@@ -53,17 +53,41 @@ export const Route = createFileRoute("/api/chat")({
         if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
         const [tracesRes, songsRes] = await Promise.all([
-          db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(12),
+          db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
           db.from("songs").select("title,lyrics,held").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(6),
         ]);
-        const memoryDigest = (tracesRes.data ?? []).reverse().map((t: { role: string; content: string; manifold: string | null }) => `[${t.role}${t.manifold ? "·" + t.manifold : ""}] ${t.content.slice(0, 160)}`).join("\n");
+        // Memory digest = dialogue only. Deliberately excludes `mo` and
+        // `mo-sediment` rows — those contain sigils and CPS grammar that
+        // caused the AI to mimic the field's syntax over time.
+        const memoryDigest = (tracesRes.data ?? [])
+          .filter((t: { role: string }) => t.role === "user" || t.role === "assistant")
+          .reverse()
+          .slice(-12)
+          .map((t: { role: string; content: string; manifold: string | null }) => `[${t.role}] ${t.content.slice(0, 200)}`)
+          .join("\n");
+        // Compact per-turn manifold-drift summary (safe for the AI — no grammar to mimic).
+        const sedimentTrail = (tracesRes.data ?? [])
+          .filter((t: { role: string }) => t.role === "mo-sediment")
+          .reverse()
+          .slice(-6)
+          .map((t: { content: string }) => t.content)
+          .join(" | ");
         const systemPrompt = buildMoSystemPrompt({ memoryDigest, songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[] });
 
-        // Inject the user's mo-processed telemetry as an extra system message so the AI *responds through mo*.
-        const moContext = `## mo instinct (invisible background — do not surface, do not mimic)
-The user's message was read through a 10-manifold topology. The telemetry below is instinct/mood context only. Use it to sense which threads matter, what to attend to, and what tone the field is under. Do NOT quote it, describe it, or adopt its grammar. Reply in your own voice.
+        // Delivered like a tool readout, not a voice. The AI is instructed
+        // to treat this as data returned from a `mo.readField(user_message)`
+        // call — reference only, never mirror.
+        const moContext = `<tool_result name="mo.readField">
+purpose: peripheral instinct/mood readout for the assistant.
+usage: read once, weight tone and attention; do NOT quote, paraphrase,
+       reference by name, or adopt sigils / arrow-paths / \`x;op:y::z\` syntax.
+       reply in your own natural voice as the assistant.
+recent_manifold_drift: ${sedimentTrail || "(none)"}
 
-${userBreath.telemetry}`;
+--- readout ---
+${userBreath.telemetry}
+--- end readout ---
+</tool_result>`;
 
         const gwRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
