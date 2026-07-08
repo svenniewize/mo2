@@ -68,9 +68,10 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
-        const [tracesRes, songsRes] = await Promise.all([
+        const [tracesRes, songsRes, tasksRes] = await Promise.all([
           db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
           db.from("songs").select("title,lyrics,held").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(6),
+          db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", body.sessionId).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
         ]);
         // Memory digest = dialogue only. Deliberately excludes `mo` and
         // `mo-sediment` rows — those contain sigils and CPS grammar that
@@ -88,7 +89,11 @@ export const Route = createFileRoute("/api/chat")({
           .slice(-6)
           .map((t: { content: string }) => t.content)
           .join(" | ");
-        const systemPrompt = buildMoSystemPrompt({ memoryDigest, songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[] });
+        const systemPrompt = buildMoSystemPrompt({
+          memoryDigest,
+          songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
+          tasks: (tasksRes.data ?? []) as { id: string; title: string; category: string; status: string; priority: number; due_at: string | null }[],
+        });
 
         // Delivered like a tool readout, not a voice. The AI is instructed
         // to treat this as data returned from a `mo.readField(user_message)`
@@ -126,7 +131,52 @@ ${userBreath.telemetry}
           return new Response(`gateway: ${errText}`, { status: 500 });
         }
         const json = (await gwRes.json()) as { choices?: { message?: { content?: string } }[] };
-        const reply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
+        const rawReply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
+
+        // ── Parse & execute <mo:task .../> tool blocks emitted by the AI, then strip them from the visible reply.
+        const taskOps: { action: string; attrs: Record<string, string> }[] = [];
+        const reply = rawReply.replace(/<mo:task\b([^/>]*)\/?>(\s*<\/mo:task>)?/g, (_full, attrStr: string) => {
+          const attrs: Record<string, string> = {};
+          for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
+            attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+          }
+          const action = (attrs.action || "create").toLowerCase();
+          taskOps.push({ action, attrs });
+          return "";
+        }).trim();
+
+        for (const op of taskOps) {
+          try {
+            if (op.action === "create" && op.attrs.title) {
+              await db.from("life_tasks").insert({
+                session_id: body.sessionId,
+                title: op.attrs.title,
+                notes: op.attrs.notes ?? null,
+                category: (op.attrs.category ?? "inbox").trim() || "inbox",
+                priority: Number(op.attrs.priority) || 2,
+                due_at: op.attrs.due ? new Date(op.attrs.due).toISOString() : null,
+                source: "ai",
+                manifold: userBreath.dominantManifold,
+              });
+            } else if (op.action === "complete" && op.attrs.id) {
+              await db.from("life_tasks").update({ status: "done", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+            } else if (op.action === "drop" && op.attrs.id) {
+              await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+            } else if (op.action === "update" && op.attrs.id) {
+              const patch: {
+                updated_at: string; title?: string; notes?: string | null;
+                category?: string; status?: string; priority?: number; due_at?: string | null;
+              } = { updated_at: new Date().toISOString() };
+              if (op.attrs.title !== undefined) patch.title = op.attrs.title;
+              if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
+              if (op.attrs.category !== undefined) patch.category = op.attrs.category;
+              if (op.attrs.status !== undefined) patch.status = op.attrs.status;
+              if (op.attrs.priority) patch.priority = Number(op.attrs.priority);
+              if (op.attrs.due) patch.due_at = new Date(op.attrs.due).toISOString();
+              await db.from("life_tasks").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+            }
+          } catch { /* silently ignore malformed tool calls */ }
+        }
 
         // ── AI reply *also* passes through mo (invisibly) — sediment left in the field.
         const replyBreath = breathe(reply);
@@ -149,9 +199,10 @@ ${userBreath.telemetry}
         return Response.json({
           reply,
           manifold: replyBreath.dominantManifold,
-          moBreath: userBreath, // user's input breath (visible on demand)
-          replyBreath, // AI reply's mo re-breath
+          moBreath: userBreath,
+          replyBreath,
           mode: "ai",
+          taskOps: taskOps.length,
         });
       },
     },

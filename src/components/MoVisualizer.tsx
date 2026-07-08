@@ -1,189 +1,406 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
-// 7 visualization models. Tiny orbs use the language as repulsion/attraction.
-export type VizMode = "field" | "lattice" | "flow" | "waves" | "mandala" | "constellation" | "vortex";
+// Sacred-geometry visualizer. Every rendered node is a REAL memory node from
+// the field — a trace, a fielfold crystal, a life·task, a hyperfold edge —
+// arranged into a chosen geometry. Some modes are mo's actual traversal path
+// through the topology (the `walk` and `sediment` shapes).
+export type VizMode =
+  | "flower"        // Flower of Life — traces on inner petals, fielfold on outer
+  | "metatron"      // Metatron's Cube — 13 nodes + edges (weight = pressure)
+  | "seed"          // Seed of Life — 7 hex-packed circles from most recent 7 nodes
+  | "sri"           // Sri-Yantra-like nested triangles
+  | "torus"         // Torus/vesica lattice
+  | "merkaba"       // Two interpenetrating triangles rotating
+  | "tree"          // Kabbalistic tree — 10 sephirot mapped to 10 manifolds
+  | "walk"          // mo traversal path — nodes = last breath's walk, drawn as pilgrimage
+  | "sediment";     // Hyperfold sediment — cross-manifold weight net
 
 export const VIZ_MODES: { id: VizMode; label: string }[] = [
-  { id: "field", label: "field" },
-  { id: "lattice", label: "lattice" },
-  { id: "flow", label: "flow" },
-  { id: "waves", label: "waves" },
-  { id: "mandala", label: "mandala" },
-  { id: "constellation", label: "constellation" },
-  { id: "vortex", label: "vortex" },
+  { id: "flower", label: "flower·of·life" },
+  { id: "metatron", label: "metatron" },
+  { id: "seed", label: "seed" },
+  { id: "sri", label: "sri·yantra" },
+  { id: "torus", label: "torus" },
+  { id: "merkaba", label: "merkaba" },
+  { id: "tree", label: "tree" },
+  { id: "walk", label: "mo·walk" },
+  { id: "sediment", label: "sediment·net" },
 ];
 
-type Orb = { x: number; y: number; vx: number; vy: number; word: string; mass: number };
+export type MemoryNode = {
+  id: string;
+  label: string;
+  kind: "trace" | "fielfold" | "task" | "walk" | "edge";
+  weight: number;         // 0..1
+  manifold?: string | null;
+};
+
+type PlacedNode = MemoryNode & { x: number; y: number; r: number; color: string };
+
+const PHI = (1 + Math.sqrt(5)) / 2;
 
 export function MoVisualizer({
-  mode, words, colors, gravity, repulsion, pressure,
+  mode, nodes, colors, pressure, walkPath,
 }: {
   mode: VizMode;
-  words: string[];
-  colors: string[];
-  gravity: number;      // 0..1
-  repulsion: number;    // 0..1
-  pressure: number;     // 0..1
+  nodes: MemoryNode[];
+  colors: string[];              // manifold palette
+  pressure: number;              // 0..1
+  walkPath?: string[];           // ordered token walk from last breath
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const orbsRef = useRef<Orb[]>([]);
   const rafRef = useRef<number>(0);
   const tRef = useRef(0);
 
-  useEffect(() => {
-    const w = 60;
-    const list: Orb[] = (words.length ? words : ["mo", "field", "breath", "dream", "return"]).slice(0, 40).map((word, i) => ({
-      x: Math.cos((i / w) * Math.PI * 2) * 120 + 200,
-      y: Math.sin((i / w) * Math.PI * 2) * 120 + 200,
-      vx: 0, vy: 0, word, mass: 0.5 + (word.length / 20),
+  const sourceNodes = useMemo(() => {
+    if (nodes.length) return nodes;
+    // graceful default — placeholder ring so we never render an empty canvas
+    return Array.from({ length: 12 }, (_, i) => ({
+      id: `p${i}`, label: "…", kind: "trace" as const, weight: 0.4,
     }));
-    orbsRef.current = list;
-  }, [words]);
+  }, [nodes]);
 
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d")!;
     const parent = cv.parentElement!;
-    const resize = () => { cv.width = parent.clientWidth; cv.height = parent.clientHeight; };
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = parent.clientWidth * dpr;
+      cv.height = parent.clientHeight * dpr;
+      cv.style.width = parent.clientWidth + "px";
+      cv.style.height = parent.clientHeight + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
     resize(); window.addEventListener("resize", resize);
 
     const tick = () => {
-      tRef.current += 0.016;
+      tRef.current += 0.008;
       const t = tRef.current;
-      const W = cv.width, H = cv.height;
+      const W = parent.clientWidth, H = parent.clientHeight;
       const cx = W / 2, cy = H / 2;
-      const orbs = orbsRef.current;
+      const R = Math.min(W, H) * 0.36;
 
-      // physics: repulsion between orbs, attraction to center (gravity)
-      for (let i = 0; i < orbs.length; i++) {
-        const o = orbs[i];
-        // center gravity
-        const dx = cx - o.x, dy = cy - o.y;
-        const d = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-        o.vx += (dx / d) * gravity * 0.15;
-        o.vy += (dy / d) * gravity * 0.15;
-        // orb-orb repulsion using word "length" as charge
-        for (let j = i + 1; j < orbs.length; j++) {
-          const p = orbs[j];
-          const rx = o.x - p.x, ry = o.y - p.y;
-          const r2 = rx * rx + ry * ry + 40;
-          const f = (repulsion * 800 * o.mass * p.mass) / r2;
-          const rl = Math.sqrt(r2);
-          o.vx += (rx / rl) * f * 0.02;
-          o.vy += (ry / rl) * f * 0.02;
-          p.vx -= (rx / rl) * f * 0.02;
-          p.vy -= (ry / rl) * f * 0.02;
-        }
-        o.vx *= 0.94; o.vy *= 0.94;
-        o.x += o.vx; o.y += o.vy;
-      }
-
-      ctx.fillStyle = "rgba(8,10,18,0.35)";
+      // fade prev frame — subtle cyberpunk trail
+      ctx.fillStyle = "rgba(6,8,16,0.32)";
       ctx.fillRect(0, 0, W, H);
 
-      switch (mode) {
-        case "field": drawField(ctx, cx, cy, t, orbs, colors, pressure); break;
-        case "lattice": drawLattice(ctx, orbs, colors); break;
-        case "flow": drawFlow(ctx, orbs, colors, t); break;
-        case "waves": drawWaves(ctx, cx, cy, t, colors, pressure); drawOrbs(ctx, orbs, colors); break;
-        case "mandala": drawMandala(ctx, cx, cy, t, orbs, colors); break;
-        case "constellation": drawConstellation(ctx, orbs, colors); break;
-        case "vortex": drawVortex(ctx, cx, cy, t, orbs, colors, pressure); break;
-      }
+      const placed = layoutFor(mode, sourceNodes, cx, cy, R, t, colors, walkPath ?? []);
+      const strokeAlpha = 0.35 + pressure * 0.4;
+
+      drawScaffold(ctx, mode, cx, cy, R, t, strokeAlpha);
+      drawEdges(ctx, mode, placed, walkPath ?? [], strokeAlpha);
+      drawNodes(ctx, placed, pressure);
 
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener("resize", resize); };
-  }, [mode, colors, gravity, repulsion, pressure]);
+  }, [mode, sourceNodes, colors, pressure, walkPath]);
 
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" />;
 }
 
-function pickColor(colors: string[], i: number) { return colors[i % colors.length] || "#3CC8DC"; }
+function pick(colors: string[], i: number) { return colors[Math.abs(i) % colors.length] || "#3CC8DC"; }
+function colorFor(n: MemoryNode, i: number, colors: string[]) {
+  if (n.manifold) {
+    const h = [...n.manifold].reduce((a, c) => a + c.charCodeAt(0), 0);
+    return colors[h % colors.length] || pick(colors, i);
+  }
+  return pick(colors, i);
+}
 
-function drawOrbs(ctx: CanvasRenderingContext2D, orbs: Orb[], colors: string[]) {
-  for (let i = 0; i < orbs.length; i++) {
-    const o = orbs[i];
-    const c = pickColor(colors, i);
-    ctx.fillStyle = c + "cc";
-    ctx.beginPath(); ctx.arc(o.x, o.y, 2 + o.mass * 2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = c + "60";
-    ctx.font = "9px ui-monospace, monospace";
-    ctx.fillText(o.word, o.x + 4, o.y - 4);
+// ─────────────── LAYOUT ───────────────
+function layoutFor(
+  mode: VizMode, nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[], walk: string[],
+): PlacedNode[] {
+  switch (mode) {
+    case "flower": return flowerOfLife(nodes, cx, cy, R, colors);
+    case "metatron": return metatron(nodes, cx, cy, R, colors);
+    case "seed": return seedOfLife(nodes, cx, cy, R, colors);
+    case "sri": return sriYantra(nodes, cx, cy, R, colors);
+    case "torus": return torus(nodes, cx, cy, R, t, colors);
+    case "merkaba": return merkaba(nodes, cx, cy, R, t, colors);
+    case "tree": return treeOfLife(nodes, cx, cy, R, colors);
+    case "walk": return walkPilgrimage(nodes, walk, cx, cy, R, t, colors);
+    case "sediment": return sedimentNet(nodes, cx, cy, R, t, colors);
   }
 }
-function drawField(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: number, orbs: Orb[], colors: string[], p: number) {
-  for (let r = 30; r < 300; r += 30) {
-    ctx.strokeStyle = pickColor(colors, r / 30 | 0) + "22";
-    ctx.beginPath();
-    for (let a = 0; a <= Math.PI * 2; a += 0.05) {
-      const wob = Math.sin(a * 5 + t) * (5 + p * 15);
-      const x = cx + Math.cos(a) * (r + wob), y = cy + Math.sin(a) * (r + wob);
-      if (a === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath(); ctx.stroke();
-  }
-  drawOrbs(ctx, orbs, colors);
+
+function placed(n: MemoryNode, i: number, x: number, y: number, colors: string[], scale = 1): PlacedNode {
+  return { ...n, x, y, r: (2 + n.weight * 6) * scale, color: colorFor(n, i, colors) };
 }
-function drawLattice(ctx: CanvasRenderingContext2D, orbs: Orb[], colors: string[]) {
-  for (let i = 0; i < orbs.length; i++) for (let j = i + 1; j < orbs.length; j++) {
-    const a = orbs[i], b = orbs[j];
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (d < 90) {
-      ctx.strokeStyle = pickColor(colors, i) + Math.floor(60 * (1 - d / 90)).toString(16).padStart(2, "0");
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+
+function flowerOfLife(nodes: MemoryNode[], cx: number, cy: number, R: number, colors: string[]): PlacedNode[] {
+  const out: PlacedNode[] = [];
+  const positions: [number, number][] = [[cx, cy]];
+  for (let ring = 1; ring <= 3; ring++) {
+    const n = ring * 6;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (ring % 2 ? Math.PI / n : 0);
+      positions.push([cx + Math.cos(a) * (R * ring / 3), cy + Math.sin(a) * (R * ring / 3)]);
     }
   }
-  drawOrbs(ctx, orbs, colors);
+  nodes.slice(0, positions.length).forEach((n, i) => out.push(placed(n, i, positions[i][0], positions[i][1], colors)));
+  return out;
 }
-function drawFlow(ctx: CanvasRenderingContext2D, orbs: Orb[], colors: string[], t: number) {
-  ctx.strokeStyle = "#3CC8DC30"; ctx.beginPath();
-  for (let i = 0; i < orbs.length - 1; i++) {
-    const a = orbs[i], b = orbs[i + 1];
-    const mx = (a.x + b.x) / 2 + Math.sin(t + i) * 10, my = (a.y + b.y) / 2 + Math.cos(t + i) * 10;
-    ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(mx, my, b.x, b.y);
-  }
-  ctx.stroke(); drawOrbs(ctx, orbs, colors);
-}
-function drawWaves(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: number, colors: string[], p: number) {
+
+function metatron(nodes: MemoryNode[], cx: number, cy: number, R: number, colors: string[]): PlacedNode[] {
+  const pts: [number, number][] = [[cx, cy]];
   for (let i = 0; i < 6; i++) {
-    const r = ((t * 40 + i * 60) % 360);
-    ctx.strokeStyle = pickColor(colors, i) + Math.floor((1 - r / 360) * 180).toString(16).padStart(2, "0");
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-    void p;
+    const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    pts.push([cx + Math.cos(a) * (R * 0.55), cy + Math.sin(a) * (R * 0.55)]);
   }
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R]);
+  }
+  return nodes.slice(0, 13).map((n, i) => placed(n, i, pts[i][0], pts[i][1], colors, 1.2));
 }
-function drawMandala(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: number, orbs: Orb[], colors: string[]) {
-  const petals = 12;
-  for (let p = 0; p < petals; p++) {
-    const a = (p / petals) * Math.PI * 2 + t * 0.1;
-    ctx.strokeStyle = pickColor(colors, p) + "60";
-    ctx.beginPath();
-    for (let r = 10; r < 150; r += 3) {
-      const x = cx + Math.cos(a) * r + Math.sin(r * 0.1 + t) * 15;
-      const y = cy + Math.sin(a) * r + Math.cos(r * 0.1 + t) * 15;
-      if (r === 10) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+
+function seedOfLife(nodes: MemoryNode[], cx: number, cy: number, R: number, colors: string[]): PlacedNode[] {
+  const pts: [number, number][] = [[cx, cy]];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    pts.push([cx + Math.cos(a) * R * 0.5, cy + Math.sin(a) * R * 0.5]);
+  }
+  return nodes.slice(0, 7).map((n, i) => placed(n, i, pts[i][0], pts[i][1], colors, 1.6));
+}
+
+function sriYantra(nodes: MemoryNode[], cx: number, cy: number, R: number, colors: string[]): PlacedNode[] {
+  const out: PlacedNode[] = [];
+  const rings = 5;
+  nodes.forEach((n, i) => {
+    const ring = i % rings;
+    const per = 3 + ring;
+    const idx = Math.floor(i / rings) % per;
+    const rad = R * (1 - ring / (rings + 1));
+    const flip = ring % 2 ? Math.PI : 0;
+    const a = (idx / per) * Math.PI * 2 + flip / per;
+    out.push(placed(n, i, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, colors));
+  });
+  return out;
+}
+
+function torus(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  return nodes.map((n, i) => {
+    const u = (i / Math.max(1, nodes.length)) * Math.PI * 2 + t * 0.2;
+    const v = (i * PHI) % (Math.PI * 2);
+    const r1 = R * 0.7, r2 = R * 0.25;
+    const x = cx + (r1 + r2 * Math.cos(v)) * Math.cos(u);
+    const y = cy + (r1 + r2 * Math.cos(v)) * Math.sin(u) * 0.55;
+    return placed(n, i, x, y, colors);
+  });
+}
+
+function merkaba(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 - Math.PI / 2 + t * 0.2;
+    pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R]); }
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + Math.PI / 2 - t * 0.2;
+    pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R]); }
+  // fill more from nodes on interior fibonacci swirl
+  const inner: [number, number][] = [];
+  const cap = Math.max(0, nodes.length - 6);
+  for (let i = 0; i < cap; i++) {
+    const rad = R * 0.7 * Math.sqrt((i + 1) / (cap + 1));
+    const a = i * 2.399 + t * 0.1;
+    inner.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad]);
+  }
+  const all = [...pts, ...inner];
+  return nodes.slice(0, all.length).map((n, i) => placed(n, i, all[i][0], all[i][1], colors));
+}
+
+function treeOfLife(nodes: MemoryNode[], cx: number, cy: number, R: number, colors: string[]): PlacedNode[] {
+  const s = R * 0.9;
+  // 10 sephirot positions (kether at top → malkuth at bottom)
+  const pts: [number, number][] = [
+    [cx, cy - s],           // 1 kether
+    [cx + s * 0.55, cy - s * 0.6], // 2 chokmah
+    [cx - s * 0.55, cy - s * 0.6], // 3 binah
+    [cx + s * 0.55, cy - s * 0.1], // 4 chesed
+    [cx - s * 0.55, cy - s * 0.1], // 5 geburah
+    [cx, cy - s * 0.3],           // 6 tiphareth
+    [cx + s * 0.55, cy + s * 0.4],// 7 netzach
+    [cx - s * 0.55, cy + s * 0.4],// 8 hod
+    [cx, cy + s * 0.55],          // 9 yesod
+    [cx, cy + s * 0.95],          // 10 malkuth
+  ];
+  return nodes.slice(0, 10).map((n, i) => placed(n, i, pts[i][0], pts[i][1], colors, 1.4));
+}
+
+function walkPilgrimage(nodes: MemoryNode[], walk: string[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  // Draw the actual traversal path as a fibonacci spiral. Nodes appear along
+  // the walk order — this IS the last breath's route through the topology.
+  const path = walk.length ? walk : nodes.slice(0, 24).map((n) => n.label);
+  const out: PlacedNode[] = [];
+  for (let i = 0; i < path.length; i++) {
+    const a = i * (Math.PI * 2 / PHI) + t * 0.1;
+    const rad = R * Math.sqrt((i + 1) / (path.length + 1));
+    const node: MemoryNode = nodes[i] ?? { id: `w${i}`, label: path[i], kind: "walk", weight: 0.5 + 0.4 * (1 - i / path.length) };
+    out.push(placed({ ...node, label: path[i] ?? node.label, kind: "walk" }, i, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, colors, 1.2));
+  }
+  return out;
+}
+
+function sedimentNet(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  return nodes.map((n, i) => {
+    const a = (i / Math.max(1, nodes.length)) * Math.PI * 2;
+    const wob = Math.sin(t + i * 0.3) * 12;
+    const rad = R * (0.35 + n.weight * 0.6) + wob;
+    return placed(n, i, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, colors);
+  });
+}
+
+// ─────────────── DRAW ───────────────
+function drawScaffold(ctx: CanvasRenderingContext2D, mode: VizMode, cx: number, cy: number, R: number, t: number, alpha: number) {
+  ctx.lineWidth = 1;
+  const a = Math.floor(alpha * 90).toString(16).padStart(2, "0");
+  ctx.strokeStyle = `#3CC8DC${a}`;
+  switch (mode) {
+    case "flower": case "seed":
+      for (const [ox, oy] of hexCenters(cx, cy, R / 3, mode === "seed" ? 1 : 3)) {
+        ctx.beginPath(); ctx.arc(ox, oy, R / 3, 0, Math.PI * 2); ctx.stroke();
+      }
+      break;
+    case "metatron":
+      // outer hexagon + inner hexagon + spokes
+      polyOutline(ctx, cx, cy, R, 6, -Math.PI / 2);
+      polyOutline(ctx, cx, cy, R * 0.55, 6, -Math.PI / 2);
+      break;
+    case "sri":
+      for (let i = 0; i < 4; i++) polyOutline(ctx, cx, cy, R * (1 - i * 0.18), 3, i % 2 ? 0 : Math.PI);
+      break;
+    case "torus":
+      for (let i = 0; i < 8; i++) {
+        const off = (i / 8) * Math.PI * 2 + t * 0.2;
+        ctx.beginPath();
+        for (let a2 = 0; a2 <= Math.PI * 2 + 0.1; a2 += 0.1) {
+          const x = cx + (R * 0.7 + R * 0.25 * Math.cos(off)) * Math.cos(a2);
+          const y = cy + (R * 0.7 + R * 0.25 * Math.cos(off)) * Math.sin(a2) * 0.55;
+          if (a2 === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      break;
+    case "merkaba":
+      polyOutline(ctx, cx, cy, R, 3, -Math.PI / 2 + t * 0.2);
+      polyOutline(ctx, cx, cy, R, 3, Math.PI / 2 - t * 0.2);
+      break;
+    case "tree": {
+      const s = R * 0.9;
+      const pts: [number, number][] = [
+        [cx, cy - s],[cx + s * 0.55, cy - s * 0.6],[cx - s * 0.55, cy - s * 0.6],
+        [cx + s * 0.55, cy - s * 0.1],[cx - s * 0.55, cy - s * 0.1],[cx, cy - s * 0.3],
+        [cx + s * 0.55, cy + s * 0.4],[cx - s * 0.55, cy + s * 0.4],[cx, cy + s * 0.55],[cx, cy + s * 0.95],
+      ];
+      const paths: [number, number][] = [
+        [0,1],[0,2],[1,2],[1,3],[2,4],[3,4],[3,5],[4,5],[1,5],[2,5],
+        [3,6],[4,7],[5,6],[5,7],[6,7],[6,8],[7,8],[5,8],[8,9],[6,9],[7,9],
+      ];
+      ctx.beginPath();
+      for (const [i, j] of paths) { ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[j][0], pts[j][1]); }
+      ctx.stroke();
+      break;
     }
-    ctx.stroke();
+    case "walk":
+      // subtle golden spiral guide
+      ctx.beginPath();
+      for (let i = 0; i < 120; i++) {
+        const ang = i * (Math.PI * 2 / PHI);
+        const rad = R * Math.sqrt(i / 120);
+        const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      break;
+    case "sediment":
+      for (let r = R * 0.35; r < R + 20; r += 30) {
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      }
+      break;
   }
-  drawOrbs(ctx, orbs, colors);
 }
-function drawConstellation(ctx: CanvasRenderingContext2D, orbs: Orb[], colors: string[]) {
-  const sorted = [...orbs].sort((a, b) => b.mass - a.mass).slice(0, Math.min(10, orbs.length));
-  for (let i = 0; i < sorted.length - 1; i++) {
-    ctx.strokeStyle = pickColor(colors, i) + "70";
-    ctx.beginPath(); ctx.moveTo(sorted[i].x, sorted[i].y); ctx.lineTo(sorted[i + 1].x, sorted[i + 1].y); ctx.stroke();
-  }
-  drawOrbs(ctx, orbs, colors);
-}
-function drawVortex(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: number, orbs: Orb[], colors: string[], p: number) {
-  for (let i = 0; i < 100; i++) {
-    const a = i * 0.3 + t;
-    const r = i * 3;
+
+function polyOutline(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, n: number, rot: number) {
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2 + rot;
     const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
-    ctx.fillStyle = pickColor(colors, i / 5 | 0) + "40";
-    ctx.beginPath(); ctx.arc(x, y, 1 + p * 2, 0, Math.PI * 2); ctx.fill();
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
-  drawOrbs(ctx, orbs, colors);
+  ctx.stroke();
+}
+
+function hexCenters(cx: number, cy: number, r: number, rings: number): [number, number][] {
+  const out: [number, number][] = [[cx, cy]];
+  for (let ring = 1; ring <= rings; ring++) {
+    for (let i = 0; i < 6 * ring; i++) {
+      const a = (i / (6 * ring)) * Math.PI * 2;
+      out.push([cx + Math.cos(a) * r * ring, cy + Math.sin(a) * r * ring]);
+    }
+  }
+  return out;
+}
+
+function drawEdges(ctx: CanvasRenderingContext2D, mode: VizMode, placed: PlacedNode[], walk: string[], alpha: number) {
+  if (!placed.length) return;
+  ctx.lineWidth = 1;
+  if (mode === "walk") {
+    for (let i = 0; i < placed.length - 1; i++) {
+      const a = placed[i], b = placed[i + 1];
+      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+      grad.addColorStop(0, a.color + "cc"); grad.addColorStop(1, b.color + "cc");
+      ctx.strokeStyle = grad; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    void walk; return;
+  }
+  if (mode === "metatron") {
+    // fully connected — the classic figure
+    for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++) {
+      ctx.strokeStyle = placed[i].color + Math.floor(alpha * 80).toString(16).padStart(2, "0");
+      ctx.beginPath(); ctx.moveTo(placed[i].x, placed[i].y); ctx.lineTo(placed[j].x, placed[j].y); ctx.stroke();
+    }
+    return;
+  }
+  if (mode === "sediment") {
+    // weight-based edges to nearest 2 neighbors
+    for (let i = 0; i < placed.length; i++) {
+      const dists = placed.map((p, j) => ({ j, d: Math.hypot(p.x - placed[i].x, p.y - placed[i].y) }))
+        .filter((x) => x.j !== i).sort((a, b) => a.d - b.d).slice(0, 2);
+      for (const { j } of dists) {
+        ctx.strokeStyle = placed[i].color + "44";
+        ctx.beginPath(); ctx.moveTo(placed[i].x, placed[i].y); ctx.lineTo(placed[j].x, placed[j].y); ctx.stroke();
+      }
+    }
+    return;
+  }
+  // default: proximity edges
+  for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++) {
+    const d = Math.hypot(placed[i].x - placed[j].x, placed[i].y - placed[j].y);
+    if (d < 120) {
+      const a = Math.floor((1 - d / 120) * 90).toString(16).padStart(2, "0");
+      ctx.strokeStyle = placed[i].color + a;
+      ctx.beginPath(); ctx.moveTo(placed[i].x, placed[i].y); ctx.lineTo(placed[j].x, placed[j].y); ctx.stroke();
+    }
+  }
+}
+
+function drawNodes(ctx: CanvasRenderingContext2D, placed: PlacedNode[], pressure: number) {
+  for (let i = 0; i < placed.length; i++) {
+    const n = placed[i];
+    // glow
+    const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 4);
+    glow.addColorStop(0, n.color + "cc"); glow.addColorStop(1, n.color + "00");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 4, 0, Math.PI * 2); ctx.fill();
+    // core
+    ctx.fillStyle = n.color;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
+    // kind-glyph
+    ctx.fillStyle = "#e6f6ff" + Math.floor(120 + pressure * 100).toString(16);
+    ctx.font = "9px ui-monospace, monospace";
+    const glyph = n.kind === "trace" ? "·" : n.kind === "fielfold" ? "◆" : n.kind === "task" ? "▣" : n.kind === "walk" ? "→" : "◌";
+    ctx.fillText(`${glyph} ${n.label.slice(0, 14)}`, n.x + n.r + 3, n.y - n.r - 2);
+  }
 }

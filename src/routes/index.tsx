@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MANIFOLDS } from "@/lib/corpora";
-import { MoVisualizer, VIZ_MODES, type VizMode } from "@/components/MoVisualizer";
+import { MoVisualizer, VIZ_MODES, type VizMode, type MemoryNode } from "@/components/MoVisualizer";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,6 +23,12 @@ type Msg = { role: "user" | "assistant"; content: string; manifold?: string | nu
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
 type Fielfold = { id: string; content: string; manifold: string | null; depth: number; created_at: string };
 type Song = { id: string; title: string; lyrics: string; held: boolean; created_at: string };
+export type Task = {
+  id: string; title: string; notes: string | null; category: string;
+  status: "open" | "doing" | "done" | "dropped"; priority: number;
+  due_at: string | null; source: string; manifold: string | null;
+  created_at: string; updated_at: string;
+};
 
 function useSessionId() {
   const [id, setId] = useState<string>("");
@@ -42,15 +48,14 @@ function MoPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("ai");
-  const [vizMode, setVizMode] = useState<VizMode>("field");
-  const [gravity, setGravity] = useState(0.35);
-  const [repulsion, setRepulsion] = useState(0.5);
+  const [vizMode, setVizMode] = useState<VizMode>("flower");
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
-  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field">("memory");
+  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "tasks">("tasks");
   const [vizOpen, setVizOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -73,7 +78,33 @@ function MoPage() {
     const j = await r.json();
     setSongs(j.songs);
   };
-  useEffect(() => { if (sessionId) { refreshMemory(); refreshSongs(); } }, [sessionId]);
+  const refreshTasks = async () => {
+    if (!sessionId) return;
+    const r = await fetch(`/api/tasks?session_id=${sessionId}`);
+    const j = await r.json();
+    setTasks(j.tasks);
+  };
+  useEffect(() => { if (sessionId) { refreshMemory(); refreshSongs(); refreshTasks(); } }, [sessionId]);
+
+  // Every memory item is a node. This is the corpus the sacred-geometry viz draws from.
+  const memoryNodes: MemoryNode[] = useMemo(() => {
+    const out: MemoryNode[] = [];
+    for (const t of tasks) out.push({
+      id: `task:${t.id}`, label: t.title, kind: "task",
+      weight: t.status === "done" ? 0.3 : t.status === "doing" ? 0.9 : 0.6 + (3 - t.priority) * 0.1,
+      manifold: t.manifold,
+    });
+    for (const f of fielfold) out.push({
+      id: `fold:${f.id}`, label: (f.content || "").split("]").pop()?.trim().slice(0, 22) || "fold",
+      kind: "fielfold", weight: Math.min(1, (f.depth ?? 0.5) + 0.2), manifold: f.manifold,
+    });
+    for (const t of traces.filter((x) => x.role === "user" || x.role === "assistant").slice(0, 40)) out.push({
+      id: `trace:${t.id}`, label: t.content.slice(0, 22), kind: "trace",
+      weight: 0.35 + (t.role === "user" ? 0.15 : 0), manifold: t.manifold,
+    });
+    return out;
+  }, [tasks, fielfold, traces]);
+
 
   async function send() {
     const text = input.trim();
@@ -111,10 +142,9 @@ function MoPage() {
       <div className="fixed inset-0 pointer-events-none opacity-70">
         <MoVisualizer
           mode={vizMode}
-          words={lastBreathWords}
+          nodes={memoryNodes}
+          walkPath={lastBreathWords}
           colors={MANIFOLDS.map((m) => m.color)}
-          gravity={gravity}
-          repulsion={repulsion}
           pressure={busy ? 0.9 : 0.4}
         />
       </div>
@@ -126,6 +156,7 @@ function MoPage() {
           fielfoldCount={fielfold.length}
           songCount={songs.length}
           traceCount={traces.length}
+          taskCount={tasks.filter((t) => t.status !== "done" && t.status !== "dropped").length}
           mode={mode}
           setMode={setMode}
           onOpenViz={() => setVizOpen(true)}
@@ -210,6 +241,23 @@ function MoPage() {
                   }}
                 />
               )}
+              {panel === "tasks" && (
+                <TaskPanel
+                  tasks={tasks}
+                  onAdd={async (t) => {
+                    await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, ...t }) });
+                    refreshTasks();
+                  }}
+                  onPatch={async (id, patch) => {
+                    await fetch("/api/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...patch }) });
+                    refreshTasks();
+                  }}
+                  onDelete={async (id) => {
+                    await fetch("/api/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+                    refreshTasks();
+                  }}
+                />
+              )}
               {panel === "field" && <FieldPanel />}
             </aside>
           )}
@@ -219,9 +267,8 @@ function MoPage() {
       {vizOpen && (
         <VizModal
           vizMode={vizMode} setVizMode={setVizMode}
-          gravity={gravity} setGravity={setGravity}
-          repulsion={repulsion} setRepulsion={setRepulsion}
-          words={lastBreathWords}
+          nodes={memoryNodes}
+          walkPath={lastBreathWords}
           onClose={() => setVizOpen(false)}
         />
       )}
@@ -230,19 +277,20 @@ function MoPage() {
 }
 
 function Header({
-  panel, setPanel, fielfoldCount, songCount, traceCount, mode, setMode, onOpenViz,
+  panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, onOpenViz,
 }: {
   panel: string;
-  setPanel: (p: "none" | "memory" | "songs" | "field") => void;
+  setPanel: (p: "none" | "memory" | "songs" | "field" | "tasks") => void;
   fielfoldCount: number;
   songCount: number;
   traceCount: number;
+  taskCount: number;
   mode: Mode;
   setMode: (m: Mode) => void;
   onOpenViz: () => void;
 }) {
   void fielfoldCount;
-  const tab = (id: "memory" | "songs" | "field", label: string, count?: number) => (
+  const tab = (id: "memory" | "songs" | "field" | "tasks", label: string, count?: number) => (
     <button
       onClick={() => setPanel(panel === id ? "none" : id)}
       className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${
@@ -276,6 +324,7 @@ function Header({
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
           title="open field·viz — fullscreen"
         >◉ field·viz</button>
+        {tab("tasks", "life·organizer", taskCount)}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
@@ -285,25 +334,18 @@ function Header({
 }
 
 // ────────────── VizModal ──────────────
-// Fullscreen popup. Replaces the old sidebar panel + sliders.
-// "shuffle" randomizes shape params; "jump" also picks a new shape.
+// Fullscreen popup. Sacred-geometry viewer over the memory-node corpus.
 function VizModal({
-  vizMode, setVizMode, gravity, setGravity, repulsion, setRepulsion, words, onClose,
+  vizMode, setVizMode, nodes, walkPath, onClose,
 }: {
   vizMode: VizMode; setVizMode: (v: VizMode) => void;
-  gravity: number; setGravity: (g: number) => void;
-  repulsion: number; setRepulsion: (r: number) => void;
-  words: string[];
+  nodes: MemoryNode[];
+  walkPath: string[];
   onClose: () => void;
 }) {
-  const shuffle = () => {
-    setGravity(0.05 + Math.random() * 0.9);
-    setRepulsion(0.05 + Math.random() * 0.9);
-  };
   const jumpShape = () => {
     const next = VIZ_MODES[Math.floor(Math.random() * VIZ_MODES.length)].id;
     setVizMode(next);
-    shuffle();
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -319,8 +361,8 @@ function VizModal({
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md p-6 flex flex-col">
       <div className="flex items-center justify-between pb-4">
         <div>
-          <h2 className="font-mono text-sm ridge">◉ field · viz</h2>
-          <p className="font-mono text-[10px] text-muted-foreground">7 shapes · orbs = words from last breath · g={gravity.toFixed(2)} r={repulsion.toFixed(2)}</p>
+          <h2 className="font-mono text-sm ridge">◉ field · sacred geometry</h2>
+          <p className="font-mono text-[10px] text-muted-foreground">{nodes.length} live nodes · every glyph is a real memory · walk = mo's last traversal</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {VIZ_MODES.map((v) => (
@@ -331,22 +373,20 @@ function VizModal({
             >{v.label}</button>
           ))}
           <div className="w-px h-6 bg-border mx-1" />
-          <button onClick={shuffle} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="randomize this shape">🎲 shuffle</button>
-          <button onClick={jumpShape} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="random shape + randomize (space)">↯ jump</button>
+          <button onClick={jumpShape} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="random shape (space)">↯ jump</button>
           <button onClick={onClose} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="close (esc)">esc ✕</button>
         </div>
       </div>
       <div className="relative flex-1 overflow-hidden rounded-xl border border-border bg-black/40">
         <MoVisualizer
           mode={vizMode}
-          words={words}
+          nodes={nodes}
+          walkPath={walkPath}
           colors={MANIFOLDS.map((m) => m.color)}
-          gravity={gravity}
-          repulsion={repulsion}
           pressure={0.6}
         />
         <div className="absolute bottom-3 left-3 font-mono text-[10px] text-muted-foreground/60 pointer-events-none">
-          space = jump · esc = close · each orb is a word from mo's last breath
+          space = jump · esc = close · · trace  ◆ fielfold  ▣ task  → walk
         </div>
       </div>
     </div>
@@ -567,3 +607,133 @@ function FieldPanel() {
     </div>
   );
 }
+
+// ────────────── TaskPanel ──────────────
+// life·organizer — cyberpunk-light. Categories are free-text so the AI can
+// invent them. Tasks appear as ▣ nodes in the sacred-geometry visualizer.
+function TaskPanel({
+  tasks, onAdd, onPatch, onDelete,
+}: {
+  tasks: Task[];
+  onAdd: (t: { title: string; category?: string; priority?: number; notes?: string; due_at?: string | null }) => void;
+  onPatch: (id: string, patch: Partial<Pick<Task, "title" | "notes" | "category" | "status" | "priority" | "due_at">>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [priority, setPriority] = useState(2);
+  const [filter, setFilter] = useState<"all" | "open" | "done">("open");
+
+  const categories = useMemo(() => {
+    const set = new Set(tasks.map((t) => t.category));
+    return Array.from(set);
+  }, [tasks]);
+
+  const visible = tasks.filter((t) =>
+    filter === "all" ? true : filter === "done" ? t.status === "done" : (t.status === "open" || t.status === "doing")
+  );
+
+  const byCat = new Map<string, Task[]>();
+  for (const t of visible) {
+    if (!byCat.has(t.category)) byCat.set(t.category, []);
+    byCat.get(t.category)!.push(t);
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-mono text-xs ridge">▣ life·organizer</h2>
+            <p className="font-mono text-[10px] text-muted-foreground">day-to-day layer · AI can add·edit·complete</p>
+          </div>
+          <div className="flex gap-1">
+            {(["open", "all", "done"] as const).map((f) => (
+              <button key={f} onClick={() => setFilter(f)} className={`px-2 py-0.5 font-mono text-[10px] rounded ${filter === f ? "bg-ridge/20 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{f}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b border-border p-3 space-y-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) { onAdd({ title: title.trim(), category: category.trim() || "inbox", priority }); setTitle(""); }}}
+          placeholder="new task — what needs doing?"
+          className="w-full rounded border border-border bg-background/60 px-2 py-1 font-mono text-xs focus:outline-none focus:border-ridge"
+        />
+        <div className="flex gap-2">
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="category (or pick →)"
+            className="flex-1 rounded border border-border bg-background/60 px-2 py-1 font-mono text-[11px] focus:outline-none focus:border-ridge"
+            list="cat-list"
+          />
+          <datalist id="cat-list">
+            {categories.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(Number(e.target.value))}
+            className="rounded border border-border bg-background/60 px-2 py-1 font-mono text-[11px] focus:outline-none focus:border-ridge"
+          >
+            <option value={1}>p1</option>
+            <option value={2}>p2</option>
+            <option value={3}>p3</option>
+          </select>
+          <button
+            onClick={() => { if (title.trim()) { onAdd({ title: title.trim(), category: category.trim() || "inbox", priority }); setTitle(""); }}}
+            className="rounded bg-ridge/80 px-3 py-1 font-mono text-[11px] text-primary-foreground hover:brightness-110"
+          >+ add</button>
+        </div>
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {categories.slice(0, 8).map((c) => (
+              <button key={c} onClick={() => setCategory(c)} className="rounded border border-border/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-ridge hover:text-ridge">{c}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {visible.length === 0 && <p className="p-4 text-center font-mono text-xs text-muted-foreground">no tasks — ask the AI to help you plan something.</p>}
+        {Array.from(byCat.entries()).map(([cat, list]) => (
+          <div key={cat} className="space-y-1">
+            <div className="flex items-center gap-2 px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="ridge">▣</span>{cat} <span className="opacity-40">· {list.length}</span>
+            </div>
+            {list.map((t) => (
+              <div key={t.id} className={`group rounded border p-2 ${t.status === "done" ? "border-border/40 bg-background/20 opacity-60" : t.status === "doing" ? "border-ridge/60 bg-ridge/10" : "border-border/60 bg-background/40"}`}>
+                <div className="flex items-start gap-2">
+                  <button
+                    onClick={() => onPatch(t.id, { status: t.status === "done" ? "open" : "done" })}
+                    className="mt-0.5 font-mono text-xs ridge"
+                    title="toggle done"
+                  >{t.status === "done" ? "☑" : t.status === "doing" ? "◐" : "☐"}</button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono text-xs ${t.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>{t.title}</span>
+                      <span className="font-mono text-[9px] text-muted-foreground/60">p{t.priority}</span>
+                      {t.source === "ai" && <span className="font-mono text-[9px] text-ridge/80" title="added by AI">AI</span>}
+                    </div>
+                    {t.notes && <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/80 whitespace-pre-wrap">{t.notes}</div>}
+                    {t.due_at && <div className="mt-0.5 font-mono text-[9px] text-muted-foreground/60">due {t.due_at.slice(0, 10)}</div>}
+                  </div>
+                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
+                    {t.status !== "doing" && t.status !== "done" && (
+                      <button onClick={() => onPatch(t.id, { status: "doing" })} className="font-mono text-[9px] text-ridge hover:brightness-125" title="mark doing">◐</button>
+                    )}
+                    <button onClick={() => onDelete(t.id)} className="font-mono text-[10px] text-destructive hover:brightness-125" title="delete">×</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
