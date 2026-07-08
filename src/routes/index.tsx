@@ -30,16 +30,41 @@ export type Task = {
   created_at: string; updated_at: string;
 };
 
+// Session strategy:
+// - Every visitor gets a per-browser UUID stored in `mo.session` (private memory).
+// - If they enter the shared password, we swap in a deterministic sessionId
+//   from `/api/unlock` and remember it in `mo.session.shared`. Toggle freely.
 function useSessionId() {
   const [id, setId] = useState<string>("");
+  const [shared, setShared] = useState<boolean>(false);
   useEffect(() => {
+    const useShared = localStorage.getItem("mo.session.mode") === "shared";
+    const sharedId = localStorage.getItem("mo.session.shared");
+    if (useShared && sharedId) { setId(sharedId); setShared(true); return; }
     const existing = localStorage.getItem("mo.session");
     if (existing) { setId(existing); return; }
     const fresh = crypto.randomUUID();
     localStorage.setItem("mo.session", fresh);
     setId(fresh);
   }, []);
-  return id;
+  const unlock = async (password: string) => {
+    const r = await fetch("/api/unlock", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!r.ok) throw new Error(r.status === 401 ? "wrong password" : "unlock failed");
+    const j = (await r.json()) as { sessionId: string };
+    localStorage.setItem("mo.session.shared", j.sessionId);
+    localStorage.setItem("mo.session.mode", "shared");
+    setId(j.sessionId); setShared(true);
+  };
+  const lock = () => {
+    localStorage.setItem("mo.session.mode", "local");
+    const local = localStorage.getItem("mo.session") || crypto.randomUUID();
+    localStorage.setItem("mo.session", local);
+    setId(local); setShared(false);
+  };
+  return { id, shared, unlock, lock };
 }
 
 function MoPage() {
