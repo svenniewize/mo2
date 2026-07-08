@@ -362,8 +362,8 @@ function runMo2Plus(t: Topology, seeds: string[]): VariantOut {
   const segs: string[][] = [];
   let cur = start;
   const trail: number[] = [];
-  for (let s = 0; s < 5; s++) {
-    const seg = walk(t, cur, act, 4, { activationWeight: 1.5, centralityWeight: 0.8, densityWeight: 0.5, used });
+  for (let s = 0; s < 7; s++) {
+    const seg = walk(t, cur, act, 6, { activationWeight: 1.5, centralityWeight: 0.8, densityWeight: 0.5, used });
     if (!seg.length) break;
     segs.push(seg);
     // resonance = max PPMI back to anchors
