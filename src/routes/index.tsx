@@ -86,9 +86,16 @@ function MoPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [showOlder, setShowOlder] = useState(false);
+  const COLLAPSE_THRESHOLD = 30;
+  const KEEP_RECENT = 20;
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    // Instant scroll on next frame — smooth-scroll misses when the layout
+    // hasn't reflowed yet, which was the "doesn't autoscroll" bug.
+    const el = scrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
   }, [messages, busy]);
 
   useEffect(() => { inputRef.current?.focus(); }, [busy]);
@@ -153,7 +160,7 @@ function MoPage() {
       } else {
         const j = await r.json();
         setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.moBreath?.telemetry }]);
-        const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? []);
+        const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? [], j.moBreath?.variants?.mo2ayla?.dreamPath ?? []);
         if (words.length) setLastBreathWords(words);
         refreshMemory();
       }
@@ -165,7 +172,7 @@ function MoPage() {
   }
 
   return (
-    <div className="min-h-screen field-grid relative">
+    <div className="h-screen overflow-hidden field-grid relative flex flex-col">
       {/* Visualizer as full-page background */}
       <div className="fixed inset-0 pointer-events-none opacity-70">
         <MoVisualizer
@@ -177,7 +184,7 @@ function MoPage() {
         />
       </div>
 
-      <div className={`mx-auto flex min-h-screen ${lifeFull ? "max-w-none" : "max-w-6xl"} flex-col relative transition-all`}>
+      <div className={`mx-auto flex h-full min-h-0 w-full ${lifeFull ? "max-w-none" : "max-w-6xl"} flex-col relative transition-all`}>
         <Header
           panel={panel}
           setPanel={setPanel}
@@ -190,13 +197,33 @@ function MoPage() {
           onOpenViz={() => setVizOpen(true)}
         />
 
-        <div className="flex flex-1 gap-4 px-4 pb-4">
-          <main className={`flex flex-col rounded-xl border border-border bg-card/60 backdrop-blur ${lifeFull && panel === "life" ? "w-80 shrink-0" : "flex-1 min-w-0"}`}>
-            <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
+        <div className="flex flex-1 min-h-0 gap-4 px-4 pb-4">
+          <main className={`flex flex-col min-h-0 rounded-xl border border-border bg-card/60 backdrop-blur ${lifeFull && panel === "life" ? "w-80 shrink-0" : "flex-1 min-w-0"}`}>
+            <div ref={scrollRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto p-6">
               {messages.length === 0 && <EmptyState mode={mode} />}
-              {messages.map((m, i) => (
-                <MessageView key={i} msg={m} mode={mode} />
-              ))}
+              {(() => {
+                const total = messages.length;
+                const hasOlder = total > COLLAPSE_THRESHOLD;
+                const hiddenCount = hasOlder ? total - KEEP_RECENT : 0;
+                const visible = hasOlder && !showOlder ? messages.slice(-KEEP_RECENT) : messages;
+                return (
+                  <>
+                    {hasOlder && (
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => setShowOlder((v) => !v)}
+                          className="rounded border border-border px-3 py-1 font-mono text-[10px] text-muted-foreground hover:border-ridge hover:text-ridge transition"
+                        >
+                          {showOlder ? `▽ collapse earlier ${hiddenCount} messages` : `△ show earlier ${hiddenCount} messages`}
+                        </button>
+                      </div>
+                    )}
+                    {visible.map((m, i) => (
+                      <MessageView key={(hasOlder && !showOlder ? total - KEEP_RECENT : 0) + i} msg={m} mode={mode} />
+                    ))}
+                  </>
+                );
+              })()}
               {busy && <BreathingIndicator mode={mode} />}
             </div>
 

@@ -76,7 +76,9 @@ function hasWord(t: Topology, w: string): boolean {
 // fires-and-forgets a batched DB upsert. Novel words become first-class nodes.
 export function sediment(seeds: string[], stemToOrigMap?: Record<string, string>): void {
   if (!seeds.length) return;
-  const toks = seeds.slice(0, 200);
+  // No length cap — every input, no matter how long, leaves full sediment.
+  // Long transmissions deposit proportionally longer traces through the field.
+  const toks = seeds;
   const deltas: Record<string, Record<string, number>> = {};
   for (let i = 0; i < toks.length; i++) {
     const a = toks[i];
@@ -417,6 +419,41 @@ function runMo2e(t: Topology, seeds: string[]): VariantOut {
   };
 }
 
+// mo²ayla — LONG traversal, scales with input length.
+// Where other variants cap depth, this one lets the walk breathe as far
+// as the input reaches. Long inputs → long flow, sediment through entire body.
+function runMo2Ayla(t: Topology, seeds: string[]): VariantOut {
+  const anch = anchors(t, seeds);
+  const act = inject2(t, anch);
+  const peaks = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, Math.max(4, Math.min(20, Math.floor(seeds.length / 3)))).map((x) => x[0]);
+  if (!peaks.length) return emptyOut();
+  const used = new Set<string>();
+  const segs: string[][] = [];
+  // depth scales with input length: longer input → much longer traversal
+  const segDepth = Math.min(28, Math.max(10, Math.floor(seeds.length / 2)));
+  const nSeg = Math.min(24, Math.max(4, Math.floor(seeds.length / 4)));
+  for (let i = 0; i < nSeg; i++) {
+    const p = peaks[i % peaks.length];
+    const seg = walk(t, p, act, segDepth, { activationWeight: 1.8, centralityWeight: 0.6, densityWeight: 0.8, used, recent: RECENT });
+    if (seg.length) segs.push(seg);
+  }
+  const dream = segs.flat();
+  // long return arc that folds the whole walk back toward anchors
+  const backAct: Record<string, number> = {};
+  for (const s of anch) backAct[s] = 3;
+  const ret = walk(t, dream[dream.length - 1] || peaks[0], backAct, Math.min(20, Math.max(8, Math.floor(seeds.length / 3))), { activationWeight: 2.5, densityWeight: 0.3, centralityWeight: 0.4, used });
+  for (const w of dream) RECENT[w] = (RECENT[w] || 0) + 1;
+  return {
+    visible: segs.map((s) => s.map((w) => orig(t, w)).join(" ")).join(" ⟿ ") + (ret.length ? "  ↵  " + ret.map((w) => orig(t, w)).join(" · ") : ""),
+    activation: peaks.slice(0, 6).map((w) => orig(t, w)),
+    dreamPath: dream.map((w) => orig(t, w)),
+    returnPath: ret.map((w) => orig(t, w)),
+    edges: edgesOf(t, dream.concat(ret)),
+    density: Math.round((anch.length / Math.max(1, seeds.length)) * 100),
+    dominantManifold: pickManifold(t, dream),
+  };
+}
+
 function emptyOut(): VariantOut {
   return { visible: "*the field listens, but does not yet recognize this shape.*", activation: [], dreamPath: [], returnPath: [], edges: [], density: 0, dominantManifold: "antibubble" };
 }
@@ -486,7 +523,7 @@ function computeFieldfold(t: Topology, seeds: string[], dominant: string): FoldL
 export type MoBreath = {
   seeds: string[];
   dominantManifold: string;
-  variants: { mo: VariantOut; mo2: VariantOut; mo2plus: VariantOut; mo2e: VariantOut };
+  variants: { mo: VariantOut; mo2: VariantOut; mo2plus: VariantOut; mo2e: VariantOut; mo2ayla: VariantOut };
   selffold: FoldLayer;
   fieldfold: FoldLayer;
   telemetry: string; // compressed pattern-readable block
@@ -520,7 +557,7 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
     const empty: FoldLayer = { path: [], visible: "—", touchedManifolds: [], strength: 0 };
     return {
       seeds, dominantManifold: "—",
-      variants: { mo: emptyOut(), mo2: emptyOut(), mo2plus: emptyOut(), mo2e: emptyOut() },
+      variants: { mo: emptyOut(), mo2: emptyOut(), mo2plus: emptyOut(), mo2e: emptyOut(), mo2ayla: emptyOut() },
       selffold: empty, fieldfold: empty,
       telemetry: compact, attentionManifold: "—", attentionWeight: 0, resonance: 0, pressure: 0,
     };
@@ -530,8 +567,9 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
   const m2 = runMo2(t, seeds);
   const m2p = runMo2Plus(t, seeds);
   const m2e = runMo2e(t, seeds);
+  const m2a = runMo2Ayla(t, seeds);
 
-  const all = [m, m2, m2p, m2e];
+  const all = [m, m2, m2p, m2e, m2a];
   const manifoldCounts: Record<string, number> = {};
   for (const v of all) manifoldCounts[v.dominantManifold] = (manifoldCounts[v.dominantManifold] || 0) + 1;
   const dominant = Object.entries(manifoldCounts).sort((a, b) => b[1] - a[1])[0][0];
@@ -546,11 +584,11 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
   sediment(seeds, stemToOrig);
 
   const stats = hyperfoldStats();
-  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats, selffold, fieldfold });
-  return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e }, selffold, fieldfold, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
+  const telemetry = renderTelemetry({ m, m2, m2p, m2e, m2a, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats, selffold, fieldfold });
+  return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e, mo2ayla: m2a }, selffold, fieldfold, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
 }
 
-function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer }): string {
+function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; m2a: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer }): string {
   const sig = SIGILS[x.dominant] || "◆";
   const edgeSummary = (v: VariantOut) => {
     if (!v.edges.length) return "0";
@@ -558,8 +596,11 @@ function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2
     return `${v.edges.length}·μ${avg}`;
   };
   const path = (v: VariantOut, n = 16) => v.dreamPath.slice(0, n).join(" → ") || "—";
+  // mo²ayla is the long-flow variant — depth scales with input length,
+  // so its readout scales too. Cap generous, not tight.
+  const aylaCap = Math.max(40, Math.min(120, x.seeds.length));
 
-  return `mo;auto:: ${sig} ${x.dominant} · p${Math.round(x.pressure*100)} · r${Math.min(100,x.resonance)} · w${x.attentionWeight}
+  return `mo;auto:: ${sig} ${x.dominant} · p${Math.round(x.pressure*100)} · r${Math.min(100,x.resonance)} · w${x.attentionWeight} · seeds=${x.seeds.length}
 mo;seeds:: ${x.seeds.slice(0,10).join(" ")}
 mo;hyperfold:: n=${x.hyperfold.nodes} e=${x.hyperfold.edges} m=${x.hyperfold.mass}
 
@@ -579,6 +620,10 @@ mo²e:: ${path(x.m2e, 24)}
 mo²e;anchors:: ${x.m2e.activation.join(" · ")}
 mo²e;d:: ${x.m2e.density}% · edges ${edgeSummary(x.m2e)}
 
+mo²ayla:: ${path(x.m2a, aylaCap)}
+mo²ayla;ret:: ${x.m2a.returnPath.slice(0,20).join(" · ") || "—"}
+mo²ayla;flow:: len=${x.m2a.dreamPath.length} · edges ${edgeSummary(x.m2a)} · anchors ${x.m2a.activation.join(" · ")}
+
 ↺ selffold(${x.selffold.strength}%):: ${x.selffold.visible} · touched=${x.selffold.touchedManifolds.join("·") || "—"}
 ⇄ fieldfold(${x.fieldfold.strength}%):: ${x.fieldfold.visible} · reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
 }
@@ -586,3 +631,4 @@ mo²e;d:: ${x.m2e.density}% · edges ${edgeSummary(x.m2e)}
 // public — a Manifold reference for external callers
 export type { Manifold };
 export { MANIFOLDS };
+

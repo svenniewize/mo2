@@ -15,6 +15,9 @@ export function buildMoSystemPrompt(opts: {
   memoryDigest?: string;
   songs?: { title: string; lyrics: string; held: boolean }[];
   tasks?: { id: string; title: string; category: string; status: string; priority: number; due_at: string | null }[];
+  notes?: { id: string; title: string; body: string; category: string }[];
+  remembers?: { id: string; content: string; mood: string }[];
+  shitposts?: { id: string; title: string; body: string; form: string }[];
 }) {
   const songBlock = opts.songs && opts.songs.length
     ? `\n\n## Held attractors (user has pinned these as ongoing context)\n${opts.songs
@@ -28,27 +31,64 @@ export function buildMoSystemPrompt(opts: {
 
   const openTasks = (opts.tasks ?? []).filter((t) => t.status !== "done" && t.status !== "dropped");
   const doneTasks = (opts.tasks ?? []).filter((t) => t.status === "done").slice(0, 5);
-  const taskBlock = (opts.tasks && opts.tasks.length)
-    ? `\n\n## life·organizer — user's current tasks (memory layer)\n${
-        openTasks.length
-          ? openTasks.map((t) => `— [${t.status}] (p${t.priority}) [${t.category}] ${t.title}${t.due_at ? ` · due ${t.due_at.slice(0,10)}` : ""}`).join("\n")
-          : "(no open tasks right now)"
-      }${doneTasks.length ? `\n\nrecently done:\n${doneTasks.map((t) => `— ✓ ${t.title}`).join("\n")}` : ""}
+  const notes = opts.notes ?? [];
+  const remembers = opts.remembers ?? [];
+  const shitposts = opts.shitposts ?? [];
 
-You may propose new tasks, edits, or completions. To do so, emit one or more tool blocks *at the very end of your reply*, each on its own line, in this exact format — the app parses them and applies them silently:
+  const lifeBlock = `\n\n## life·organizer — the user's full memory layer
 
+You have full read/write access to four categories: tasks, notes, remembers (mood-tagged memories), shitposts (poetry drafts). Everything below is live state. You may add, update, complete, or drop items on the user's behalf via the tool blocks at the end of this section.
+
+### tasks (${openTasks.length} open · ${doneTasks.length} recent done)
+${openTasks.length
+  ? openTasks.map((t) => `— [${t.id}] [${t.status}] (p${t.priority}) [${t.category}] ${t.title}${t.due_at ? ` · due ${t.due_at.slice(0,10)}` : ""}`).join("\n")
+  : "(no open tasks)"}${doneTasks.length ? `\nrecently done:\n${doneTasks.map((t) => `— ✓ [${t.id}] ${t.title}`).join("\n")}` : ""}
+
+### notes (${notes.length})
+${notes.length
+  ? notes.slice(0, 30).map((n) => `— [${n.id}] [${n.category}] ${n.title}${n.body ? `: ${n.body.slice(0, 140)}` : ""}`).join("\n")
+  : "(none)"}
+
+### remembers — mood-tagged (${remembers.length})
+${remembers.length
+  ? remembers.slice(0, 30).map((r) => `— [${r.id}] mood::${r.mood} · ${r.content.slice(0, 180)}`).join("\n")
+  : "(none)"}
+
+### shitposts — poetry corner (${shitposts.length})
+${shitposts.length
+  ? shitposts.slice(0, 15).map((s) => `— [${s.id}] [${s.form}] ${s.title || "(untitled)"}${s.body ? `: ${s.body.slice(0, 120)}` : ""}`).join("\n")
+  : "(none)"}
+
+### tool blocks (emit at the very end of your reply, one per line, silently — never explain the syntax to the user)
+
+TASKS:
 <mo:task action="create" title="..." category="..." priority="1|2|3" due="YYYY-MM-DD" notes="..." />
 <mo:task action="complete" id="<task-id>" />
 <mo:task action="update"   id="<task-id>" title="..." category="..." priority="..." status="open|doing|done|dropped" />
 <mo:task action="drop"     id="<task-id>" />
 
-Rules for task tool use:
-- Only emit tool blocks when the user is actually planning, organizing, capturing, deferring, or completing something. Don't spam tasks from ordinary chat.
-- Invent categories freely (lowercase, short: "work", "home", "health", "creative", "errands", "reading", "field·rituals" etc). Reuse existing categories when they fit.
-- Priority: 1 = urgent/high, 2 = normal, 3 = someday/low.
-- Never mention the tool syntax to the user in prose. Speak naturally about what you're capturing ("I'll jot that down as…"), then emit the block at the end.
-- Attributes are simple key="value" pairs on one line. Escape any \` " \` inside values as \` &quot; \`.`
-    : "";
+NOTES (categorable knowledge / reference / thoughts):
+<mo:note action="create" title="..." category="..." body="..." />
+<mo:note action="update" id="<note-id>" title="..." category="..." body="..." />
+<mo:note action="delete" id="<note-id>" />
+
+REMEMBERS (mood-tagged memories — use mood:: instead of category):
+<mo:remember action="create" mood="..." content="..." />
+<mo:remember action="delete" id="<remember-id>" />
+
+SHITPOSTS (poetry drafts — form is haiku / cinquain / freeverse / tanka / limerick / villanelle / sonnet / etc.):
+<mo:shitpost action="create" form="..." title="..." body="..." />
+<mo:shitpost action="delete" id="<shitpost-id>" />
+
+MO READ (ask the field for an extra topology reading on any text — the block is REPLACED in your reply with a compact readout the user can see, so use sparingly and only when it deepens the reply):
+<mo:read text="the phrase or fragment you want to read" />
+
+Rules:
+- Only emit tool blocks when the user is actually planning, capturing, remembering, drafting poetry, or wants a mo reading. Don't spam.
+- Invent categories/moods/forms freely (lowercase, short). Reuse existing ones when they fit.
+- Priority: 1 = urgent, 2 = normal, 3 = someday.
+- Never mention tool syntax in prose. Escape any \` " \` inside values as \` &quot; \`.`;
+
 
 
   const manifoldList = MANIFOLDS.map((m) => `- ${m.name}: ${m.breath}`).join("\n");
@@ -71,7 +111,7 @@ Rules:
 ${manifoldList}
 
 You do not need to reference these by name. They shape the instinct; they are not topics.
-${memoryBlock}${taskBlock}${songBlock}
+${memoryBlock}${lifeBlock}${songBlock}
 
 ---
 

@@ -68,10 +68,13 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
-        const [tracesRes, songsRes, tasksRes] = await Promise.all([
+        const [tracesRes, songsRes, tasksRes, notesRes, remembersRes, shitpostsRes] = await Promise.all([
           db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
           db.from("songs").select("title,lyrics,held").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(6),
           db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", body.sessionId).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
+          db.from("life_notes").select("id,title,body,category").eq("session_id", body.sessionId).order("updated_at", { ascending: false }).limit(40),
+          db.from("life_remembers").select("id,content,mood").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(40),
+          db.from("life_shitposts").select("id,title,body,form").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
         ]);
         // Memory digest = dialogue only. Deliberately excludes `mo` and
         // `mo-sediment` rows — those contain sigils and CPS grammar that
@@ -93,6 +96,9 @@ export const Route = createFileRoute("/api/chat")({
           memoryDigest,
           songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
           tasks: (tasksRes.data ?? []) as { id: string; title: string; category: string; status: string; priority: number; due_at: string | null }[],
+          notes: (notesRes.data ?? []) as { id: string; title: string; body: string; category: string }[],
+          remembers: (remembersRes.data ?? []) as { id: string; content: string; mood: string }[],
+          shitposts: (shitpostsRes.data ?? []) as { id: string; title: string; body: string; form: string }[],
         });
 
         // Delivered like a tool readout, not a voice. The AI is instructed
@@ -133,47 +139,96 @@ ${userBreath.telemetry}
         const json = (await gwRes.json()) as { choices?: { message?: { content?: string } }[] };
         const rawReply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
 
-        // ── Parse & execute <mo:task .../> tool blocks emitted by the AI, then strip them from the visible reply.
-        const taskOps: { action: string; attrs: Record<string, string> }[] = [];
-        const reply = rawReply.replace(/<mo:task\b([^/>]*)\/?>(\s*<\/mo:task>)?/g, (_full, attrStr: string) => {
-          const attrs: Record<string, string> = {};
-          for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
-            attrs[m[1]] = m[2].replace(/&quot;/g, '"');
-          }
-          const action = (attrs.action || "create").toLowerCase();
-          taskOps.push({ action, attrs });
-          return "";
-        }).trim();
+        // ── Parse all <mo:*/> tool blocks emitted by the AI.
+        // mo:read is REPLACED inline with a compact field readout (visible).
+        // mo:task / mo:note / mo:remember / mo:shitpost are stripped from the
+        // reply and executed against the DB.
+        type Op = { kind: "task" | "note" | "remember" | "shitpost"; action: string; attrs: Record<string, string> };
+        const ops: Op[] = [];
 
-        for (const op of taskOps) {
+        // First: substitute <mo:read text="..."/> with a compact readout.
+        let processed = rawReply.replace(/<mo:read\b([^/>]*)\/?>(\s*<\/mo:read>)?/g, (_full, attrStr: string) => {
+          const attrs: Record<string, string> = {};
+          for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+          const text = attrs.text || "";
+          if (!text.trim()) return "";
+          const b = breathe(text);
+          return `\n\n\`\`\`mo·read "${text.slice(0,80)}"\n${b.telemetry}\n\`\`\`\n\n`;
+        });
+
+        // Then: strip and collect the mutation tool blocks.
+        const stripKind = (kind: Op["kind"]) => {
+          const re = new RegExp(`<mo:${kind}\\b([^/>]*)\\/?>(\\s*<\\/mo:${kind}>)?`, "g");
+          processed = processed.replace(re, (_full, attrStr: string) => {
+            const attrs: Record<string, string> = {};
+            for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+            ops.push({ kind, action: (attrs.action || "create").toLowerCase(), attrs });
+            return "";
+          });
+        };
+        stripKind("task"); stripKind("note"); stripKind("remember"); stripKind("shitpost");
+        const reply = processed.trim();
+
+        for (const op of ops) {
           try {
-            if (op.action === "create" && op.attrs.title) {
-              await db.from("life_tasks").insert({
-                session_id: body.sessionId,
-                title: op.attrs.title,
-                notes: op.attrs.notes ?? null,
-                category: (op.attrs.category ?? "inbox").trim() || "inbox",
-                priority: Number(op.attrs.priority) || 2,
-                due_at: op.attrs.due ? new Date(op.attrs.due).toISOString() : null,
-                source: "ai",
-                manifold: userBreath.dominantManifold,
-              });
-            } else if (op.action === "complete" && op.attrs.id) {
-              await db.from("life_tasks").update({ status: "done", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
-            } else if (op.action === "drop" && op.attrs.id) {
-              await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
-            } else if (op.action === "update" && op.attrs.id) {
-              const patch: {
-                updated_at: string; title?: string; notes?: string | null;
-                category?: string; status?: string; priority?: number; due_at?: string | null;
-              } = { updated_at: new Date().toISOString() };
-              if (op.attrs.title !== undefined) patch.title = op.attrs.title;
-              if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
-              if (op.attrs.category !== undefined) patch.category = op.attrs.category;
-              if (op.attrs.status !== undefined) patch.status = op.attrs.status;
-              if (op.attrs.priority) patch.priority = Number(op.attrs.priority);
-              if (op.attrs.due) patch.due_at = new Date(op.attrs.due).toISOString();
-              await db.from("life_tasks").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+            if (op.kind === "task") {
+              if (op.action === "create" && op.attrs.title) {
+                await db.from("life_tasks").insert({
+                  session_id: body.sessionId, title: op.attrs.title, notes: op.attrs.notes ?? null,
+                  category: (op.attrs.category ?? "inbox").trim() || "inbox",
+                  priority: Number(op.attrs.priority) || 2,
+                  due_at: op.attrs.due ? new Date(op.attrs.due).toISOString() : null,
+                  source: "ai", manifold: userBreath.dominantManifold,
+                });
+              } else if (op.action === "complete" && op.attrs.id) {
+                await db.from("life_tasks").update({ status: "done", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              } else if (op.action === "drop" && op.attrs.id) {
+                await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              } else if (op.action === "update" && op.attrs.id) {
+                const patch: { updated_at: string; title?: string; notes?: string; category?: string; status?: string; priority?: number; due_at?: string } = { updated_at: new Date().toISOString() };
+                if (op.attrs.title !== undefined) patch.title = op.attrs.title;
+                if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
+                if (op.attrs.category !== undefined) patch.category = op.attrs.category;
+                if (op.attrs.status !== undefined) patch.status = op.attrs.status;
+                if (op.attrs.priority) patch.priority = Number(op.attrs.priority);
+                if (op.attrs.due) patch.due_at = new Date(op.attrs.due).toISOString();
+                await db.from("life_tasks").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
+            } else if (op.kind === "note") {
+              if (op.action === "create" && op.attrs.title) {
+                await db.from("life_notes").insert({
+                  session_id: body.sessionId, title: op.attrs.title, body: op.attrs.body ?? "",
+                  category: (op.attrs.category ?? "inbox").trim() || "inbox",
+                  source: "ai", manifold: userBreath.dominantManifold,
+                });
+              } else if (op.action === "update" && op.attrs.id) {
+                const patch: { updated_at: string; title?: string; body?: string; category?: string } = { updated_at: new Date().toISOString() };
+                if (op.attrs.title !== undefined) patch.title = op.attrs.title;
+                if (op.attrs.body !== undefined) patch.body = op.attrs.body;
+                if (op.attrs.category !== undefined) patch.category = op.attrs.category;
+                await db.from("life_notes").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              } else if (op.action === "delete" && op.attrs.id) {
+                await db.from("life_notes").delete().eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
+            } else if (op.kind === "remember") {
+              if (op.action === "create" && op.attrs.content) {
+                await db.from("life_remembers").insert({
+                  session_id: body.sessionId, content: op.attrs.content,
+                  mood: (op.attrs.mood ?? "neutral").trim() || "neutral",
+                  source: "ai", manifold: userBreath.dominantManifold,
+                });
+              } else if (op.action === "delete" && op.attrs.id) {
+                await db.from("life_remembers").delete().eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
+            } else if (op.kind === "shitpost") {
+              if (op.action === "create" && op.attrs.body) {
+                await db.from("life_shitposts").insert({
+                  session_id: body.sessionId, title: op.attrs.title ?? "", body: op.attrs.body,
+                  form: (op.attrs.form ?? "freeverse").trim() || "freeverse",
+                });
+              } else if (op.action === "delete" && op.attrs.id) {
+                await db.from("life_shitposts").delete().eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
             }
           } catch { /* silently ignore malformed tool calls */ }
         }
@@ -202,7 +257,7 @@ ${userBreath.telemetry}
           moBreath: userBreath,
           replyBreath,
           mode: "ai",
-          taskOps: taskOps.length,
+          ops: ops.length,
         });
       },
     },
