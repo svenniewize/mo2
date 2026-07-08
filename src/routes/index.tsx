@@ -609,7 +609,7 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
       <div className="flex justify-end">
         <div className="group relative max-w-[80%] rounded-lg bg-primary/90 px-4 py-2.5 font-mono text-sm text-primary-foreground">
           <div className="mb-1 font-mono text-[10px] opacity-70">{label}</div>
-          <div className="whitespace-pre-wrap">{msg.content}</div>
+          <div className="whitespace-pre-wrap">{rendered}</div>
           <button
             onClick={copyOne}
             className="absolute -top-2 -right-2 rounded border border-primary-foreground/30 bg-background/80 px-1.5 py-0.5 font-mono text-[9px] text-foreground opacity-0 group-hover:opacity-100 hover:border-ridge hover:text-ridge transition"
