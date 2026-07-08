@@ -68,7 +68,7 @@ function useSessionId() {
 }
 
 function MoPage() {
-  const sessionId = useSessionId();
+  const { id: sessionId, shared: sessionShared, unlock: unlockSession, lock: lockSession } = useSessionId();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
