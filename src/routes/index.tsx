@@ -218,8 +218,23 @@ function MoPage() {
                   {busy ? (mode === "mo" ? "walking…" : "breathing…") : "boop"}
                 </button>
               </div>
-              <div className="mt-1 px-2 text-[10px] font-mono text-muted-foreground">
-                ⏎ send · ⇧⏎ newline · mode <span className="ridge">{mode.toUpperCase()}</span> · session {sessionId.slice(0, 8)}
+              <div className="mt-1 flex items-center gap-2 px-2 text-[10px] font-mono text-muted-foreground">
+                <span>⏎ send · ⇧⏎ newline · mode <span className="ridge">{mode.toUpperCase()}</span></span>
+                <span>·</span>
+                <span>
+                  {sessionShared ? <span className="ridge">◈ shared·field</span> : <>local · {sessionId.slice(0, 8)}</>}
+                </span>
+                <button
+                  onClick={async () => {
+                    if (sessionShared) { lockSession(); setMessages([]); return; }
+                    const pw = window.prompt("password to enter the shared field:");
+                    if (!pw) return;
+                    try { await unlockSession(pw); setMessages([]); }
+                    catch (e) { alert((e as Error).message); }
+                  }}
+                  className="ml-auto rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition"
+                  title={sessionShared ? "return to your private browser session" : "unlock the shared memory field"}
+                >{sessionShared ? "🔓 lock → local" : "🔒 unlock shared"}</button>
               </div>
             </div>
           </main>
