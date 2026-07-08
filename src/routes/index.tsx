@@ -76,7 +76,9 @@ function MoPage() {
   const [mode, setMode] = useState<Mode>("ai");
   const [vizMode, setVizMode] = useState<VizMode>("flower");
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
-  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "tasks">("tasks");
+  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "life">("life");
+  const [lifeFull, setLifeFull] = useState(false);
+  const [lifeTab, setLifeTab] = useState<LifeTab>("tasks");
   const [vizOpen, setVizOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
