@@ -642,7 +642,7 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
         )}
       </div>
       <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
-        {msg.content}
+        {rendered}
       </pre>
       {mode === "ai" && showTelemetry && msg.telemetry && (
         <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
