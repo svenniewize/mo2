@@ -237,7 +237,7 @@ ${userBreath.telemetry}
         const reply = processed.trim();
 
         const replyBreath = breathe(reply);
-        await crystallize("assistant", reply, replyBreath);
+        await crystallizeAssistant(reply, replyBreath);
         if (!shared) {
           await db.from("mo_traces").insert({
             session_id: writeSession, role: "assistant", content: reply,
