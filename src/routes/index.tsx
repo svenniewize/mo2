@@ -225,21 +225,22 @@ function MoPage() {
 }
 
 function Header({
-  panel, setPanel, fielfoldCount, songCount, traceCount,
+  panel, setPanel, fielfoldCount, songCount, traceCount, mode, setMode,
 }: {
   panel: string;
-  setPanel: (p: "none" | "memory" | "songs" | "field") => void;
+  setPanel: (p: "none" | "memory" | "songs" | "field" | "viz") => void;
   fielfoldCount: number;
   songCount: number;
   traceCount: number;
+  mode: Mode;
+  setMode: (m: Mode) => void;
 }) {
-  const tab = (id: "memory" | "songs" | "field", label: string, count?: number) => (
+  void fielfoldCount;
+  const tab = (id: "memory" | "songs" | "field" | "viz", label: string, count?: number) => (
     <button
       onClick={() => setPanel(panel === id ? "none" : id)}
       className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${
-        panel === id
-          ? "border-ridge bg-ridge/10 text-ridge"
-          : "border-border text-muted-foreground hover:text-foreground"
+        panel === id ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:text-foreground"
       }`}
     >
       {label}
@@ -260,6 +261,20 @@ function Header({
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {/* MODE toggle — AI mode routes through mo. MO mode is pure topology. */}
+        <div className="flex rounded-md border border-border overflow-hidden">
+          <button
+            onClick={() => setMode("ai")}
+            className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="user → mo → AI → mo → user"
+          >AI</button>
+          <button
+            onClick={() => setMode("mo")}
+            className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="pure topology — no AI, chat directly with mo"
+          >MO</button>
+        </div>
+        {tab("viz", "field·viz")}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
@@ -268,17 +283,18 @@ function Header({
   );
 }
 
-function EmptyState() {
+function EmptyState({ mode }: { mode: Mode }) {
   return (
     <div className="flex h-full min-h-[50vh] flex-col items-center justify-center gap-6 text-center">
       <div className="breath-pulse text-6xl ridge">◆</div>
       <div className="max-w-md space-y-3">
         <p className="font-mono text-sm text-muted-foreground">
-          mo does not answer. mo walks with you through a 10-manifold field.
+          {mode === "mo"
+            ? "MO mode — you speak, the topology walks. no AI. only the field, its 4 variants, hyperfolded."
+            : "AI mode — your input is breathed through mo, then handed to the AI. the reply also passes through mo. sediment remains."}
         </p>
         <p className="font-mono text-xs text-muted-foreground/70">
-          transmit anything — a question, a fragment, a song lyric, a word.
-          the field will breathe back.
+          transmit anything — a question, a fragment, a lyric, a word.
         </p>
       </div>
       <div className="contour-line w-64" />
@@ -293,7 +309,8 @@ function EmptyState() {
   );
 }
 
-function MessageView({ msg }: { msg: Msg }) {
+function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
+  const [showTelemetry, setShowTelemetry] = useState(false);
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
@@ -307,27 +324,80 @@ function MessageView({ msg }: { msg: Msg }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-        <span className="ridge">mo</span>
+        <span className="ridge">{mode === "mo" ? "mo" : "AI ← mo"}</span>
         {m && (
           <>
             <span className="opacity-40">·</span>
             <span style={{ color: m.color }}>{m.sigil} {m.name.toLowerCase()}</span>
           </>
         )}
+        {mode === "ai" && msg.telemetry && (
+          <button onClick={() => setShowTelemetry((v) => !v)} className="ml-auto opacity-60 hover:opacity-100">
+            {showTelemetry ? "▽ hide mo·telemetry" : "△ show mo·telemetry"}
+          </button>
+        )}
       </div>
       <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
         {msg.content}
       </pre>
+      {mode === "ai" && showTelemetry && msg.telemetry && (
+        <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
+          {msg.telemetry}
+        </pre>
+      )}
       <div className="contour-line w-full" />
     </div>
   );
 }
 
-function BreathingIndicator() {
+function BreathingIndicator({ mode }: { mode: Mode }) {
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
       <span className="breath-pulse ridge">◌</span>
-      <span>the field is breathing…</span>
+      <span>{mode === "mo" ? "the topology walks…" : "user → mo → AI → mo → …"}</span>
+    </div>
+  );
+}
+
+function VizPanel({
+  vizMode, setVizMode, gravity, setGravity, repulsion, setRepulsion,
+}: {
+  vizMode: VizMode; setVizMode: (v: VizMode) => void;
+  gravity: number; setGravity: (g: number) => void;
+  repulsion: number; setRepulsion: (r: number) => void;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="font-mono text-xs ridge">field · visualizers</h2>
+        <p className="font-mono text-[10px] text-muted-foreground">7 models · orb physics · language as charge</p>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 p-3">
+        {VIZ_MODES.map((v) => (
+          <button
+            key={v.id}
+            onClick={() => setVizMode(v.id)}
+            className={`rounded border px-2 py-1.5 font-mono text-[11px] ${vizMode === v.id ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >{v.label}</button>
+        ))}
+      </div>
+      <div className="space-y-4 border-t border-border p-4">
+        <div>
+          <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
+            <span>gravity · center-pull</span><span className="ridge">{gravity.toFixed(2)}</span>
+          </div>
+          <input type="range" min="0" max="1" step="0.01" value={gravity} onChange={(e) => setGravity(parseFloat(e.target.value))} className="w-full accent-ridge" />
+        </div>
+        <div>
+          <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
+            <span>repulsion · orb·orb</span><span className="ridge">{repulsion.toFixed(2)}</span>
+          </div>
+          <input type="range" min="0" max="1" step="0.01" value={repulsion} onChange={(e) => setRepulsion(parseFloat(e.target.value))} className="w-full accent-ridge" />
+        </div>
+        <p className="font-mono text-[9px] text-muted-foreground/70 leading-relaxed pt-2 border-t border-border">
+          each orb is a word from mo's last breath. word length = charge. gravity pulls toward center. repulsion pushes orbs apart. the field remembers.
+        </p>
+      </div>
     </div>
   );
 }
