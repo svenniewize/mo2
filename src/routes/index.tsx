@@ -445,7 +445,7 @@ what does it feel like to hold too many things at once?`}</pre>
 }
 
 function Header({
-  panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, onOpenViz,
+  panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, glyph, setGlyph, onOpenViz,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -455,6 +455,8 @@ function Header({
   taskCount: number;
   mode: Mode;
   setMode: (m: Mode) => void;
+  glyph: boolean;
+  setGlyph: (v: boolean) => void;
   onOpenViz: () => void;
 }) {
   void fielfoldCount;
