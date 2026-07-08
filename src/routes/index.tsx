@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
       { title: "mo — the breathing field" },
       { name: "description", content: "mo is a semantic topology walker traversing a 10-manifold field. Not a chatbot. A co-mover." },
       { property: "og:title", content: "mo — the breathing field" },
-      { property: "og:description", content: "10 manifolds. One field. Walk with mo." },
+      { property: "og:description", content: "mo is a semantic topology walker traversing a 10-manifold field. Not a chatbot. A co-mover." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

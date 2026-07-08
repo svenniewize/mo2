@@ -79,6 +79,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "mo — the breathing field" },
       { name: "description", content: "mo is a semantic topology walker traversing a 10-manifold field. Not a chatbot. A co-mover." },
+      { property: "og:title", content: "mo — the breathing field" },
+      { name: "twitter:title", content: "mo — the breathing field" },
+      { property: "og:description", content: "mo is a semantic topology walker traversing a 10-manifold field. Not a chatbot. A co-mover." },
+      { name: "twitter:description", content: "mo is a semantic topology walker traversing a 10-manifold field. Not a chatbot. A co-mover." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a2433ce3-c1d1-4e16-9927-57151a9d6468/id-preview-1f7ee391--fe6d875c-bd13-4f7c-b5f8-0c583ba4685d.lovable.app-1783475283039.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a2433ce3-c1d1-4e16-9927-57151a9d6468/id-preview-1f7ee391--fe6d875c-bd13-4f7c-b5f8-0c583ba4685d.lovable.app-1783475283039.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:type", content: "website" },
     ],
     links: [
       {
