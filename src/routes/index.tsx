@@ -32,21 +32,21 @@ export type Task = {
 };
 
 // Session strategy:
-// - Every visitor gets a per-browser UUID stored in `mo.session` (private memory).
-// - If they enter the shared password, we swap in a deterministic sessionId
-//   from `/api/unlock` and remember it in `mo.session.shared`. Toggle freely.
+// - Every visitor ALWAYS boots into their per-browser persistent UUID
+//   (`mo.session`). That is the default and it never goes away.
+// - Password unlock loads a shared field for the current visit only —
+//   it is NOT persisted across reloads. Next page load = back to local.
+// - Lock returns to the same persistent local uuid.
 function useSessionId() {
   const [id, setId] = useState<string>("");
   const [shared, setShared] = useState<boolean>(false);
   useEffect(() => {
-    const useShared = localStorage.getItem("mo.session.mode") === "shared";
-    const sharedId = localStorage.getItem("mo.session.shared");
-    if (useShared && sharedId) { setId(sharedId); setShared(true); return; }
-    const existing = localStorage.getItem("mo.session");
-    if (existing) { setId(existing); return; }
-    const fresh = crypto.randomUUID();
-    localStorage.setItem("mo.session", fresh);
-    setId(fresh);
+    let local = localStorage.getItem("mo.session");
+    if (!local) {
+      local = crypto.randomUUID();
+      localStorage.setItem("mo.session", local);
+    }
+    setId(local);
   }, []);
   const unlock = async (password: string) => {
     const r = await fetch("/api/unlock", {
@@ -55,18 +55,16 @@ function useSessionId() {
     });
     if (!r.ok) throw new Error(r.status === 401 ? "wrong password" : "unlock failed");
     const j = (await r.json()) as { sessionId: string };
-    localStorage.setItem("mo.session.shared", j.sessionId);
-    localStorage.setItem("mo.session.mode", "shared");
     setId(j.sessionId); setShared(true);
   };
   const lock = () => {
-    localStorage.setItem("mo.session.mode", "local");
     const local = localStorage.getItem("mo.session") || crypto.randomUUID();
     localStorage.setItem("mo.session", local);
     setId(local); setShared(false);
   };
   return { id, shared, unlock, lock };
 }
+
 
 function MoPage() {
   const { id: sessionId, shared: sessionShared, unlock: unlockSession, lock: lockSession } = useSessionId();
