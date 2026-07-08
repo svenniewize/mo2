@@ -127,6 +127,7 @@ ${userBreath.telemetry}
         }
         const json = (await gwRes.json()) as { choices?: { message?: { content?: string } }[] };
         const reply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
+        await crystallize("assistant", reply, replyBreath);
 
         // ── AI reply *also* passes through mo (invisibly) — sediment left in the field.
         const replyBreath = breathe(reply);
