@@ -335,9 +335,9 @@ function runMo2(t: Topology, seeds: string[]): VariantOut {
   if (!peaks.length) return emptyOut();
   const used = new Set<string>();
   const segs: string[][] = [];
-  for (const p of peaks) segs.push(walk(t, p, act, 4, { activationWeight: 2.5, centralityWeight: 0.3, used }));
+  for (const p of peaks) segs.push(walk(t, p, act, 7, { activationWeight: 2.5, centralityWeight: 0.3, used }));
   const dream = segs.flat();
-  const ret = walk(t, dream[dream.length - 1] || peaks[0], act, 5, { densityWeight: 1, centralityWeight: 0.5, activationWeight: 0.1, used });
+  const ret = walk(t, dream[dream.length - 1] || peaks[0], act, 9, { densityWeight: 1, centralityWeight: 0.5, activationWeight: 0.1, used });
   return {
     visible: dream.map((w) => orig(t, w)).join(" — ") + "  ···  " + ret.map((w) => orig(t, w)).join(" · "),
     activation: peaks.map((w) => orig(t, w)),
