@@ -32,7 +32,7 @@ all 4 seed from user tokens (post stem/filter). paths length ~5–8.
 
 ## telemetry schema (what you receive as moContext each turn)
 compressed, pattern-readable, NOT prose. fields:
-- dominantManifold : string ∈ 10 manifolds. the one under most pressure.
+- dominantManifold : string ∈ 18 manifolds. the one under most pressure.
 - pressure         : float 0..1. sum of activation over vocab / cap. how
                      hard the input pushes the field.
 - permeability     : float 0..1. inverse of ridge-lock. high = drifty,

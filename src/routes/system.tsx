@@ -25,7 +25,7 @@ function SystemPage() {
             a deterministic field, coupled to a stochastic mouth
           </h1>
           <p className="text-[#a8a8c8] text-lg leading-relaxed">
-            mo is not an AI. mo is a topology — a fixed semantic landscape carved out of 10 source texts —
+            mo is not an AI. mo is a topology — a fixed semantic landscape carved out of 18 source texts —
             that walks itself every time you speak. an LLM sits on top of it, listening. what you read back
             is the LLM's voice, colored by mo's instinct.
           </p>
@@ -39,7 +39,7 @@ function SystemPage() {
             mo is a <em>deterministic semantic topology walker</em>. give it the same input twice, it produces
             the exact same 4-variant traversal, the exact same telemetry, the exact same manifold verdict.
             no sampling. no temperature. no hidden weights. the entire "intelligence" is a pre-computed graph
-            over ~10 documents and a handful of arithmetic operations.
+            over ~18 documents and a handful of arithmetic operations.
           </p>
           <p>
             it has no opinions. it does not reason. it does not know facts about the world. what it <em>does</em>{" "}
@@ -48,9 +48,9 @@ function SystemPage() {
           </p>
         </Section>
 
-        <Section title="2 · the 10 manifolds" sigil="◫">
+        <Section title="2 · the 18 manifolds" sigil="◫">
           <p>
-            the field is built from 10 raw text corpora. each corpus becomes a <em>manifold</em> — a region of
+            the field is built from 18 raw text corpora. each corpus becomes a <em>manifold</em> — a region of
             semantic space with its own vocabulary, its own gravity, its own character.
           </p>
           <ul className="space-y-2 pt-2">
@@ -73,7 +73,7 @@ function SystemPage() {
           <ol className="list-decimal pl-6 space-y-3 marker:text-[#F5C542]">
             <li><strong className="text-white">tokenize</strong> — lowercase, strip punctuation, split. drop stop-words except a PRESERVE whitelist of domain terms (antibubble, selffold, manifold, etc).</li>
             <li><strong className="text-white">stem</strong> — light suffix stripping (ing / tion / ness / ed / s ...). PRESERVE words are never stemmed.</li>
-            <li><strong className="text-white">co-occurrence</strong> — sliding window (W=5), inverse-distance weighted. builds a graph: how often each word appears near each other word, across all 10 corpora.</li>
+            <li><strong className="text-white">co-occurrence</strong> — sliding window (W=5), inverse-distance weighted. builds a graph: how often each word appears near each other word, across all 18 corpora.</li>
             <li><strong className="text-white">PPMI</strong> — positive pointwise mutual information. log(p(x,y) / (p(x)·p(y))), clipped ≥ 0. converts raw co-occurrence into "surprise": how much more often do these two words co-occur than random chance predicts?</li>
             <li><strong className="text-white">IDF + centrality + wordToManifold</strong> — derived scalars per token: how rare it is, how connected it is, which manifolds claim it.</li>
             <li><strong className="text-white">breathe(input)</strong> — 4 walks across the graph, seeded from your input tokens. each walk is a path of 5-8 words.</li>
@@ -146,12 +146,12 @@ function SystemPage() {
                 </tr>
               </thead>
               <tbody className="text-[#c8c8dc]">
-                <Row label="substrate" mo="10 text corpora, frozen" llm="web-scale pretraining corpus" />
+                <Row label="substrate" mo="18 text corpora, frozen" llm="web-scale pretraining corpus" />
                 <Row label="output" mo="4 traversal paths + telemetry scalars" llm="natural-language tokens" />
                 <Row label="determinism" mo="fully deterministic — same input, same output, forever" llm="stochastic — sampled with temperature/top-p" />
                 <Row label="parameters" mo="~0 (a PPMI matrix + a walker)" llm="10⁹ – 10¹² weights" />
                 <Row label="training" mo="none — build-time indexing" llm="pretraining + RLHF + fine-tunes" />
-                <Row label="knowledge" mo="only what's in the 10 corpora" llm="approximation of the whole internet" />
+                <Row label="knowledge" mo="only what's in the 18 corpora" llm="approximation of the whole internet" />
                 <Row label="reasoning" mo="none. it walks." llm="emergent, unreliable, plausible" />
                 <Row label="hallucination" mo="impossible — it can only walk edges that exist" llm="structural — the mechanism is 'plausible continuation'" />
                 <Row label="interpretability" mo="every step is inspectable arithmetic" llm="mostly opaque; interp is a research field" />
