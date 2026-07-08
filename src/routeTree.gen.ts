@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUnlockRouteImport } from './routes/api/unlock'
 import { Route as ApiTasksRouteImport } from './routes/api/tasks'
 import { Route as ApiSongsRouteImport } from './routes/api/songs'
+import { Route as ApiRemembersRouteImport } from './routes/api/remembers'
 import { Route as ApiNotesRouteImport } from './routes/api/notes'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -36,6 +37,11 @@ const ApiTasksRoute = ApiTasksRouteImport.update({
 const ApiSongsRoute = ApiSongsRouteImport.update({
   id: '/api/songs',
   path: '/api/songs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRemembersRoute = ApiRemembersRouteImport.update({
+  id: '/api/remembers',
+  path: '/api/remembers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiNotesRoute = ApiNotesRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
+  '/api/remembers': typeof ApiRemembersRoute
   '/api/songs': typeof ApiSongsRoute
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
+  '/api/remembers': typeof ApiRemembersRoute
   '/api/songs': typeof ApiSongsRoute
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
+  '/api/remembers': typeof ApiRemembersRoute
   '/api/songs': typeof ApiSongsRoute
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
+    | '/api/remembers'
     | '/api/songs'
     | '/api/tasks'
     | '/api/unlock'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
+    | '/api/remembers'
     | '/api/songs'
     | '/api/tasks'
     | '/api/unlock'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
+    | '/api/remembers'
     | '/api/songs'
     | '/api/tasks'
     | '/api/unlock'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
   ApiNotesRoute: typeof ApiNotesRoute
+  ApiRemembersRoute: typeof ApiRemembersRoute
   ApiSongsRoute: typeof ApiSongsRoute
   ApiTasksRoute: typeof ApiTasksRoute
   ApiUnlockRoute: typeof ApiUnlockRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/api/songs'
       fullPath: '/api/songs'
       preLoaderRoute: typeof ApiSongsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/remembers': {
+      id: '/api/remembers'
+      path: '/api/remembers'
+      fullPath: '/api/remembers'
+      preLoaderRoute: typeof ApiRemembersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/notes': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,
   ApiNotesRoute: ApiNotesRoute,
+  ApiRemembersRoute: ApiRemembersRoute,
   ApiSongsRoute: ApiSongsRoute,
   ApiTasksRoute: ApiTasksRoute,
   ApiUnlockRoute: ApiUnlockRoute,
