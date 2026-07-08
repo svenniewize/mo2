@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
 
 type Mode = "ai" | "mo";
 
-type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null };
+type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
 type Fielfold = { id: string; content: string; manifold: string | null; depth: number; created_at: string };
 type Song = { id: string; title: string; lyrics: string; held: boolean; created_at: string };
