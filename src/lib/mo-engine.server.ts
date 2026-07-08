@@ -447,6 +447,29 @@ export function breathe(input: string): MoBreath {
   const stemToOrig: Record<string, string> = {};
   for (let i = 0; i < seeds.length; i++) if (!t.stemToOriginal[seeds[i]]) stemToOrig[seeds[i]] = raw[i];
 
+  // ⚡ Short/casual input: no anchored seeds → compact "no-signal" readout.
+  // Still sediment the tokens so even chatter grows the field over time.
+  const anchoredSeeds = seeds.filter((s) => hasWord(t, s));
+  if (anchoredSeeds.length === 0) {
+    sediment(seeds, stemToOrig);
+    const stats0 = hyperfoldStats();
+    const rawWords = raw.slice(0, 6).join(" ");
+    const compact = `mo;quiet:: no ridge (0 anchored seeds from ${raw.length} tokens: "${rawWords}")
+mo;pressure:: 0
+mo;dominant:: —
+mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
+    return {
+      seeds,
+      dominantManifold: "—",
+      variants: { mo: emptyOut(), mo2: emptyOut(), mo2plus: emptyOut(), mo2e: emptyOut() },
+      telemetry: compact,
+      attentionManifold: "—",
+      attentionWeight: 0,
+      resonance: 0,
+      pressure: 0,
+    };
+  }
+
   const m = runMo(t, seeds);
   const m2 = runMo2(t, seeds);
   const m2p = runMo2Plus(t, seeds);
@@ -462,7 +485,6 @@ export function breathe(input: string): MoBreath {
   const resonance = Math.round(50 + m.density * 0.4 + m2p.density * 0.1);
 
   // ⚡ SEDIMENT — the field learns from every breath.
-  // Additive overlay only. Base topology stays immutable.
   sediment(seeds, stemToOrig);
 
   const stats = hyperfoldStats();
