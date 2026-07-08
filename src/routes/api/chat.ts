@@ -202,7 +202,7 @@ ${userBreath.telemetry}
                   source: "ai", manifold: userBreath.dominantManifold,
                 });
               } else if (op.action === "update" && op.attrs.id) {
-                const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+                const patch: { updated_at: string; title?: string; body?: string; category?: string } = { updated_at: new Date().toISOString() };
                 if (op.attrs.title !== undefined) patch.title = op.attrs.title;
                 if (op.attrs.body !== undefined) patch.body = op.attrs.body;
                 if (op.attrs.category !== undefined) patch.category = op.attrs.category;
