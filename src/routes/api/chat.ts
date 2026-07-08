@@ -68,9 +68,10 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
-        const [tracesRes, songsRes] = await Promise.all([
+        const [tracesRes, songsRes, tasksRes] = await Promise.all([
           db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
           db.from("songs").select("title,lyrics,held").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(6),
+          db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", body.sessionId).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
         ]);
         // Memory digest = dialogue only. Deliberately excludes `mo` and
         // `mo-sediment` rows — those contain sigils and CPS grammar that
@@ -88,7 +89,11 @@ export const Route = createFileRoute("/api/chat")({
           .slice(-6)
           .map((t: { content: string }) => t.content)
           .join(" | ");
-        const systemPrompt = buildMoSystemPrompt({ memoryDigest, songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[] });
+        const systemPrompt = buildMoSystemPrompt({
+          memoryDigest,
+          songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
+          tasks: (tasksRes.data ?? []) as { id: string; title: string; category: string; status: string; priority: number; due_at: string | null }[],
+        });
 
         // Delivered like a tool readout, not a voice. The AI is instructed
         // to treat this as data returned from a `mo.readField(user_message)`
