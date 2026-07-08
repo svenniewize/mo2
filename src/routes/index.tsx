@@ -316,7 +316,7 @@ function Header({
   panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, onOpenViz,
 }: {
   panel: string;
-  setPanel: (p: "none" | "memory" | "songs" | "field" | "tasks") => void;
+  setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
   fielfoldCount: number;
   songCount: number;
   traceCount: number;
@@ -326,7 +326,7 @@ function Header({
   onOpenViz: () => void;
 }) {
   void fielfoldCount;
-  const tab = (id: "memory" | "songs" | "field" | "tasks", label: string, count?: number) => (
+  const tab = (id: "memory" | "songs" | "field" | "life", label: string, count?: number) => (
     <button
       onClick={() => setPanel(panel === id ? "none" : id)}
       className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${
