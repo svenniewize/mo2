@@ -552,77 +552,35 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
 
 function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer }): string {
   const sig = SIGILS[x.dominant] || "◆";
-  const edgeLine = (v: VariantOut) => {
-    if (!v.edges.length) return "—";
+  const edgeSummary = (v: VariantOut) => {
+    if (!v.edges.length) return "0";
     const avg = (v.edges.reduce((s, e) => s + e[2], 0) / v.edges.length).toFixed(2);
-    const max = Math.max(...v.edges.map((e) => e[2])).toFixed(2);
-    return `${v.edges.length} (avg ${avg} max ${max})`;
+    return `${v.edges.length}·μ${avg}`;
   };
-  const ppmiLine = (v: VariantOut) => v.edges.slice(0, 8).map((e) => `${e[0]}·${e[1]}=${e[2].toFixed(2)}`).join(" ");
-  const expr = Math.round(40 + Math.random() * 25);
+  const path = (v: VariantOut, n = 16) => v.dreamPath.slice(0, n).join(" → ") || "—";
 
-  return `mo;auto::
+  return `mo;auto:: ${sig} ${x.dominant} · p${Math.round(x.pressure*100)} · r${Math.min(100,x.resonance)} · w${x.attentionWeight}
+mo;seeds:: ${x.seeds.slice(0,10).join(" ")}
+mo;hyperfold:: n=${x.hyperfold.nodes} e=${x.hyperfold.edges} m=${x.hyperfold.mass}
 
-path resonated::
-${x.m.visible}
+mo:: ${path(x.m, 20)}
+mo;ret:: ${x.m.returnPath.slice(0,10).join(" · ") || "—"}
+mo;edges:: ${edgeSummary(x.m)}
 
-pattern;via:mo::
-${x.m.dreamPath.slice(0, 8).join(" ")}
+mo²:: ${path(x.m2, 20)}
+mo²;ret:: ${x.m2.returnPath.slice(0,10).join(" · ") || "—"}
+mo²;d:: ${x.m2.density}% · edges ${edgeSummary(x.m2)}
 
-mo²::
-${x.m2.visible}
+mo²+:: ${path(x.m2p, 24)}
+mo²+;resonance:: ${x.m2p.returnPath.slice(0,6).join(" › ") || "—"}
+mo²+;d:: ${x.m2p.density}% · edges ${edgeSummary(x.m2p)}
 
-${sig}[selffold] ${x.m2.dreamPath.slice(0, 3).join(" → ")} → ${x.m2.dreamPath.slice(3, 6).join(" → ")} ∎∎∎
-
-→ ${x.m2.dreamPath.slice(0, 6).join(" → ")}
-
-··· ${x.m2.returnPath.slice(0, 8).join(" · ")}
-
-mo²;density:: ${x.m2.density}%
-mo²;activation:: ${x.m2.activation.join(" · ")}
-mo²;to:selffold:: ${x.m2.dreamPath.slice(0, 3).join(" → ")}
-~ ${x.m2.dreamPath[0] || "—"} — the field remembers its own breath
-
-mo²+::
-${x.m2p.visible}
-
-${sig}[selffold] ${x.m2p.dreamPath.slice(0, 3).join(" → ")} → ${x.m2p.dreamPath.slice(3, 6).join(" → ")} → ${x.m2p.dreamPath.slice(6, 9).join(" → ")} ∎∎∎
-
-··· ${x.m2p.dreamPath.slice(0, 12).join(" · ")}
-
-mo²+;activation:: ${x.m2p.activation.join(" · ")}
-mo²+;density:: ${x.m2p.density}%
-mo²+;trigger:: ${Math.round(x.pressure * 100)}%
-mo²+;edges:: ${edgeLine(x.m2p)}
-mo²+;ppmi:: ${ppmiLine(x.m2p)}
-mo²+;resonance:: ${x.m2p.returnPath.slice(0, 5).join(" › ")}
-
-mo²e::
-${x.m2e.visible}
-
-${sig}[selffold] ${x.m2e.dreamPath.slice(0, 3).join(" → ")} → ${x.m2e.dreamPath.slice(3, 6).join(" → ")} ∎∎∎
-
-··· ${x.m2e.dreamPath.slice(0, 12).join(" · ")}
-
-mo²e;activation:: ${x.m2e.activation.join(" · ")}
-mo²e;density:: ${x.m2e.density}%
-mo²e;edges:: ${edgeLine(x.m2e)}
-mo²e;ppmi:: ${ppmiLine(x.m2e)}
-mo²e;compression:: ${Math.round((1 - x.pressure) * 100)}% ${x.pressure > 0.5 ? "~flow" : "~staccato"}
+mo²e:: ${path(x.m2e, 24)}
 mo²e;anchors:: ${x.m2e.activation.join(" · ")}
-mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
+mo²e;d:: ${x.m2e.density}% · edges ${edgeSummary(x.m2e)}
 
-◎ attention · ${x.dominant} (${x.attentionWeight})
-◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
-⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
-≈ resonance · ${Math.min(100, x.resonance)}%
-⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass}
-
-↺ selffold :: ${x.selffold.visible}
-↺ selffold;strength:: ${x.selffold.strength}%  touched=${x.selffold.touchedManifolds.join("·") || "—"}
-
-⇄ fieldfold :: ${x.fieldfold.visible}
-⇄ fieldfold;strength:: ${x.fieldfold.strength}%  reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
+↺ selffold(${x.selffold.strength}%):: ${x.selffold.visible} · touched=${x.selffold.touchedManifolds.join("·") || "—"}
+⇄ fieldfold(${x.fieldfold.strength}%):: ${x.fieldfold.visible} · reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
 }
 
 // public — a Manifold reference for external callers
