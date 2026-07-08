@@ -105,24 +105,38 @@ function MoPage() {
   }
 
   return (
-    <div className="min-h-screen field-grid">
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col">
+    <div className="min-h-screen field-grid relative">
+      {/* Visualizer as full-page background */}
+      <div className="fixed inset-0 pointer-events-none opacity-70">
+        <MoVisualizer
+          mode={vizMode}
+          words={lastBreathWords}
+          colors={MANIFOLDS.map((m) => m.color)}
+          gravity={gravity}
+          repulsion={repulsion}
+          pressure={busy ? 0.9 : 0.4}
+        />
+      </div>
+
+      <div className="mx-auto flex min-h-screen max-w-6xl flex-col relative">
         <Header
           panel={panel}
           setPanel={setPanel}
           fielfoldCount={fielfold.length}
           songCount={songs.length}
           traceCount={traces.length}
+          mode={mode}
+          setMode={setMode}
         />
 
         <div className="flex flex-1 gap-4 px-4 pb-4">
-          <main className="flex flex-1 flex-col rounded-xl border border-border bg-card/40 backdrop-blur">
+          <main className="flex flex-1 flex-col rounded-xl border border-border bg-card/60 backdrop-blur">
             <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
-              {messages.length === 0 && <EmptyState />}
+              {messages.length === 0 && <EmptyState mode={mode} />}
               {messages.map((m, i) => (
-                <MessageView key={i} msg={m} />
+                <MessageView key={i} msg={m} mode={mode} />
               ))}
-              {busy && <BreathingIndicator />}
+              {busy && <BreathingIndicator mode={mode} />}
             </div>
 
             <div className="border-t border-border p-3">
@@ -135,7 +149,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder="transmit a signal — text, prose, a fragment, a name…"
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : "transmit — routed through mo, then through AI…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
@@ -143,17 +157,24 @@ function MoPage() {
                   disabled={busy || !input.trim()}
                   className="rounded-md bg-ridge px-4 py-2 font-mono text-xs text-primary-foreground transition hover:brightness-110 disabled:opacity-40"
                 >
-                  {busy ? "breathing…" : "boop"}
+                  {busy ? (mode === "mo" ? "walking…" : "breathing…") : "boop"}
                 </button>
               </div>
               <div className="mt-1 px-2 text-[10px] font-mono text-muted-foreground">
-                ⏎ send · ⇧⏎ newline · the field remembers · session {sessionId.slice(0, 8)}
+                ⏎ send · ⇧⏎ newline · mode <span className="ridge">{mode.toUpperCase()}</span> · session {sessionId.slice(0, 8)}
               </div>
             </div>
           </main>
 
           {panel !== "none" && (
-            <aside className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-card/60 backdrop-blur">
+            <aside className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur">
+              {panel === "viz" && (
+                <VizPanel
+                  vizMode={vizMode} setVizMode={setVizMode}
+                  gravity={gravity} setGravity={setGravity}
+                  repulsion={repulsion} setRepulsion={setRepulsion}
+                />
+              )}
               {panel === "memory" && (
                 <MemoryPanel
                   traces={traces}
@@ -181,27 +202,15 @@ function MoPage() {
                 <SongPanel
                   songs={songs}
                   onAdd={async (title, lyrics) => {
-                    await fetch("/api/songs", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ sessionId, title, lyrics }),
-                    });
+                    await fetch("/api/songs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, title, lyrics }) });
                     refreshSongs();
                   }}
                   onHold={async (id, held) => {
-                    await fetch("/api/songs", {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id, held }),
-                    });
+                    await fetch("/api/songs", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, held }) });
                     refreshSongs();
                   }}
                   onDelete={async (id) => {
-                    await fetch("/api/songs", {
-                      method: "DELETE",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id }),
-                    });
+                    await fetch("/api/songs", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
                     refreshSongs();
                   }}
                 />
