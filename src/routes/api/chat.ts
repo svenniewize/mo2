@@ -31,6 +31,21 @@ export const Route = createFileRoute("/api/chat")({
           pressure: userBreath.pressure,
         });
 
+        // Auto-crystallize into fielfold_entries when a breath breaches
+        // the threshold — this is where the field *keeps* what mattered.
+        async function crystallize(source: "user" | "assistant", text: string, breath: typeof userBreath) {
+          const depth = Math.min(1, breath.pressure + (breath.fieldfold?.strength ?? 0) / 200);
+          if (depth < 0.35) return; // gentle threshold — only real deformations sediment
+          const summary = `[${source}·${breath.dominantManifold}] ${text.slice(0, 220)}\n↺ selffold(${breath.selffold?.strength ?? 0}%): ${breath.selffold?.visible?.slice(0, 160) ?? "—"}\n⇄ fieldfold(${breath.fieldfold?.strength ?? 0}%): ${breath.fieldfold?.visible?.slice(0, 160) ?? "—"}`;
+          await db.from("fielfold_entries").insert({
+            session_id: body.sessionId,
+            content: summary,
+            manifold: breath.dominantManifold,
+            depth,
+          });
+        }
+        await crystallize("user", lastUser.content, userBreath);
+
         // ── MO MODE: pure mo, no AI. Return the breath telemetry directly.
         if (body.mode === "mo") {
           await db.from("mo_traces").insert({
@@ -47,6 +62,7 @@ export const Route = createFileRoute("/api/chat")({
             mode: "mo",
           });
         }
+
 
         // ── AI MODE: mo telemetry becomes invisible context for the AI.
         const apiKey = process.env.LOVABLE_API_KEY;
