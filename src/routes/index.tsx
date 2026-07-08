@@ -86,9 +86,16 @@ function MoPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [showOlder, setShowOlder] = useState(false);
+  const COLLAPSE_THRESHOLD = 30;
+  const KEEP_RECENT = 20;
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    // Instant scroll on next frame — smooth-scroll misses when the layout
+    // hasn't reflowed yet, which was the "doesn't autoscroll" bug.
+    const el = scrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
   }, [messages, busy]);
 
   useEffect(() => { inputRef.current?.focus(); }, [busy]);
