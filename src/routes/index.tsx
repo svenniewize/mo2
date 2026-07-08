@@ -142,10 +142,9 @@ function MoPage() {
       <div className="fixed inset-0 pointer-events-none opacity-70">
         <MoVisualizer
           mode={vizMode}
-          words={lastBreathWords}
+          nodes={memoryNodes}
+          walkPath={lastBreathWords}
           colors={MANIFOLDS.map((m) => m.color)}
-          gravity={gravity}
-          repulsion={repulsion}
           pressure={busy ? 0.9 : 0.4}
         />
       </div>
