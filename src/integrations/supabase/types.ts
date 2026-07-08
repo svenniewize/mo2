@@ -41,6 +41,51 @@ export type Database = {
         }
         Relationships: []
       }
+      life_tasks: {
+        Row: {
+          category: string
+          created_at: string
+          due_at: string | null
+          id: string
+          manifold: string | null
+          notes: string | null
+          priority: number
+          session_id: string
+          source: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          manifold?: string | null
+          notes?: string | null
+          priority?: number
+          session_id: string
+          source?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          manifold?: string | null
+          notes?: string | null
+          priority?: number
+          session_id?: string
+          source?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mo_hyperfold_edges: {
         Row: {
           updated_at: string
