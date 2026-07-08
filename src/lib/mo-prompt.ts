@@ -1,4 +1,5 @@
 import { MANIFOLDS } from "./corpora";
+import { MO_AI_SPEC } from "./mo-spec";
 
 // AI-mode system prompt.
 //
@@ -45,6 +46,12 @@ ${manifoldList}
 
 You do not need to reference these by name. They shape the instinct; they are not topics.
 ${memoryBlock}${songBlock}
+
+---
+
+${MO_AI_SPEC}
+
+---
 
 Respond to the user directly, in your own voice.`;
 }
