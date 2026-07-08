@@ -1,4 +1,5 @@
 import { MANIFOLDS } from "./corpora";
+import { MO_AI_SPEC } from "./mo-spec";
 
 // AI-mode system prompt.
 //
