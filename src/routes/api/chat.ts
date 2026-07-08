@@ -185,7 +185,7 @@ ${userBreath.telemetry}
               } else if (op.action === "drop" && op.attrs.id) {
                 await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
               } else if (op.action === "update" && op.attrs.id) {
-                const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+                const patch: { updated_at: string; title?: string; notes?: string; category?: string; status?: string; priority?: number; due_at?: string } = { updated_at: new Date().toISOString() };
                 if (op.attrs.title !== undefined) patch.title = op.attrs.title;
                 if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
                 if (op.attrs.category !== undefined) patch.category = op.attrs.category;
