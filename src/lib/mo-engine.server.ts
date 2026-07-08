@@ -419,6 +419,41 @@ function runMo2e(t: Topology, seeds: string[]): VariantOut {
   };
 }
 
+// mo²ayla — LONG traversal, scales with input length.
+// Where other variants cap depth, this one lets the walk breathe as far
+// as the input reaches. Long inputs → long flow, sediment through entire body.
+function runMo2Ayla(t: Topology, seeds: string[]): VariantOut {
+  const anch = anchors(t, seeds);
+  const act = inject2(t, anch);
+  const peaks = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, Math.max(4, Math.min(20, Math.floor(seeds.length / 3)))).map((x) => x[0]);
+  if (!peaks.length) return emptyOut();
+  const used = new Set<string>();
+  const segs: string[][] = [];
+  // depth scales with input length: longer input → much longer traversal
+  const segDepth = Math.min(28, Math.max(10, Math.floor(seeds.length / 2)));
+  const nSeg = Math.min(24, Math.max(4, Math.floor(seeds.length / 4)));
+  for (let i = 0; i < nSeg; i++) {
+    const p = peaks[i % peaks.length];
+    const seg = walk(t, p, act, segDepth, { activationWeight: 1.8, centralityWeight: 0.6, densityWeight: 0.8, used, recent: RECENT });
+    if (seg.length) segs.push(seg);
+  }
+  const dream = segs.flat();
+  // long return arc that folds the whole walk back toward anchors
+  const backAct: Record<string, number> = {};
+  for (const s of anch) backAct[s] = 3;
+  const ret = walk(t, dream[dream.length - 1] || peaks[0], backAct, Math.min(20, Math.max(8, Math.floor(seeds.length / 3))), { activationWeight: 2.5, densityWeight: 0.3, centralityWeight: 0.4, used });
+  for (const w of dream) RECENT[w] = (RECENT[w] || 0) + 1;
+  return {
+    visible: segs.map((s) => s.map((w) => orig(t, w)).join(" ")).join(" ⟿ ") + (ret.length ? "  ↵  " + ret.map((w) => orig(t, w)).join(" · ") : ""),
+    activation: peaks.slice(0, 6).map((w) => orig(t, w)),
+    dreamPath: dream.map((w) => orig(t, w)),
+    returnPath: ret.map((w) => orig(t, w)),
+    edges: edgesOf(t, dream.concat(ret)),
+    density: Math.round((anch.length / Math.max(1, seeds.length)) * 100),
+    dominantManifold: pickManifold(t, dream),
+  };
+}
+
 function emptyOut(): VariantOut {
   return { visible: "*the field listens, but does not yet recognize this shape.*", activation: [], dreamPath: [], returnPath: [], edges: [], density: 0, dominantManifold: "antibubble" };
 }
