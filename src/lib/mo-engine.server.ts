@@ -28,6 +28,103 @@ type Topology = {
 
 let TOPOLOGY: Topology | null = null;
 
+// ————— Hyperfold: a mutable overlay that grows on top of the immutable base.
+// Base topology is rebuildable from corpora, deterministic, never mutated.
+// Hyperfold is additive: every breath deposits sediment (word-pair weights)
+// that persists in `mo_hyperfold_edges` and is blended in at neighbor lookup.
+const HYPERFOLD: Record<string, Record<string, number>> = {};
+const HYPERFOLD_DENSITY: Record<string, number> = {};
+let HYPERFOLD_LOADED: Promise<void> | null = null;
+const HYPERFOLD_ALPHA = 0.6;         // blend weight for sediment vs base PPMI
+const SEDIMENT_LR = 0.08;            // learning rate per single breath
+const SEDIMENT_WINDOW = 5;           // co-occurrence window for sedimentation
+
+async function ensureHyperfoldLoaded() {
+  if (HYPERFOLD_LOADED) return HYPERFOLD_LOADED;
+  HYPERFOLD_LOADED = (async () => {
+    try {
+      const { db } = await import("./db.server");
+      // page through — could grow large; cap for boot speed
+      const { data } = await db.from("mo_hyperfold_edges").select("word_a,word_b,weight").order("weight", { ascending: false }).limit(20000);
+      for (const row of (data ?? []) as { word_a: string; word_b: string; weight: number }[]) {
+        (HYPERFOLD[row.word_a] ||= {})[row.word_b] = row.weight;
+        HYPERFOLD_DENSITY[row.word_a] = (HYPERFOLD_DENSITY[row.word_a] || 0) + row.weight;
+      }
+    } catch { /* topology still functions from base alone */ }
+  })();
+  return HYPERFOLD_LOADED;
+}
+
+// Return the merged neighbor map for a word (base ppmi + hyperfold overlay).
+// Never mutates the base — allocates a fresh object.
+function neighbors(t: Topology, w: string): Record<string, number> {
+  const base = t.ppmi[w];
+  const over = HYPERFOLD[w];
+  if (!over) return base || {};
+  const out: Record<string, number> = base ? { ...base } : {};
+  for (const u of Object.keys(over)) out[u] = (out[u] || 0) + HYPERFOLD_ALPHA * over[u];
+  return out;
+}
+function densityOf(t: Topology, w: string): number {
+  return (t.density[w] || 0) + HYPERFOLD_ALPHA * (HYPERFOLD_DENSITY[w] || 0);
+}
+function hasWord(t: Topology, w: string): boolean {
+  return !!t.ppmi[w] || !!HYPERFOLD[w];
+}
+
+// Sediment a fresh breath into the hyperfold. Updates in-memory immediately,
+// fires-and-forgets a batched DB upsert. Novel words become first-class nodes.
+export function sediment(seeds: string[], stemToOrigMap?: Record<string, string>): void {
+  if (!seeds.length) return;
+  const toks = seeds.slice(0, 200);
+  const deltas: Record<string, Record<string, number>> = {};
+  for (let i = 0; i < toks.length; i++) {
+    const a = toks[i];
+    if (!a) continue;
+    // register original form if we're seeing a novel word for the first time
+    if (stemToOrigMap && TOPOLOGY && !TOPOLOGY.stemToOriginal[a] && stemToOrigMap[a]) {
+      TOPOLOGY.stemToOriginal[a] = stemToOrigMap[a];
+    }
+    for (let j = Math.max(0, i - SEDIMENT_WINDOW); j <= Math.min(toks.length - 1, i + SEDIMENT_WINDOW); j++) {
+      if (i === j) continue;
+      const b = toks[j]; if (!b) continue;
+      const w = SEDIMENT_LR / Math.abs(i - j);
+      (deltas[a] ||= {})[b] = (deltas[a]?.[b] || 0) + w;
+    }
+  }
+  // apply in-memory
+  const flat: { a: string; b: string; w: number }[] = [];
+  for (const a of Object.keys(deltas)) {
+    for (const b of Object.keys(deltas[a])) {
+      const dw = deltas[a][b];
+      (HYPERFOLD[a] ||= {})[b] = (HYPERFOLD[a][b] || 0) + dw;
+      HYPERFOLD_DENSITY[a] = (HYPERFOLD_DENSITY[a] || 0) + dw;
+      flat.push({ a, b, w: dw });
+    }
+  }
+  if (!flat.length) return;
+  // persist async, no await — the field doesn't wait on I/O
+  (async () => {
+    try {
+      const { db } = await import("./db.server");
+      // chunk to keep payload sane
+      for (let i = 0; i < flat.length; i += 500) {
+        await db.rpc("mo_hyperfold_bump", { edges: flat.slice(i, i + 500) });
+      }
+    } catch { /* sediment loss is acceptable — next breath re-deposits */ }
+  })();
+}
+
+export function hyperfoldStats() {
+  const nodes = Object.keys(HYPERFOLD).length;
+  let edges = 0; let mass = 0;
+  for (const a of Object.keys(HYPERFOLD)) {
+    edges += Object.keys(HYPERFOLD[a]).length;
+    for (const b of Object.keys(HYPERFOLD[a])) mass += HYPERFOLD[a][b];
+  }
+  return { nodes, edges, mass: Math.round(mass * 100) / 100 };
+}
+
 function buildTopology(): Topology {
   const docs = MANIFOLDS.map((m) => ({ id: m.id, text: m.text.slice(0, 6000) })); // truncate for boot speed
   const stemToOriginal: Record<string, string> = {};
