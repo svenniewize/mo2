@@ -244,7 +244,7 @@ function MoPage() {
                       </div>
                     )}
                     {visible.map((m, i) => (
-                      <MessageView key={(hasOlder && !showOlder ? total - KEEP_RECENT : 0) + i} msg={m} mode={mode} />
+                      <MessageView key={(hasOlder && !showOlder ? total - KEEP_RECENT : 0) + i} msg={m} mode={mode} glyph={glyph} />
                     ))}
                   </>
                 );
