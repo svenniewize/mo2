@@ -14,7 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      fielfold_entries: {
+        Row: {
+          content: string
+          created_at: string
+          depth: number | null
+          id: string
+          manifold: string | null
+          session_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          depth?: number | null
+          id?: string
+          manifold?: string | null
+          session_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          depth?: number | null
+          id?: string
+          manifold?: string | null
+          session_id?: string
+        }
+        Relationships: []
+      }
+      mo_traces: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          manifold: string | null
+          pressure: number | null
+          role: string
+          session_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          manifold?: string | null
+          pressure?: number | null
+          role: string
+          session_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          manifold?: string | null
+          pressure?: number | null
+          role?: string
+          session_id?: string
+        }
+        Relationships: []
+      }
+      songs: {
+        Row: {
+          created_at: string
+          held: boolean
+          id: string
+          lyrics: string
+          session_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          held?: boolean
+          id?: string
+          lyrics: string
+          session_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          held?: boolean
+          id?: string
+          lyrics?: string
+          session_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
