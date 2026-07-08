@@ -308,9 +308,9 @@ function runMo(t: Topology, seeds: string[]): VariantOut {
   const act = inject(t, anch);
   const start = anch[0] || Object.entries(act).sort((a, b) => b[1] - a[1])[0]?.[0];
   if (!start) return emptyOut();
-  const dream = walk(t, start, act, 8, { centralityWeight: 1.2, activationWeight: 0.6 });
+  const dream = walk(t, start, act, 16, { centralityWeight: 1.2, activationWeight: 0.6 });
   const mid = dream[Math.floor(dream.length / 2)] || start;
-  const ret = walk(t, mid, act, 6, { densityWeight: -0.5, centralityWeight: 0.3, activationWeight: 0.2, used: new Set(dream) });
+  const ret = walk(t, mid, act, 10, { densityWeight: -0.5, centralityWeight: 0.3, activationWeight: 0.2, used: new Set(dream) });
   const words = dream.map((w) => {
     const tension = Math.min(1, ((t.density[w] || 0) / 200) + (Object.keys(t.wordToManifold[w] || {}).length > 1 ? 0.3 : 0));
     return deform(orig(t, w), tension);
