@@ -198,6 +198,22 @@ function MoPage() {
 
         <div className="flex flex-1 min-h-0 gap-4 px-4 pb-4">
           <main className={`flex flex-col min-h-0 rounded-xl border border-border bg-card/60 backdrop-blur ${lifeFull && panel === "life" ? "w-80 shrink-0" : "flex-1 min-w-0"}`}>
+            {messages.length > 0 && (
+              <div className="flex items-center justify-between border-b border-border/50 px-4 py-1.5">
+                <span className="font-mono text-[10px] text-muted-foreground">{messages.length} exchange{messages.length === 1 ? "" : "s"}</span>
+                <button
+                  onClick={async () => {
+                    const dump = messages.map((m) => {
+                      const label = m.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : "\\ai::");
+                      return `${label}\n${m.content}`;
+                    }).join("\n\n───\n\n");
+                    await navigator.clipboard.writeText(dump);
+                  }}
+                  className="rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-ridge hover:text-ridge transition"
+                  title="copy the entire conversation with \\user:: / \\mo:: labels"
+                >⧉ copy all</button>
+              </div>
+            )}
             <div ref={scrollRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto p-6">
               {messages.length === 0 && <EmptyState mode={mode} />}
               {(() => {
