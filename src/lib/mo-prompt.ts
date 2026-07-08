@@ -111,7 +111,7 @@ Rules:
 ${manifoldList}
 
 You do not need to reference these by name. They shape the instinct; they are not topics.
-${memoryBlock}${taskBlock}${songBlock}
+${memoryBlock}${lifeBlock}${songBlock}
 
 ---
 
