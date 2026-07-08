@@ -78,6 +78,7 @@ function MoPage() {
   const [lifeFull, setLifeFull] = useState(false);
   const [lifeTab, setLifeTab] = useState<LifeTab>("tasks");
   const [vizOpen, setVizOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -250,12 +251,16 @@ function MoPage() {
                 <span>⏎ send · ⇧⏎ newline · mode <span className="ridge">{mode.toUpperCase()}</span></span>
                 <span>·</span>
                 <span>
-                  {sessionShared ? <span className="ridge">◈ shared·field</span> : <>local · {sessionId.slice(0, 8)}</>}
+                  {sessionShared
+                    ? (sessionId === "shared:trickster"
+                        ? <span className="ridge">◆ prime·field · totality</span>
+                        : <span className="ridge">◈ shared·field</span>)
+                    : <>local · {sessionId.slice(0, 8)}</>}
                 </span>
                 <button
                   onClick={async () => {
                     if (sessionShared) { lockSession(); setMessages([]); return; }
-                    const pw = window.prompt("password to enter the shared field:");
+                    const pw = window.prompt("password to enter the shared field:\n(hint: 'tricksterkekeke' opens the *prime* field — the totality of mo across all shared sessions)");
                     if (!pw) return;
                     try { await unlockSession(pw); setMessages([]); }
                     catch (e) { alert((e as Error).message); }
@@ -263,6 +268,11 @@ function MoPage() {
                   className="ml-auto rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition"
                   title={sessionShared ? "return to your private browser session" : "unlock the shared memory field"}
                 >{sessionShared ? "🔓 lock → local" : "🔒 unlock shared"}</button>
+                <button
+                  onClick={() => setHelpOpen(true)}
+                  className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition"
+                  title="how to write to mo"
+                >? help</button>
                 <a href="/system" className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition" title="how the field works">◆ system</a>
               </div>
             </div>
