@@ -41,6 +41,102 @@ export type Database = {
         }
         Relationships: []
       }
+      life_notes: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          manifold: string | null
+          session_id: string
+          source: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          manifold?: string | null
+          session_id: string
+          source?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          manifold?: string | null
+          session_id?: string
+          source?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      life_remembers: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          manifold: string | null
+          mood: string
+          session_id: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          manifold?: string | null
+          mood?: string
+          session_id: string
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          manifold?: string | null
+          mood?: string
+          session_id?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      life_shitposts: {
+        Row: {
+          body: string
+          created_at: string
+          form: string
+          id: string
+          session_id: string
+          title: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          form?: string
+          id?: string
+          session_id: string
+          title?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          form?: string
+          id?: string
+          session_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       life_tasks: {
         Row: {
           category: string
