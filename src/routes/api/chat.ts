@@ -4,13 +4,6 @@ import { parseShorthand, parseXmlBlocks, executeOps, isPrime, isShared, PRIME_SE
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
-// Helper: apply session filter unless we're in PRIME mode (tricksterkekeke),
-// where reads span every session — the totality of mo.
-type Filterable = { eq: (col: string, val: string) => Filterable };
-function scopedTo<T extends Filterable>(q: T, sessionId: string): T {
-  if (isPrime(sessionId)) return q;
-  return q.eq("session_id", sessionId) as T;
-}
 
 export const Route = createFileRoute("/api/chat")({
   server: {
@@ -98,13 +91,17 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
+        // Prime scope: MO memory (traces + fielfold) merges across all sessions;
+        // life·organizer stays session-local (personal items don't cross-pollinate).
         const [tracesRes, songsRes, tasksRes, notesRes, remembersRes, shitpostsRes] = await Promise.all([
-          scopedTo(db.from("mo_traces").select("role,content,manifold,created_at"), sessionId).order("created_at", { ascending: false }).limit(20),
-          scopedTo(db.from("songs").select("title,lyrics,held"), sessionId).order("created_at", { ascending: false }).limit(6),
-          scopedTo(db.from("life_tasks").select("id,title,category,status,priority,due_at"), sessionId).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
-          scopedTo(db.from("life_notes").select("id,title,body,category"), sessionId).order("updated_at", { ascending: false }).limit(40),
-          scopedTo(db.from("life_remembers").select("id,content,mood"), sessionId).order("created_at", { ascending: false }).limit(40),
-          scopedTo(db.from("life_shitposts").select("id,title,body,form"), sessionId).order("created_at", { ascending: false }).limit(20),
+          prime
+            ? db.from("mo_traces").select("role,content,manifold,created_at").order("created_at", { ascending: false }).limit(60)
+            : db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", sessionId).order("created_at", { ascending: false }).limit(20),
+          db.from("songs").select("title,lyrics,held").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(6),
+          db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", writeSession).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
+          db.from("life_notes").select("id,title,body,category").eq("session_id", writeSession).order("updated_at", { ascending: false }).limit(40),
+          db.from("life_remembers").select("id,content,mood").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(40),
+          db.from("life_shitposts").select("id,title,body,form").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(20),
         ]);
         const memoryDigest = (tracesRes.data ?? [])
           .filter((t: { role: string }) => t.role === "user" || t.role === "assistant")
