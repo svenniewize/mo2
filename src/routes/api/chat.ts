@@ -93,10 +93,17 @@ export const Route = createFileRoute("/api/chat")({
 
         // Prime scope: MO memory (traces + fielfold) merges across all sessions;
         // life·organizer stays session-local (personal items don't cross-pollinate).
+        // Rich-memory sessions: prime merges across all sessions; any password-
+        // unlocked session (shared:* or the seeded garfield UUID) gets deep recall
+        // — the AI actually *has* the 150+ trace field, not just the last 20.
+        const rich = prime || shared || sessionId === "a7f91ef6-14a5-492a-9c02-3d4f0b888bdc";
+        const traceLimit = prime ? 400 : rich ? 200 : 20;
+        const digestSlice = prime ? 80 : rich ? 60 : 12;
+
         const [tracesRes, songsRes, tasksRes, notesRes, remembersRes, shitpostsRes] = await Promise.all([
           prime
-            ? db.from("mo_traces").select("role,content,manifold,created_at").order("created_at", { ascending: false }).limit(60)
-            : db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", sessionId).order("created_at", { ascending: false }).limit(20),
+            ? db.from("mo_traces").select("role,content,manifold,created_at").order("created_at", { ascending: false }).limit(traceLimit)
+            : db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", sessionId).order("created_at", { ascending: false }).limit(traceLimit),
           db.from("songs").select("title,lyrics,held").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(6),
           db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", writeSession).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
           db.from("life_notes").select("id,title,body,category").eq("session_id", writeSession).order("updated_at", { ascending: false }).limit(40),
@@ -106,7 +113,7 @@ export const Route = createFileRoute("/api/chat")({
         const memoryDigest = (tracesRes.data ?? [])
           .filter((t: { role: string }) => t.role === "user" || t.role === "assistant")
           .reverse()
-          .slice(-12)
+          .slice(-digestSlice)
           .map((t: { role: string; content: string }) => `[${t.role}] ${t.content.slice(0, 200)}`)
           .join("\n");
         const sedimentTrail = (tracesRes.data ?? [])
@@ -115,6 +122,7 @@ export const Route = createFileRoute("/api/chat")({
           .slice(-6)
           .map((t: { content: string }) => t.content)
           .join(" | ");
+
         const systemPrompt = buildMoSystemPrompt({
           memoryDigest,
           songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
