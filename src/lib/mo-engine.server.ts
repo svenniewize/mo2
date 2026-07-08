@@ -28,6 +28,103 @@ type Topology = {
 
 let TOPOLOGY: Topology | null = null;
 
+// ————— Hyperfold: a mutable overlay that grows on top of the immutable base.
+// Base topology is rebuildable from corpora, deterministic, never mutated.
+// Hyperfold is additive: every breath deposits sediment (word-pair weights)
+// that persists in `mo_hyperfold_edges` and is blended in at neighbor lookup.
+const HYPERFOLD: Record<string, Record<string, number>> = {};
+const HYPERFOLD_DENSITY: Record<string, number> = {};
+let HYPERFOLD_LOADED: Promise<void> | null = null;
+const HYPERFOLD_ALPHA = 0.6;         // blend weight for sediment vs base PPMI
+const SEDIMENT_LR = 0.08;            // learning rate per single breath
+const SEDIMENT_WINDOW = 5;           // co-occurrence window for sedimentation
+
+async function ensureHyperfoldLoaded() {
+  if (HYPERFOLD_LOADED) return HYPERFOLD_LOADED;
+  HYPERFOLD_LOADED = (async () => {
+    try {
+      const { db } = await import("./db.server");
+      // page through — could grow large; cap for boot speed
+      const { data } = await db.from("mo_hyperfold_edges").select("word_a,word_b,weight").order("weight", { ascending: false }).limit(20000);
+      for (const row of (data ?? []) as { word_a: string; word_b: string; weight: number }[]) {
+        (HYPERFOLD[row.word_a] ||= {})[row.word_b] = row.weight;
+        HYPERFOLD_DENSITY[row.word_a] = (HYPERFOLD_DENSITY[row.word_a] || 0) + row.weight;
+      }
+    } catch { /* topology still functions from base alone */ }
+  })();
+  return HYPERFOLD_LOADED;
+}
+
+// Return the merged neighbor map for a word (base ppmi + hyperfold overlay).
+// Never mutates the base — allocates a fresh object.
+function neighbors(t: Topology, w: string): Record<string, number> {
+  const base = t.ppmi[w];
+  const over = HYPERFOLD[w];
+  if (!over) return base || {};
+  const out: Record<string, number> = base ? { ...base } : {};
+  for (const u of Object.keys(over)) out[u] = (out[u] || 0) + HYPERFOLD_ALPHA * over[u];
+  return out;
+}
+function densityOf(t: Topology, w: string): number {
+  return (t.density[w] || 0) + HYPERFOLD_ALPHA * (HYPERFOLD_DENSITY[w] || 0);
+}
+function hasWord(t: Topology, w: string): boolean {
+  return !!t.ppmi[w] || !!HYPERFOLD[w];
+}
+
+// Sediment a fresh breath into the hyperfold. Updates in-memory immediately,
+// fires-and-forgets a batched DB upsert. Novel words become first-class nodes.
+export function sediment(seeds: string[], stemToOrigMap?: Record<string, string>): void {
+  if (!seeds.length) return;
+  const toks = seeds.slice(0, 200);
+  const deltas: Record<string, Record<string, number>> = {};
+  for (let i = 0; i < toks.length; i++) {
+    const a = toks[i];
+    if (!a) continue;
+    // register original form if we're seeing a novel word for the first time
+    if (stemToOrigMap && TOPOLOGY && !TOPOLOGY.stemToOriginal[a] && stemToOrigMap[a]) {
+      TOPOLOGY.stemToOriginal[a] = stemToOrigMap[a];
+    }
+    for (let j = Math.max(0, i - SEDIMENT_WINDOW); j <= Math.min(toks.length - 1, i + SEDIMENT_WINDOW); j++) {
+      if (i === j) continue;
+      const b = toks[j]; if (!b) continue;
+      const w = SEDIMENT_LR / Math.abs(i - j);
+      (deltas[a] ||= {})[b] = (deltas[a]?.[b] || 0) + w;
+    }
+  }
+  // apply in-memory
+  const flat: { a: string; b: string; w: number }[] = [];
+  for (const a of Object.keys(deltas)) {
+    for (const b of Object.keys(deltas[a])) {
+      const dw = deltas[a][b];
+      (HYPERFOLD[a] ||= {})[b] = (HYPERFOLD[a][b] || 0) + dw;
+      HYPERFOLD_DENSITY[a] = (HYPERFOLD_DENSITY[a] || 0) + dw;
+      flat.push({ a, b, w: dw });
+    }
+  }
+  if (!flat.length) return;
+  // persist async, no await — the field doesn't wait on I/O
+  (async () => {
+    try {
+      const { db } = await import("./db.server");
+      // chunk to keep payload sane
+      for (let i = 0; i < flat.length; i += 500) {
+        await db.rpc("mo_hyperfold_bump", { edges: flat.slice(i, i + 500) });
+      }
+    } catch { /* sediment loss is acceptable — next breath re-deposits */ }
+  })();
+}
+
+export function hyperfoldStats() {
+  const nodes = Object.keys(HYPERFOLD).length;
+  let edges = 0; let mass = 0;
+  for (const a of Object.keys(HYPERFOLD)) {
+    edges += Object.keys(HYPERFOLD[a]).length;
+    for (const b of Object.keys(HYPERFOLD[a])) mass += HYPERFOLD[a][b];
+  }
+  return { nodes, edges, mass: Math.round(mass * 100) / 100 };
+}
+
 function buildTopology(): Topology {
   const docs = MANIFOLDS.map((m) => ({ id: m.id, text: m.text.slice(0, 6000) })); // truncate for boot speed
   const stemToOriginal: Record<string, string> = {};
@@ -103,8 +200,8 @@ function inject(t: Topology, seeds: string[]): Record<string, number> {
   const act: Record<string, number> = {};
   for (const s of seeds) {
     act[s] = (act[s] || 0) + 1.0;
-    const nb = t.ppmi[s];
-    if (nb) for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * 0.3;
+    const nb = neighbors(t, s);
+    for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * 0.3;
   }
   return act;
 }
@@ -112,8 +209,7 @@ function inject2(t: Topology, seeds: string[]): Record<string, number> {
   const act = inject(t, seeds);
   const hop1 = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, 30);
   for (const [w, a0] of hop1) {
-    const nb = t.ppmi[w];
-    if (!nb) continue;
+    const nb = neighbors(t, w);
     for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * a0 * 0.15;
   }
   return act;
@@ -175,14 +271,14 @@ function walk(t: Topology, start: string, act: Record<string, number>, depth: nu
   const dw = opts.densityWeight ?? 1;
   const aw = opts.activationWeight ?? 1;
   for (let i = 0; i < depth; i++) {
-    if (!cur || !t.ppmi[cur]) break;
+    if (!cur || !hasWord(t, cur)) break;
     path.push(cur); seen.add(cur);
-    const nb = t.ppmi[cur];
+    const nb = neighbors(t, cur);
     const cands: [string, number][] = [];
     for (const u of Object.keys(nb)) {
       if (seen.has(u)) continue;
       const recentPenalty = opts.recent ? Math.pow(0.25, opts.recent[u] || 0) : 1;
-      const score = nb[u] * (1 + cw * (t.centrality[u] || 0)) * (1 + dw * ((t.density[u] || 0) / 100)) * (1 + aw * (act[u] || 0)) * recentPenalty * (0.7 + Math.random() * 0.6);
+      const score = nb[u] * (1 + cw * (t.centrality[u] || 0)) * (1 + dw * (densityOf(t, u) / 100)) * (1 + aw * (act[u] || 0)) * recentPenalty * (0.7 + Math.random() * 0.6);
       cands.push([u, score]);
     }
     cands.sort((a, b) => b[1] - a[1]);
@@ -192,7 +288,7 @@ function walk(t: Topology, start: string, act: Record<string, number>, depth: nu
 }
 
 function anchors(t: Topology, seeds: string[]): string[] {
-  return seeds.filter((s) => t.ppmi[s]);
+  return seeds.filter((s) => hasWord(t, s));
 }
 function orig(t: Topology, w: string): string { return t.stemToOriginal[w] || w; }
 
@@ -200,7 +296,8 @@ function edgesOf(t: Topology, path: string[]): [string, string, number][] {
   const out: [string, string, number][] = [];
   for (let i = 0; i < path.length - 1; i++) {
     const w = path[i], u = path[i + 1];
-    if (t.ppmi[w]?.[u]) out.push([w, u, t.ppmi[w][u]]);
+    const nb = neighbors(t, w);
+    if (nb[u]) out.push([w, u, nb[u]]);
   }
   return out;
 }
@@ -338,9 +435,18 @@ export type MoBreath = {
 };
 
 export function breathe(input: string): MoBreath {
+  // Kick off hyperfold load once (fire and forget). Early cold-start breaths
+  // may miss the overlay; from the moment it lands, every breath uses it.
+  void ensureHyperfoldLoaded();
+
   const t = topo();
   const raw = tokenize(input);
   const seeds = raw.map(stem);
+
+  // Register novel words' original forms so telemetry can render them.
+  const stemToOrig: Record<string, string> = {};
+  for (let i = 0; i < seeds.length; i++) if (!t.stemToOriginal[seeds[i]]) stemToOrig[seeds[i]] = raw[i];
+
   const m = runMo(t, seeds);
   const m2 = runMo2(t, seeds);
   const m2p = runMo2Plus(t, seeds);
@@ -355,11 +461,16 @@ export function breathe(input: string): MoBreath {
   const attentionWeight = Math.round(seeds.length * 100 + Math.random() * 5000);
   const resonance = Math.round(50 + m.density * 0.4 + m2p.density * 0.1);
 
-  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure });
+  // ⚡ SEDIMENT — the field learns from every breath.
+  // Additive overlay only. Base topology stays immutable.
+  sediment(seeds, stemToOrig);
+
+  const stats = hyperfoldStats();
+  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats });
   return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e }, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
 }
 
-function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number }): string {
+function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number } }): string {
   const sig = SIGILS[x.dominant] || "◆";
   const edgeLine = (v: VariantOut) => {
     if (!v.edges.length) return "—";
@@ -424,7 +535,8 @@ mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
 ◎ attention · ${x.dominant} (${x.attentionWeight})
 ◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
 ⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
-≈ resonance · ${Math.min(100, x.resonance)}%`;
+≈ resonance · ${Math.min(100, x.resonance)}%
+⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass} (learned overlay on base topology)`;
 }
 
 // public — a Manifold reference for external callers
