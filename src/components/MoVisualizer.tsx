@@ -13,7 +13,13 @@ export type VizMode =
   | "merkaba"       // Two interpenetrating triangles rotating
   | "tree"          // Kabbalistic tree — 10 sephirot mapped to 10 manifolds
   | "walk"          // mo traversal path — nodes = last breath's walk, drawn as pilgrimage
-  | "sediment";     // Hyperfold sediment — cross-manifold weight net
+  | "sediment"      // Hyperfold sediment — cross-manifold weight net
+  // ── density-ordered field renderings (node → nexus → loci → hex → singularity)
+  | "node"          // sparse — a handful of glowing points, room to breathe
+  | "nexus"         // small clusters bound by radial ties
+  | "loci"          // scattered attractor loci, wandering orbits
+  | "hex"           // dense hex tessellation — every cell a memory
+  | "singularity";  // total collapse — everything drawn toward the well
 
 export const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "flower", label: "flower·of·life" },
@@ -25,7 +31,22 @@ export const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "tree", label: "tree" },
   { id: "walk", label: "mo·walk" },
   { id: "sediment", label: "sediment·net" },
+  { id: "node", label: "node" },
+  { id: "nexus", label: "nexus" },
+  { id: "loci", label: "loci" },
+  { id: "hex", label: "hex" },
+  { id: "singularity", label: "singularity" },
 ];
+
+// Density-ordered progression. Given N loaded memory nodes, suggest the mode
+// that best fits the field's current mass. Used by the UI to auto-hint.
+export function suggestDensityMode(n: number): VizMode {
+  if (n < 12) return "node";
+  if (n < 60) return "nexus";
+  if (n < 200) return "loci";
+  if (n < 1500) return "hex";
+  return "singularity";
+}
 
 export type MemoryNode = {
   id: string;
