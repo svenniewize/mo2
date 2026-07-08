@@ -96,6 +96,9 @@ export const Route = createFileRoute("/api/chat")({
           memoryDigest,
           songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
           tasks: (tasksRes.data ?? []) as { id: string; title: string; category: string; status: string; priority: number; due_at: string | null }[],
+          notes: (notesRes.data ?? []) as { id: string; title: string; body: string; category: string }[],
+          remembers: (remembersRes.data ?? []) as { id: string; content: string; mood: string }[],
+          shitposts: (shitpostsRes.data ?? []) as { id: string; title: string; body: string; form: string }[],
         });
 
         // Delivered like a tool readout, not a voice. The AI is instructed
