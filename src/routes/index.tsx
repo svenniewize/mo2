@@ -238,6 +238,7 @@ function MoPage() {
                   className="ml-auto rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition"
                   title={sessionShared ? "return to your private browser session" : "unlock the shared memory field"}
                 >{sessionShared ? "🔓 lock → local" : "🔒 unlock shared"}</button>
+                <a href="/system" className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition" title="how the field works">◆ system</a>
               </div>
             </div>
           </main>

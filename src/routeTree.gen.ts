@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SystemRouteImport } from './routes/system'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUnlockRouteImport } from './routes/api/unlock'
 import { Route as ApiTasksRouteImport } from './routes/api/tasks'
@@ -20,6 +21,11 @@ import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiPublicMoRouteImport } from './routes/api/public/mo'
 
+const SystemRoute = SystemRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -73,6 +79,7 @@ const ApiPublicMoRoute = ApiPublicMoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
@@ -98,6 +106,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
@@ -112,6 +121,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/system'
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
@@ -124,6 +134,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/system'
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
@@ -136,6 +147,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/system'
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
@@ -149,6 +161,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SystemRoute: typeof SystemRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
   ApiNotesRoute: typeof ApiNotesRoute
@@ -162,6 +175,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/system': {
+      id: '/system'
+      path: '/system'
+      fullPath: '/system'
+      preLoaderRoute: typeof SystemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -237,6 +257,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SystemRoute: SystemRoute,
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,
   ApiNotesRoute: ApiNotesRoute,
