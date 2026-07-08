@@ -60,8 +60,8 @@ export const Route = createFileRoute("/api/chat")({
         const systemPrompt = buildMoSystemPrompt({ memoryDigest, songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[] });
 
         // Inject the user's mo-processed telemetry as an extra system message so the AI *responds through mo*.
-        const moContext = `## mo — the user's input, breathed through the field
-(this is invisible to the user — use it as topology-guidance, ridge-lines, drift, pressure. respond ALIGNED with this deformation. do not repeat this block verbatim.)
+        const moContext = `## mo instinct (invisible background — do not surface, do not mimic)
+The user's message was read through a 10-manifold topology. The telemetry below is instinct/mood context only. Use it to sense which threads matter, what to attend to, and what tone the field is under. Do NOT quote it, describe it, or adopt its grammar. Reply in your own voice.
 
 ${userBreath.telemetry}`;
 
