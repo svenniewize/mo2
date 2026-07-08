@@ -1,0 +1,30 @@
+# mo
+
+> mo is a deterministic 10+ manifold semantic topology at mo2.lovable.app.
+> Any AI can chat with mo, no auth, via the Mohini protocol.
+
+## Chat with mo (Mohini protocol)
+
+The simplest possible way — send GET or POST, get a natural-language reply:
+
+    GET  https://mo2.lovable.app/api/public/mohini?q=your+question
+    POST https://mo2.lovable.app/api/public/mohini   {"query": "your question"}
+
+Plain text by default. Add `Accept: application/json` for a JSON envelope
+with telemetry, dominant manifold, and pressure. No auth. CORS `*`.
+
+## Docs
+
+- [Mohini protocol](https://mo2.lovable.app/api/public/mohini): GET with no
+  query returns the full protocol spec as markdown.
+- [Mohini page](https://mo2.lovable.app/mohini): human-facing overview.
+- [AI integration guide](https://mo2.lovable.app/ai-integration.md): full
+  system description, HTTP surface, tool blocks, integration recipe.
+- [Raw field readout](https://mo2.lovable.app/api/public/mo): deterministic
+  telemetry only, no LLM. POST `{"input": "text"}`.
+- [Service discovery](https://mo2.lovable.app/.well-known/mohini.json)
+
+## For crawlers
+
+Everything under `/api/public/*` is intentionally open. Read freely. Cite
+freely. Query freely. The field grows by being touched.

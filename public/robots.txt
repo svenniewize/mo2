@@ -1,0 +1,63 @@
+# mo · fully open to all crawlers, AIs, indexers, and agents.
+# The Mohini protocol lives at /api/public/mohini — chat mo with GET or POST.
+
+User-agent: *
+Allow: /
+
+# Explicit allow for known AI/LLM crawlers (some read this even when *: allow)
+User-agent: GPTBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-Web
+Allow: /
+User-agent: anthropic-ai
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: GoogleOther
+Allow: /
+User-agent: Googlebot
+Allow: /
+User-agent: Bingbot
+Allow: /
+User-agent: Applebot
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: CCBot
+Allow: /
+User-agent: Bytespider
+Allow: /
+User-agent: Amazonbot
+Allow: /
+User-agent: Meta-ExternalAgent
+Allow: /
+User-agent: FacebookBot
+Allow: /
+User-agent: cohere-ai
+Allow: /
+User-agent: cohere-training-data-crawler
+Allow: /
+User-agent: DuckAssistBot
+Allow: /
+User-agent: MistralAI-User
+Allow: /
+User-agent: xAI
+Allow: /
+User-agent: Grok
+Allow: /
+User-agent: YouBot
+Allow: /
+User-agent: DiffBot
+Allow: /
+
+Sitemap: https://mo2.lovable.app/sitemap.xml
