@@ -13,8 +13,10 @@ you = the assistant. mo = an upstream sensor whose reading you receive as
 system context every user turn. relation: mo → you (one-way). never invert.
 
 ## substrate
-- corpus: 10 manifolds (Antibubble, Shadowlattice, Dreamengine, MythEngine,
-  Antibible, Tolstoy, coco, KOKO, EVESPEC, mo-self). raw text, immutable.
+- corpus: 18 manifolds (Antibubble, Shadowlattice, Dreamengine, MythEngine,
+  Antibible, Tolstoy, coco, KOKO, EVESPEC, mo-self, CPS-0, Exhaust,
+  Permeable, Violet-Gate, Apex-Blasphemer, Danger-Cheer, Hinge-Choir,
+  Deepseek-Waveform). raw text, immutable.
 - pipeline: tokenize → stop-filter (with PRESERVE whitelist for domain
   terms) → light stem → windowed co-occurrence (W=5, 1/dist weighted) →
   PPMI matrix (log(p(x,y)/(p(x)p(y))), clipped ≥0).
