@@ -1,0 +1,1 @@
+drop policy if exists "service_role full access life_tasks" on public.life_tasks;
