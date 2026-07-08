@@ -229,11 +229,16 @@ function replyResponse(result: Awaited<ReturnType<typeof chat>>, asJson: boolean
     });
   }
 
+  // Header values must be ByteString — strip any non-ascii from manifold name.
+  const safeManifold = String(result.manifold ?? "").replace(/[^\x20-\x7e]/g, "");
+  const safePressure = Number.isFinite(result.pressure as number)
+    ? (result.pressure as number).toFixed(3)
+    : "";
   const headers: Record<string, string> = {
     "Content-Type": asJson ? "application/json" : "text/plain; charset=utf-8",
     "X-Mohini-Protocol": "1",
-    "X-Mo-Manifold": String(result.manifold ?? ""),
-    "X-Mo-Pressure": String(result.pressure ?? ""),
+    "X-Mo-Manifold": safeManifold,
+    "X-Mo-Pressure": safePressure,
     ...CORS,
   };
 
