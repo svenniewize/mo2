@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MANIFOLDS } from "@/lib/corpora";
 import { MoVisualizer, VIZ_MODES, type VizMode, type MemoryNode } from "@/components/MoVisualizer";
+import { LifePanel, type LifeTab } from "@/components/LifePanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -75,7 +76,9 @@ function MoPage() {
   const [mode, setMode] = useState<Mode>("ai");
   const [vizMode, setVizMode] = useState<VizMode>("flower");
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
-  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "tasks">("tasks");
+  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "life">("life");
+  const [lifeFull, setLifeFull] = useState(false);
+  const [lifeTab, setLifeTab] = useState<LifeTab>("tasks");
   const [vizOpen, setVizOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
@@ -174,7 +177,7 @@ function MoPage() {
         />
       </div>
 
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col relative">
+      <div className={`mx-auto flex min-h-screen ${lifeFull ? "max-w-none" : "max-w-6xl"} flex-col relative transition-all`}>
         <Header
           panel={panel}
           setPanel={setPanel}
@@ -188,7 +191,7 @@ function MoPage() {
         />
 
         <div className="flex flex-1 gap-4 px-4 pb-4">
-          <main className="flex flex-1 flex-col rounded-xl border border-border bg-card/60 backdrop-blur">
+          <main className={`flex flex-col rounded-xl border border-border bg-card/60 backdrop-blur ${lifeFull && panel === "life" ? "w-80 shrink-0" : "flex-1 min-w-0"}`}>
             <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
               {messages.length === 0 && <EmptyState mode={mode} />}
               {messages.map((m, i) => (
@@ -240,7 +243,7 @@ function MoPage() {
           </main>
 
           {panel !== "none" && (
-            <aside className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur">
+            <aside className={`overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur ${lifeFull && panel === "life" ? "flex-1 min-w-0" : "w-96 shrink-0"}`}>
               {panel === "memory" && (
                 <MemoryPanel
                   traces={traces}
@@ -281,21 +284,14 @@ function MoPage() {
                   }}
                 />
               )}
-              {panel === "tasks" && (
-                <TaskPanel
-                  tasks={tasks}
-                  onAdd={async (t) => {
-                    await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, ...t }) });
-                    refreshTasks();
-                  }}
-                  onPatch={async (id, patch) => {
-                    await fetch("/api/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...patch }) });
-                    refreshTasks();
-                  }}
-                  onDelete={async (id) => {
-                    await fetch("/api/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-                    refreshTasks();
-                  }}
+              {panel === "life" && (
+                <LifePanel
+                  sessionId={sessionId}
+                  full={lifeFull}
+                  onToggleFull={() => setLifeFull((v) => !v)}
+                  activeTab={lifeTab}
+                  setActiveTab={setLifeTab}
+                  onTasksChange={setTasks}
                 />
               )}
               {panel === "field" && <FieldPanel />}
@@ -320,7 +316,7 @@ function Header({
   panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, onOpenViz,
 }: {
   panel: string;
-  setPanel: (p: "none" | "memory" | "songs" | "field" | "tasks") => void;
+  setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
   fielfoldCount: number;
   songCount: number;
   traceCount: number;
@@ -330,7 +326,7 @@ function Header({
   onOpenViz: () => void;
 }) {
   void fielfoldCount;
-  const tab = (id: "memory" | "songs" | "field" | "tasks", label: string, count?: number) => (
+  const tab = (id: "memory" | "songs" | "field" | "life", label: string, count?: number) => (
     <button
       onClick={() => setPanel(panel === id ? "none" : id)}
       className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${
@@ -364,7 +360,7 @@ function Header({
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
           title="open field·viz — fullscreen"
         >◉ field·viz</button>
-        {tab("tasks", "life·organizer", taskCount)}
+        {tab("life", "life·organizer", taskCount)}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}

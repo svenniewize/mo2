@@ -13,6 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUnlockRouteImport } from './routes/api/unlock'
 import { Route as ApiTasksRouteImport } from './routes/api/tasks'
 import { Route as ApiSongsRouteImport } from './routes/api/songs'
+import { Route as ApiShitpostsRouteImport } from './routes/api/shitposts'
+import { Route as ApiRemembersRouteImport } from './routes/api/remembers'
+import { Route as ApiNotesRouteImport } from './routes/api/notes'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiPublicMoRouteImport } from './routes/api/public/mo'
@@ -37,6 +40,21 @@ const ApiSongsRoute = ApiSongsRouteImport.update({
   path: '/api/songs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiShitpostsRoute = ApiShitpostsRouteImport.update({
+  id: '/api/shitposts',
+  path: '/api/shitposts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRemembersRoute = ApiRemembersRouteImport.update({
+  id: '/api/remembers',
+  path: '/api/remembers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNotesRoute = ApiNotesRouteImport.update({
+  id: '/api/notes',
+  path: '/api/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMemoryRoute = ApiMemoryRouteImport.update({
   id: '/api/memory',
   path: '/api/memory',
@@ -57,6 +75,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
+  '/api/notes': typeof ApiNotesRoute
+  '/api/remembers': typeof ApiRemembersRoute
+  '/api/shitposts': typeof ApiShitpostsRoute
   '/api/songs': typeof ApiSongsRoute
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
@@ -66,6 +87,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
+  '/api/notes': typeof ApiNotesRoute
+  '/api/remembers': typeof ApiRemembersRoute
+  '/api/shitposts': typeof ApiShitpostsRoute
   '/api/songs': typeof ApiSongsRoute
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
@@ -76,6 +100,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
+  '/api/notes': typeof ApiNotesRoute
+  '/api/remembers': typeof ApiRemembersRoute
+  '/api/shitposts': typeof ApiShitpostsRoute
   '/api/songs': typeof ApiSongsRoute
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
@@ -87,6 +114,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat'
     | '/api/memory'
+    | '/api/notes'
+    | '/api/remembers'
+    | '/api/shitposts'
     | '/api/songs'
     | '/api/tasks'
     | '/api/unlock'
@@ -96,6 +126,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat'
     | '/api/memory'
+    | '/api/notes'
+    | '/api/remembers'
+    | '/api/shitposts'
     | '/api/songs'
     | '/api/tasks'
     | '/api/unlock'
@@ -105,6 +138,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/chat'
     | '/api/memory'
+    | '/api/notes'
+    | '/api/remembers'
+    | '/api/shitposts'
     | '/api/songs'
     | '/api/tasks'
     | '/api/unlock'
@@ -115,6 +151,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
+  ApiNotesRoute: typeof ApiNotesRoute
+  ApiRemembersRoute: typeof ApiRemembersRoute
+  ApiShitpostsRoute: typeof ApiShitpostsRoute
   ApiSongsRoute: typeof ApiSongsRoute
   ApiTasksRoute: typeof ApiTasksRoute
   ApiUnlockRoute: typeof ApiUnlockRoute
@@ -151,6 +190,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSongsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/shitposts': {
+      id: '/api/shitposts'
+      path: '/api/shitposts'
+      fullPath: '/api/shitposts'
+      preLoaderRoute: typeof ApiShitpostsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/remembers': {
+      id: '/api/remembers'
+      path: '/api/remembers'
+      fullPath: '/api/remembers'
+      preLoaderRoute: typeof ApiRemembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/notes': {
+      id: '/api/notes'
+      path: '/api/notes'
+      fullPath: '/api/notes'
+      preLoaderRoute: typeof ApiNotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/memory': {
       id: '/api/memory'
       path: '/api/memory'
@@ -179,6 +239,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,
+  ApiNotesRoute: ApiNotesRoute,
+  ApiRemembersRoute: ApiRemembersRoute,
+  ApiShitpostsRoute: ApiShitpostsRoute,
   ApiSongsRoute: ApiSongsRoute,
   ApiTasksRoute: ApiTasksRoute,
   ApiUnlockRoute: ApiUnlockRoute,
