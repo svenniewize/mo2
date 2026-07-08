@@ -23,6 +23,12 @@ type Msg = { role: "user" | "assistant"; content: string; manifold?: string | nu
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
 type Fielfold = { id: string; content: string; manifold: string | null; depth: number; created_at: string };
 type Song = { id: string; title: string; lyrics: string; held: boolean; created_at: string };
+export type Task = {
+  id: string; title: string; notes: string | null; category: string;
+  status: "open" | "doing" | "done" | "dropped"; priority: number;
+  due_at: string | null; source: string; manifold: string | null;
+  created_at: string; updated_at: string;
+};
 
 function useSessionId() {
   const [id, setId] = useState<string>("");
@@ -42,15 +48,14 @@ function MoPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("ai");
-  const [vizMode, setVizMode] = useState<VizMode>("field");
-  const [gravity, setGravity] = useState(0.35);
-  const [repulsion, setRepulsion] = useState(0.5);
+  const [vizMode, setVizMode] = useState<VizMode>("flower");
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
-  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field">("memory");
+  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "tasks">("tasks");
   const [vizOpen, setVizOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -73,7 +78,33 @@ function MoPage() {
     const j = await r.json();
     setSongs(j.songs);
   };
-  useEffect(() => { if (sessionId) { refreshMemory(); refreshSongs(); } }, [sessionId]);
+  const refreshTasks = async () => {
+    if (!sessionId) return;
+    const r = await fetch(`/api/tasks?session_id=${sessionId}`);
+    const j = await r.json();
+    setTasks(j.tasks);
+  };
+  useEffect(() => { if (sessionId) { refreshMemory(); refreshSongs(); refreshTasks(); } }, [sessionId]);
+
+  // Every memory item is a node. This is the corpus the sacred-geometry viz draws from.
+  const memoryNodes: MemoryNode[] = useMemo(() => {
+    const out: MemoryNode[] = [];
+    for (const t of tasks) out.push({
+      id: `task:${t.id}`, label: t.title, kind: "task",
+      weight: t.status === "done" ? 0.3 : t.status === "doing" ? 0.9 : 0.6 + (3 - t.priority) * 0.1,
+      manifold: t.manifold,
+    });
+    for (const f of fielfold) out.push({
+      id: `fold:${f.id}`, label: (f.content || "").split("]").pop()?.trim().slice(0, 22) || "fold",
+      kind: "fielfold", weight: Math.min(1, (f.depth ?? 0.5) + 0.2), manifold: f.manifold,
+    });
+    for (const t of traces.filter((x) => x.role === "user" || x.role === "assistant").slice(0, 40)) out.push({
+      id: `trace:${t.id}`, label: t.content.slice(0, 22), kind: "trace",
+      weight: 0.35 + (t.role === "user" ? 0.15 : 0), manifold: t.manifold,
+    });
+    return out;
+  }, [tasks, fielfold, traces]);
+
 
   async function send() {
     const text = input.trim();
