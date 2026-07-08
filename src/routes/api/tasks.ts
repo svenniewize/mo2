@@ -63,10 +63,21 @@ export const Route = createFileRoute("/api/tasks")({
         const { db } = await import("@/lib/db.server");
         const body = (await request.json()) as TaskPatch;
         if (!body?.id) return new Response("id required", { status: 400 });
-        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        for (const k of ["title", "notes", "category", "status", "priority", "due_at"] as const) {
-          if (body[k] !== undefined) patch[k] = body[k];
-        }
+        const patch: {
+          updated_at: string;
+          title?: string;
+          notes?: string | null;
+          category?: string;
+          status?: string;
+          priority?: number;
+          due_at?: string | null;
+        } = { updated_at: new Date().toISOString() };
+        if (body.title !== undefined) patch.title = body.title;
+        if (body.notes !== undefined) patch.notes = body.notes;
+        if (body.category !== undefined) patch.category = body.category;
+        if (body.status !== undefined) patch.status = body.status;
+        if (body.priority !== undefined) patch.priority = body.priority;
+        if (body.due_at !== undefined) patch.due_at = body.due_at;
         const { error } = await db.from("life_tasks").update(patch).eq("id", body.id);
         if (error) return new Response(error.message, { status: 500 });
         return Response.json({ ok: true });
