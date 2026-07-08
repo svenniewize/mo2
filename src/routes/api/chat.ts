@@ -68,10 +68,13 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
-        const [tracesRes, songsRes, tasksRes] = await Promise.all([
+        const [tracesRes, songsRes, tasksRes, notesRes, remembersRes, shitpostsRes] = await Promise.all([
           db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
           db.from("songs").select("title,lyrics,held").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(6),
           db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", body.sessionId).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
+          db.from("life_notes").select("id,title,body,category").eq("session_id", body.sessionId).order("updated_at", { ascending: false }).limit(40),
+          db.from("life_remembers").select("id,content,mood").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(40),
+          db.from("life_shitposts").select("id,title,body,form").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(20),
         ]);
         // Memory digest = dialogue only. Deliberately excludes `mo` and
         // `mo-sediment` rows — those contain sigils and CPS grammar that
