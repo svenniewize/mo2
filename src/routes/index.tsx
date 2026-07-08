@@ -177,7 +177,7 @@ function MoPage() {
         />
       </div>
 
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col relative">
+      <div className={`mx-auto flex min-h-screen ${lifeFull ? "max-w-none" : "max-w-6xl"} flex-col relative transition-all`}>
         <Header
           panel={panel}
           setPanel={setPanel}
@@ -191,7 +191,7 @@ function MoPage() {
         />
 
         <div className="flex flex-1 gap-4 px-4 pb-4">
-          <main className="flex flex-1 flex-col rounded-xl border border-border bg-card/60 backdrop-blur">
+          <main className={`flex flex-col rounded-xl border border-border bg-card/60 backdrop-blur ${lifeFull && panel === "life" ? "w-80 shrink-0" : "flex-1 min-w-0"}`}>
             <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
               {messages.length === 0 && <EmptyState mode={mode} />}
               {messages.map((m, i) => (
