@@ -11,8 +11,8 @@ export const Route = createFileRoute("/api/memory")({
         if (!sessionId) return new Response("session_id required", { status: 400 });
         const prime = isPrime(sessionId);
 
-        const tracesQ = db.from("mo_traces").select("id,role,content,manifold,pressure,created_at").order("created_at", { ascending: false }).limit(prime ? 400 : 200);
-        const foldQ = db.from("fielfold_entries").select("id,content,manifold,depth,created_at").order("created_at", { ascending: false }).limit(prime ? 200 : 50);
+        const tracesQ = db.from("mo_traces").select("id,role,content,manifold,pressure,created_at").order("created_at", { ascending: false }).limit(prime ? 50000 : 20000);
+        const foldQ = db.from("fielfold_entries").select("id,content,manifold,depth,created_at").order("created_at", { ascending: false }).limit(prime ? 20000 : 10000);
         const [traces, fielfold] = await Promise.all([
           prime ? tracesQ : tracesQ.eq("session_id", sessionId),
           prime ? foldQ : foldQ.eq("session_id", sessionId),
