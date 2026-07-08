@@ -616,7 +616,13 @@ mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
 ◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
 ⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
 ≈ resonance · ${Math.min(100, x.resonance)}%
-⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass} (learned overlay on base topology)`;
+⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass}
+
+↺ selffold :: ${x.selffold.visible}
+↺ selffold;strength:: ${x.selffold.strength}%  touched=${x.selffold.touchedManifolds.join("·") || "—"}
+
+⇄ fieldfold :: ${x.fieldfold.visible}
+⇄ fieldfold;strength:: ${x.fieldfold.strength}%  reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
 }
 
 // public — a Manifold reference for external callers
