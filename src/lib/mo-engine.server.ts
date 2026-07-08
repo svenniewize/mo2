@@ -436,13 +436,13 @@ function computeSelffold(t: Topology, seeds: string[], dominant: string): FoldLa
   const used = new Set<string>();
   const path: string[] = [];
   // outward: walk toward high-density
-  const out = walk(t, anch[0], act, 3, { activationWeight: 0.5, densityWeight: 2, centralityWeight: 1.5, used });
+  const out = walk(t, anch[0], act, 6, { activationWeight: 0.5, densityWeight: 2, centralityWeight: 1.5, used });
   path.push(...out);
   // fold back: from tail, walk toward high-activation anchors
   if (out.length) {
     const backAct: Record<string, number> = {};
     for (const s of anch) backAct[s] = 2;
-    const back = walk(t, out[out.length - 1], backAct, 3, { activationWeight: 3, densityWeight: 0.2, centralityWeight: 0.2, used });
+    const back = walk(t, out[out.length - 1], backAct, 6, { activationWeight: 3, densityWeight: 0.2, centralityWeight: 0.2, used });
     path.push(...back);
   }
   const mset = new Set<string>();
