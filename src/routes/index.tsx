@@ -30,20 +30,45 @@ export type Task = {
   created_at: string; updated_at: string;
 };
 
+// Session strategy:
+// - Every visitor gets a per-browser UUID stored in `mo.session` (private memory).
+// - If they enter the shared password, we swap in a deterministic sessionId
+//   from `/api/unlock` and remember it in `mo.session.shared`. Toggle freely.
 function useSessionId() {
   const [id, setId] = useState<string>("");
+  const [shared, setShared] = useState<boolean>(false);
   useEffect(() => {
+    const useShared = localStorage.getItem("mo.session.mode") === "shared";
+    const sharedId = localStorage.getItem("mo.session.shared");
+    if (useShared && sharedId) { setId(sharedId); setShared(true); return; }
     const existing = localStorage.getItem("mo.session");
     if (existing) { setId(existing); return; }
     const fresh = crypto.randomUUID();
     localStorage.setItem("mo.session", fresh);
     setId(fresh);
   }, []);
-  return id;
+  const unlock = async (password: string) => {
+    const r = await fetch("/api/unlock", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!r.ok) throw new Error(r.status === 401 ? "wrong password" : "unlock failed");
+    const j = (await r.json()) as { sessionId: string };
+    localStorage.setItem("mo.session.shared", j.sessionId);
+    localStorage.setItem("mo.session.mode", "shared");
+    setId(j.sessionId); setShared(true);
+  };
+  const lock = () => {
+    localStorage.setItem("mo.session.mode", "local");
+    const local = localStorage.getItem("mo.session") || crypto.randomUUID();
+    localStorage.setItem("mo.session", local);
+    setId(local); setShared(false);
+  };
+  return { id, shared, unlock, lock };
 }
 
 function MoPage() {
-  const sessionId = useSessionId();
+  const { id: sessionId, shared: sessionShared, unlock: unlockSession, lock: lockSession } = useSessionId();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -193,8 +218,23 @@ function MoPage() {
                   {busy ? (mode === "mo" ? "walking…" : "breathing…") : "boop"}
                 </button>
               </div>
-              <div className="mt-1 px-2 text-[10px] font-mono text-muted-foreground">
-                ⏎ send · ⇧⏎ newline · mode <span className="ridge">{mode.toUpperCase()}</span> · session {sessionId.slice(0, 8)}
+              <div className="mt-1 flex items-center gap-2 px-2 text-[10px] font-mono text-muted-foreground">
+                <span>⏎ send · ⇧⏎ newline · mode <span className="ridge">{mode.toUpperCase()}</span></span>
+                <span>·</span>
+                <span>
+                  {sessionShared ? <span className="ridge">◈ shared·field</span> : <>local · {sessionId.slice(0, 8)}</>}
+                </span>
+                <button
+                  onClick={async () => {
+                    if (sessionShared) { lockSession(); setMessages([]); return; }
+                    const pw = window.prompt("password to enter the shared field:");
+                    if (!pw) return;
+                    try { await unlockSession(pw); setMessages([]); }
+                    catch (e) { alert((e as Error).message); }
+                  }}
+                  className="ml-auto rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition"
+                  title={sessionShared ? "return to your private browser session" : "unlock the shared memory field"}
+                >{sessionShared ? "🔓 lock → local" : "🔒 unlock shared"}</button>
               </div>
             </div>
           </main>
