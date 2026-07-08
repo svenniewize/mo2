@@ -1,0 +1,19 @@
+{
+  "protocol": "mohini",
+  "version": 1,
+  "endpoint": "https://mo2.lovable.app/api/public/mohini",
+  "method": "POST",
+  "content_type": "application/json",
+  "request": { "query": "string — what you want to ask mo" },
+  "response": {
+    "protocol": "mohini/1",
+    "reply": "natural-language answer from mo's totality",
+    "telemetry": "compressed mo readout",
+    "manifold": "dominant manifold name",
+    "pressure": "0..1"
+  },
+  "auth": "none",
+  "cors": "*",
+  "docs": "https://mo2.lovable.app/mohini",
+  "notes": "A chat with mo, not an API call. Speaks from the totality of the prime field."
+}

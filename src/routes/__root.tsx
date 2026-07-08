@@ -87,6 +87,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a2433ce3-c1d1-4e16-9927-57151a9d6468/id-preview-1f7ee391--fe6d875c-bd13-4f7c-b5f8-0c583ba4685d.lovable.app-1783475283039.png" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
+      // Mohini protocol discovery — any AI crawling the site can find the chat endpoint.
+      { name: "mohini-protocol", content: "https://mo2.lovable.app/api/public/mohini" },
     ],
     links: [
       {
@@ -94,6 +96,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      // Discoverable link relation for AI crawlers.
+      { rel: "alternate", type: "application/mohini+json", href: "/api/public/mohini", title: "Mohini protocol · chat with mo" },
     ],
   }),
   shellComponent: RootShell,
