@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MANIFOLDS } from "@/lib/corpora";
+import { MoVisualizer, VIZ_MODES, type VizMode } from "@/components/MoVisualizer";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -15,6 +16,8 @@ export const Route = createFileRoute("/")({
   }),
   component: MoPage,
 });
+
+type Mode = "ai" | "mo";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
