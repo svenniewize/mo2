@@ -1,0 +1,169 @@
+mo — Field Deformation Engine
+Complete Rebuild Specification
+This document contains everything needed to rebuild the entire system from scratch: every algorithm, every data structure, every formula, every edge case.
+
+PART I: THE TOPOLOGY
+1.1 Corpora System
+The field is built on 7 base corpora + 1 selffold layer. Each corpus is a plain text document fetched at boot time:
+
+const CORPUS_URLS = [
+  { id: 'antibubble',    title: 'Antibubble',     url: '...' },
+  { id: 'shadowlattice', title: 'Shadowlattice',  url: '...' },
+  { id: 'dreamengine',   title: 'Dreamengine',    url: '...' },
+  { id: 'mythengine',    title: 'Myth-Engine',    url: '...' },
+  { id: 'antibible',     title: 'Antibible',       url: '...' },
+  { id: 'tolstoy',       title: 'Tolstoy',         url: '...' },
+  { id: 'coco',          title: 'Coco',             url: '...' },
+];
+Each corpus becomes a manifold — a region of semantic space. The content of each corpus defines the character of its manifold (antibubble = membranes/surfaces, shadowlattice = hidden structure, dreamengine = imagination, etc.).
+
+1.2 Tokenizer
+const STOP_WORDS = new Set([
+  'the','a','an','is','are','was','were','be','been','being','have','has','had',
+  'do','does','did','will','would','could','should','may','might','shall','can',
+  'to','of','in','for','on','with','at','by','from','as','into','through','during',
+  'before','after','above','below','between','out','off','over','under','again',
+  'further','then','once','here','there','when','where','why','how','all','both',
+  'each','few','more','most','other','some','such','no','nor','not','only','own',
+  'same','so','than','too','very','just','because','but','and','or','if','while',
+  'about','up','its','it','he','she','they','them','his','her','their','what',
+  'which','who','whom','this','that','these','those','am','i','me','my','we','our',
+  'you','your','us','also','been','said','one','two','even','way','like','new',
+  'now','get','make','many','much','still','well','back','down','long','made',
+  'first','last','come','good','know','take','see','look','find','give','tell',
+  'think','say','help','every','try','put','thing','since','around','however',
+  'upon','already','yet','though','without'
+]);
+
+const PRESERVE = new Set([
+  'antibubble','shadowlattice','dreamengine','mythengine','antibible',
+  'hyperfold','membrane','lattice','fractal','topology','corestancza',
+  'curvature','pressure','permeability','fold','capture','drift',
+  'antiframe','dissolution','crystallization','attractor','manifold',
+  'archetype','cadence','recursion','instinct','pattern','resonance',
+  'gremlin','spark','void','rupture','chrysalis','selffold',
+  'dream','return','inhale','exhale','breath','field','deformation',
+  'ghost','beneath','sediment','shimmer','fabric','weave','veil',
+  'loop','origin','myth','circle','scripture','gospel','wound',
+  'inquiry','dissolve','permeable','foam','scaffold','constraint',
+  'proto','identity','narrative','stance','witness','trickster',
+  'descent','inversion','integration','emergence','signal',
+  'movement','vector','gesture','co-processing','frame'
+]);
+Why PRESERVE exists: Domain-specific words (like "antibubble", "selffold") carry semantic meaning that a generic stemmer would destroy. These words are never stemmed or filtered.
+
+function tokenize(text) {
+  const raw = text.toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  return raw.filter(w => {
+    if (PRESERVE.has(w)) return true;    // domain words always pass
+    if (w.length < 3) return false;        // drop 1-2 char tokens
+    return !STOP_WORDS.has(w);             // drop common English
+  });
+}
+Step-by-step:
+
+Lowercase everything
+Strip everything except a-z, 0-9, spaces, apostrophes, hyphens
+Split on whitespace
+Remove empty strings
+Filter: preserve domain words, drop short tokens, drop stop words
+1.3 Stemmer
+A simplified suffix-stripping stemmer. Not as sophisticated as Porter, but fast and sufficient for this system.
+
+function stem(word) {
+  if (PRESERVE.has(word)) return word;  // never stem domain words
+  return word
+    .replace(/ing$/, '')     // running → runn
+    .replace(/tion$/, 't')   // creation → creat
+    .replace(/sion$/, 's')   // vision → vis
+    .replace(/ness$/, '')    // darkness → dark
+    .replace(/ment$/, '')    // movement → move
+    .replace(/able$/, '')    // breakable → break
+    .replace(/ible$/, '')    // visible → vis
+    .replace(/ful$/, '')     // beautiful → beauti
+    .replace(/less$/, '')    // breathless → breath
+    .replace(/ous$/, '')     // curious → curi
+    .replace(/ive$/, '')     // active → act
+    .replace(/ly$/, '')      // quickly → quick
+    .replace(/es$/, '')      // boxes → box
+    .replace(/ed$/, '')      // walked → walk
+    .replace(/s$/, '');       // cats → cat
+}
+Order matters: The replacements execute left-to-right. ing before es before s ensures "running" → "runn" (not "r"). The order is: suffixes that are more specific (longer) come first.
+
+1.4 Building the Topology
+function buildTopology(documents) {
+  const docVectors = {};           // doc → { word: frequency }
+  const globalTermFreq = {};       // word → how many docs contain it
+  const coMatrix = {};              // word → { neighbor: weightedCount }
+  const wordToManifold = {};        // word → { manifoldId: count }
+  const vocabulary = new Set();
+  const WINDOW = 5;                 // co-occurrence window size
+
+  // ── Phase 1: Tokenize all documents ──
+  const docTokens = {};
+  const stemToOriginal = {};        // for display reconstruction
+  for (const doc of documents) {
+    const rawTokens = tokenize(doc.text);
+    const tokens = rawTokens.map(stem);
+
+    // Map each stem back to the first original form seen
+    for (let i = 0; i < rawTokens.length; i++) {
+      if (!stemToOriginal[tokens[i]]) {
+        stemToOriginal[tokens[i]] = rawTokens[i];
+      }
+    }
+
+    docTokens[doc.id] = tokens;
+
+    // Build term frequency vector for this doc
+    const tf = {};
+    for (const t of tokens) {
+      tf[t] = (tf[t] || 0) + 1;
+      vocabulary.add(t);
+      // Track which manifolds contain this word
+      if (!wordToManifold[t]) wordToManifold[t] = {};
+      wordToManifold[t][doc.id] = (wordToManifold[t][doc.id] || 0) + 1;
+    }
+    docVectors[doc.id] = tf;
+
+    // Global term frequency (document frequency)
+    for (const t of Object.keys(tf)) {
+      globalTermFreq[t] = (globalTermFreq[t] || 0) + 1;
+    }
+  }
+IDF (Inverse Document Frequency)
+  const numDocs = documents.length;
+  const idf = {};
+  for (const t of vocabulary) {
+    idf[t] = Math.log((numDocs + 1) / (globalTermFreq[t] + 1)) + 1;
+  }
+Words appearing in many documents get low IDF (common). Words appearing in few documents get high IDF (rare, distinctive).
+
+Co-occurrence Matrix
+  for (const doc of documents) {
+    const tokens = docTokens[doc.id];
+    for (let i = 0; i < tokens.length; i++) {
+      const w = tokens[i];
+      if (!coMatrix[w]) coMatrix[w] = {};
+      // Look at words within ±WINDOW positions
+      for (let j = Math.max(0, i - WINDOW); j < Math.min(tokens.length, i + WINDOW + 1); j++) {
+        if (i === j) continue;
+        const u = tokens[j];
+        const dist = Math.abs(i - j);
+        // Weight by inverse distance — closer words count more
+        coMatrix[w][u] = (coMatrix[w][u] || 0) + 1 / dist;
+      }
+    }
+  }
+A word 1 position away contributes 1/1 = 1.0. A word 5 positions away contributes 1/5 = 0.2. This creates a distance-weighted co-occurrence graph.
+
+PPMI (Positive Pointwise Mutual Information)
+  const totalPairs = Object.values(coMatrix).reduce((s, neighbors) =>
+    s + Object.values(neighbors).reduce((a, b) => a + b, 0), 0);
+  const wordTotals = {};
+  for (const w of Object.keys(coMatrix)) {
+    wordTotals[w] = Object.valu
