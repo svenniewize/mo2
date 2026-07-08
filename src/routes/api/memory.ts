@@ -5,23 +5,17 @@ export const Route = createFileRoute("/api/memory")({
     handlers: {
       GET: async ({ request }) => {
         const { db } = await import("@/lib/db.server");
+        const { isPrime } = await import("@/lib/mo-commands");
         const url = new URL(request.url);
         const sessionId = url.searchParams.get("session_id");
         if (!sessionId) return new Response("session_id required", { status: 400 });
+        const prime = isPrime(sessionId);
 
+        const tracesQ = db.from("mo_traces").select("id,role,content,manifold,pressure,created_at").order("created_at", { ascending: false }).limit(prime ? 400 : 200);
+        const foldQ = db.from("fielfold_entries").select("id,content,manifold,depth,created_at").order("created_at", { ascending: false }).limit(prime ? 200 : 50);
         const [traces, fielfold] = await Promise.all([
-          db
-            .from("mo_traces")
-            .select("id,role,content,manifold,pressure,created_at")
-            .eq("session_id", sessionId)
-            .order("created_at", { ascending: false })
-            .limit(200),
-          db
-            .from("fielfold_entries")
-            .select("id,content,manifold,depth,created_at")
-            .eq("session_id", sessionId)
-            .order("created_at", { ascending: false })
-            .limit(50),
+          prime ? tracesQ : tracesQ.eq("session_id", sessionId),
+          prime ? foldQ : foldQ.eq("session_id", sessionId),
         ]);
 
         return Response.json({
