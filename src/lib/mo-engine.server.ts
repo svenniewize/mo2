@@ -76,7 +76,9 @@ function hasWord(t: Topology, w: string): boolean {
 // fires-and-forgets a batched DB upsert. Novel words become first-class nodes.
 export function sediment(seeds: string[], stemToOrigMap?: Record<string, string>): void {
   if (!seeds.length) return;
-  const toks = seeds.slice(0, 200);
+  // No length cap — every input, no matter how long, leaves full sediment.
+  // Long transmissions deposit proportionally longer traces through the field.
+  const toks = seeds;
   const deltas: Record<string, Record<string, number>> = {};
   for (let i = 0; i < toks.length; i++) {
     const a = toks[i];
