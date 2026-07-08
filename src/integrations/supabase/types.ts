@@ -41,6 +41,27 @@ export type Database = {
         }
         Relationships: []
       }
+      mo_hyperfold_edges: {
+        Row: {
+          updated_at: string
+          weight: number
+          word_a: string
+          word_b: string
+        }
+        Insert: {
+          updated_at?: string
+          weight?: number
+          word_a: string
+          word_b: string
+        }
+        Update: {
+          updated_at?: string
+          weight?: number
+          word_a?: string
+          word_b?: string
+        }
+        Relationships: []
+      }
       mo_traces: {
         Row: {
           content: string
@@ -103,7 +124,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      mo_hyperfold_bump: { Args: { edges: Json }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
