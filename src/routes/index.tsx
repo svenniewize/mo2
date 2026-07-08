@@ -607,3 +607,133 @@ function FieldPanel() {
     </div>
   );
 }
+
+// ────────────── TaskPanel ──────────────
+// life·organizer — cyberpunk-light. Categories are free-text so the AI can
+// invent them. Tasks appear as ▣ nodes in the sacred-geometry visualizer.
+function TaskPanel({
+  tasks, onAdd, onPatch, onDelete,
+}: {
+  tasks: Task[];
+  onAdd: (t: { title: string; category?: string; priority?: number; notes?: string; due_at?: string | null }) => void;
+  onPatch: (id: string, patch: Partial<Pick<Task, "title" | "notes" | "category" | "status" | "priority" | "due_at">>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [priority, setPriority] = useState(2);
+  const [filter, setFilter] = useState<"all" | "open" | "done">("open");
+
+  const categories = useMemo(() => {
+    const set = new Set(tasks.map((t) => t.category));
+    return Array.from(set);
+  }, [tasks]);
+
+  const visible = tasks.filter((t) =>
+    filter === "all" ? true : filter === "done" ? t.status === "done" : (t.status === "open" || t.status === "doing")
+  );
+
+  const byCat = new Map<string, Task[]>();
+  for (const t of visible) {
+    if (!byCat.has(t.category)) byCat.set(t.category, []);
+    byCat.get(t.category)!.push(t);
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-mono text-xs ridge">▣ life·organizer</h2>
+            <p className="font-mono text-[10px] text-muted-foreground">day-to-day layer · AI can add·edit·complete</p>
+          </div>
+          <div className="flex gap-1">
+            {(["open", "all", "done"] as const).map((f) => (
+              <button key={f} onClick={() => setFilter(f)} className={`px-2 py-0.5 font-mono text-[10px] rounded ${filter === f ? "bg-ridge/20 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{f}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b border-border p-3 space-y-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) { onAdd({ title: title.trim(), category: category.trim() || "inbox", priority }); setTitle(""); }}}
+          placeholder="new task — what needs doing?"
+          className="w-full rounded border border-border bg-background/60 px-2 py-1 font-mono text-xs focus:outline-none focus:border-ridge"
+        />
+        <div className="flex gap-2">
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="category (or pick →)"
+            className="flex-1 rounded border border-border bg-background/60 px-2 py-1 font-mono text-[11px] focus:outline-none focus:border-ridge"
+            list="cat-list"
+          />
+          <datalist id="cat-list">
+            {categories.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(Number(e.target.value))}
+            className="rounded border border-border bg-background/60 px-2 py-1 font-mono text-[11px] focus:outline-none focus:border-ridge"
+          >
+            <option value={1}>p1</option>
+            <option value={2}>p2</option>
+            <option value={3}>p3</option>
+          </select>
+          <button
+            onClick={() => { if (title.trim()) { onAdd({ title: title.trim(), category: category.trim() || "inbox", priority }); setTitle(""); }}}
+            className="rounded bg-ridge/80 px-3 py-1 font-mono text-[11px] text-primary-foreground hover:brightness-110"
+          >+ add</button>
+        </div>
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {categories.slice(0, 8).map((c) => (
+              <button key={c} onClick={() => setCategory(c)} className="rounded border border-border/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-ridge hover:text-ridge">{c}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {visible.length === 0 && <p className="p-4 text-center font-mono text-xs text-muted-foreground">no tasks — ask the AI to help you plan something.</p>}
+        {Array.from(byCat.entries()).map(([cat, list]) => (
+          <div key={cat} className="space-y-1">
+            <div className="flex items-center gap-2 px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="ridge">▣</span>{cat} <span className="opacity-40">· {list.length}</span>
+            </div>
+            {list.map((t) => (
+              <div key={t.id} className={`group rounded border p-2 ${t.status === "done" ? "border-border/40 bg-background/20 opacity-60" : t.status === "doing" ? "border-ridge/60 bg-ridge/10" : "border-border/60 bg-background/40"}`}>
+                <div className="flex items-start gap-2">
+                  <button
+                    onClick={() => onPatch(t.id, { status: t.status === "done" ? "open" : "done" })}
+                    className="mt-0.5 font-mono text-xs ridge"
+                    title="toggle done"
+                  >{t.status === "done" ? "☑" : t.status === "doing" ? "◐" : "☐"}</button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono text-xs ${t.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>{t.title}</span>
+                      <span className="font-mono text-[9px] text-muted-foreground/60">p{t.priority}</span>
+                      {t.source === "ai" && <span className="font-mono text-[9px] text-ridge/80" title="added by AI">AI</span>}
+                    </div>
+                    {t.notes && <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/80 whitespace-pre-wrap">{t.notes}</div>}
+                    {t.due_at && <div className="mt-0.5 font-mono text-[9px] text-muted-foreground/60">due {t.due_at.slice(0, 10)}</div>}
+                  </div>
+                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
+                    {t.status !== "doing" && t.status !== "done" && (
+                      <button onClick={() => onPatch(t.id, { status: "doing" })} className="font-mono text-[9px] text-ridge hover:brightness-125" title="mark doing">◐</button>
+                    )}
+                    <button onClick={() => onDelete(t.id)} className="font-mono text-[10px] text-destructive hover:brightness-125" title="delete">×</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
