@@ -210,7 +210,7 @@ export async function executeOps(
         } else if (op.action === "drop") {
           await db.from("life_tasks").update({ status: "dropped", updated_at: now() }).eq("id", op.id).eq("session_id", ctx.sessionId);
         } else if (op.action === "update") {
-          const patch: Record<string, string | number | null> = { updated_at: now() };
+          const patch: { updated_at: string; title?: string; notes?: string | null; category?: string; status?: string; priority?: number; due_at?: string } = { updated_at: now() };
           if (op.title !== undefined) patch.title = op.title;
           if (op.notes !== undefined) patch.notes = op.notes;
           if (op.category !== undefined) patch.category = op.category;
@@ -227,7 +227,7 @@ export async function executeOps(
             source: ctx.source ?? "user", manifold: ctx.manifold ?? null,
           });
         } else if (op.action === "update") {
-          const patch: Record<string, string | number | null> = { updated_at: now() };
+          const patch: { updated_at: string; title?: string; body?: string; category?: string } = { updated_at: now() };
           if (op.title !== undefined) patch.title = op.title;
           if (op.body !== undefined) patch.body = op.body;
           if (op.category !== undefined) patch.category = op.category;
