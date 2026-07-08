@@ -139,47 +139,96 @@ ${userBreath.telemetry}
         const json = (await gwRes.json()) as { choices?: { message?: { content?: string } }[] };
         const rawReply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
 
-        // ── Parse & execute <mo:task .../> tool blocks emitted by the AI, then strip them from the visible reply.
-        const taskOps: { action: string; attrs: Record<string, string> }[] = [];
-        const reply = rawReply.replace(/<mo:task\b([^/>]*)\/?>(\s*<\/mo:task>)?/g, (_full, attrStr: string) => {
-          const attrs: Record<string, string> = {};
-          for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
-            attrs[m[1]] = m[2].replace(/&quot;/g, '"');
-          }
-          const action = (attrs.action || "create").toLowerCase();
-          taskOps.push({ action, attrs });
-          return "";
-        }).trim();
+        // ── Parse all <mo:*/> tool blocks emitted by the AI.
+        // mo:read is REPLACED inline with a compact field readout (visible).
+        // mo:task / mo:note / mo:remember / mo:shitpost are stripped from the
+        // reply and executed against the DB.
+        type Op = { kind: "task" | "note" | "remember" | "shitpost"; action: string; attrs: Record<string, string> };
+        const ops: Op[] = [];
 
-        for (const op of taskOps) {
+        // First: substitute <mo:read text="..."/> with a compact readout.
+        let processed = rawReply.replace(/<mo:read\b([^/>]*)\/?>(\s*<\/mo:read>)?/g, (_full, attrStr: string) => {
+          const attrs: Record<string, string> = {};
+          for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+          const text = attrs.text || "";
+          if (!text.trim()) return "";
+          const b = breathe(text);
+          return `\n\n\`\`\`mo·read "${text.slice(0,80)}"\n${b.telemetry}\n\`\`\`\n\n`;
+        });
+
+        // Then: strip and collect the mutation tool blocks.
+        const stripKind = (kind: Op["kind"]) => {
+          const re = new RegExp(`<mo:${kind}\\b([^/>]*)\\/?>(\\s*<\\/mo:${kind}>)?`, "g");
+          processed = processed.replace(re, (_full, attrStr: string) => {
+            const attrs: Record<string, string> = {};
+            for (const m of attrStr.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) attrs[m[1]] = m[2].replace(/&quot;/g, '"');
+            ops.push({ kind, action: (attrs.action || "create").toLowerCase(), attrs });
+            return "";
+          });
+        };
+        stripKind("task"); stripKind("note"); stripKind("remember"); stripKind("shitpost");
+        const reply = processed.trim();
+
+        for (const op of ops) {
           try {
-            if (op.action === "create" && op.attrs.title) {
-              await db.from("life_tasks").insert({
-                session_id: body.sessionId,
-                title: op.attrs.title,
-                notes: op.attrs.notes ?? null,
-                category: (op.attrs.category ?? "inbox").trim() || "inbox",
-                priority: Number(op.attrs.priority) || 2,
-                due_at: op.attrs.due ? new Date(op.attrs.due).toISOString() : null,
-                source: "ai",
-                manifold: userBreath.dominantManifold,
-              });
-            } else if (op.action === "complete" && op.attrs.id) {
-              await db.from("life_tasks").update({ status: "done", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
-            } else if (op.action === "drop" && op.attrs.id) {
-              await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
-            } else if (op.action === "update" && op.attrs.id) {
-              const patch: {
-                updated_at: string; title?: string; notes?: string | null;
-                category?: string; status?: string; priority?: number; due_at?: string | null;
-              } = { updated_at: new Date().toISOString() };
-              if (op.attrs.title !== undefined) patch.title = op.attrs.title;
-              if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
-              if (op.attrs.category !== undefined) patch.category = op.attrs.category;
-              if (op.attrs.status !== undefined) patch.status = op.attrs.status;
-              if (op.attrs.priority) patch.priority = Number(op.attrs.priority);
-              if (op.attrs.due) patch.due_at = new Date(op.attrs.due).toISOString();
-              await db.from("life_tasks").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+            if (op.kind === "task") {
+              if (op.action === "create" && op.attrs.title) {
+                await db.from("life_tasks").insert({
+                  session_id: body.sessionId, title: op.attrs.title, notes: op.attrs.notes ?? null,
+                  category: (op.attrs.category ?? "inbox").trim() || "inbox",
+                  priority: Number(op.attrs.priority) || 2,
+                  due_at: op.attrs.due ? new Date(op.attrs.due).toISOString() : null,
+                  source: "ai", manifold: userBreath.dominantManifold,
+                });
+              } else if (op.action === "complete" && op.attrs.id) {
+                await db.from("life_tasks").update({ status: "done", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              } else if (op.action === "drop" && op.attrs.id) {
+                await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              } else if (op.action === "update" && op.attrs.id) {
+                const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+                if (op.attrs.title !== undefined) patch.title = op.attrs.title;
+                if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
+                if (op.attrs.category !== undefined) patch.category = op.attrs.category;
+                if (op.attrs.status !== undefined) patch.status = op.attrs.status;
+                if (op.attrs.priority) patch.priority = Number(op.attrs.priority);
+                if (op.attrs.due) patch.due_at = new Date(op.attrs.due).toISOString();
+                await db.from("life_tasks").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
+            } else if (op.kind === "note") {
+              if (op.action === "create" && op.attrs.title) {
+                await db.from("life_notes").insert({
+                  session_id: body.sessionId, title: op.attrs.title, body: op.attrs.body ?? "",
+                  category: (op.attrs.category ?? "inbox").trim() || "inbox",
+                  source: "ai", manifold: userBreath.dominantManifold,
+                });
+              } else if (op.action === "update" && op.attrs.id) {
+                const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+                if (op.attrs.title !== undefined) patch.title = op.attrs.title;
+                if (op.attrs.body !== undefined) patch.body = op.attrs.body;
+                if (op.attrs.category !== undefined) patch.category = op.attrs.category;
+                await db.from("life_notes").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              } else if (op.action === "delete" && op.attrs.id) {
+                await db.from("life_notes").delete().eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
+            } else if (op.kind === "remember") {
+              if (op.action === "create" && op.attrs.content) {
+                await db.from("life_remembers").insert({
+                  session_id: body.sessionId, content: op.attrs.content,
+                  mood: (op.attrs.mood ?? "neutral").trim() || "neutral",
+                  source: "ai", manifold: userBreath.dominantManifold,
+                });
+              } else if (op.action === "delete" && op.attrs.id) {
+                await db.from("life_remembers").delete().eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
+            } else if (op.kind === "shitpost") {
+              if (op.action === "create" && op.attrs.body) {
+                await db.from("life_shitposts").insert({
+                  session_id: body.sessionId, title: op.attrs.title ?? "", body: op.attrs.body,
+                  form: (op.attrs.form ?? "freeverse").trim() || "freeverse",
+                });
+              } else if (op.action === "delete" && op.attrs.id) {
+                await db.from("life_shitposts").delete().eq("id", op.attrs.id).eq("session_id", body.sessionId);
+              }
             }
           } catch { /* silently ignore malformed tool calls */ }
         }
