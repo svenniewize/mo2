@@ -156,6 +156,7 @@ function MoPage() {
           fielfoldCount={fielfold.length}
           songCount={songs.length}
           traceCount={traces.length}
+          taskCount={tasks.filter((t) => t.status !== "done" && t.status !== "dropped").length}
           mode={mode}
           setMode={setMode}
           onOpenViz={() => setVizOpen(true)}
