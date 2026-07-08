@@ -46,7 +46,8 @@ function MoPage() {
   const [gravity, setGravity] = useState(0.35);
   const [repulsion, setRepulsion] = useState(0.5);
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
-  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "viz">("viz");
+  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field">("memory");
+  const [vizOpen, setVizOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -127,6 +128,7 @@ function MoPage() {
           traceCount={traces.length}
           mode={mode}
           setMode={setMode}
+          onOpenViz={() => setVizOpen(true)}
         />
 
         <div className="flex flex-1 gap-4 px-4 pb-4">
@@ -168,13 +170,6 @@ function MoPage() {
 
           {panel !== "none" && (
             <aside className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur">
-              {panel === "viz" && (
-                <VizPanel
-                  vizMode={vizMode} setVizMode={setVizMode}
-                  gravity={gravity} setGravity={setGravity}
-                  repulsion={repulsion} setRepulsion={setRepulsion}
-                />
-              )}
               {panel === "memory" && (
                 <MemoryPanel
                   traces={traces}
@@ -220,6 +215,16 @@ function MoPage() {
           )}
         </div>
       </div>
+
+      {vizOpen && (
+        <VizModal
+          vizMode={vizMode} setVizMode={setVizMode}
+          gravity={gravity} setGravity={setGravity}
+          repulsion={repulsion} setRepulsion={setRepulsion}
+          words={lastBreathWords}
+          onClose={() => setVizOpen(false)}
+        />
+      )}
     </div>
   );
 }
