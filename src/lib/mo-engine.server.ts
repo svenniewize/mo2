@@ -435,9 +435,18 @@ export type MoBreath = {
 };
 
 export function breathe(input: string): MoBreath {
+  // Kick off hyperfold load once (fire and forget). Early cold-start breaths
+  // may miss the overlay; from the moment it lands, every breath uses it.
+  void ensureHyperfoldLoaded();
+
   const t = topo();
   const raw = tokenize(input);
   const seeds = raw.map(stem);
+
+  // Register novel words' original forms so telemetry can render them.
+  const stemToOrig: Record<string, string> = {};
+  for (let i = 0; i < seeds.length; i++) if (!t.stemToOriginal[seeds[i]]) stemToOrig[seeds[i]] = raw[i];
+
   const m = runMo(t, seeds);
   const m2 = runMo2(t, seeds);
   const m2p = runMo2Plus(t, seeds);
@@ -452,11 +461,16 @@ export function breathe(input: string): MoBreath {
   const attentionWeight = Math.round(seeds.length * 100 + Math.random() * 5000);
   const resonance = Math.round(50 + m.density * 0.4 + m2p.density * 0.1);
 
-  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure });
+  // ⚡ SEDIMENT — the field learns from every breath.
+  // Additive overlay only. Base topology stays immutable.
+  sediment(seeds, stemToOrig);
+
+  const stats = hyperfoldStats();
+  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats });
   return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e }, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
 }
 
-function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number }): string {
+function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number } }): string {
   const sig = SIGILS[x.dominant] || "◆";
   const edgeLine = (v: VariantOut) => {
     if (!v.edges.length) return "—";
@@ -521,7 +535,8 @@ mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
 ◎ attention · ${x.dominant} (${x.attentionWeight})
 ◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
 ⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
-≈ resonance · ${Math.min(100, x.resonance)}%`;
+≈ resonance · ${Math.min(100, x.resonance)}%
+⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass} (learned overlay on base topology)`;
 }
 
 // public — a Manifold reference for external callers
