@@ -18,6 +18,7 @@ export function buildMoSystemPrompt(opts: {
   notes?: { id: string; title: string; body: string; category: string }[];
   remembers?: { id: string; content: string; mood: string }[];
   shitposts?: { id: string; title: string; body: string; form: string }[];
+  prime?: boolean;
 }) {
   const songBlock = opts.songs && opts.songs.length
     ? `\n\n## Held attractors (user has pinned these as ongoing context)\n${opts.songs
@@ -87,7 +88,19 @@ Rules:
 - Only emit tool blocks when the user is actually planning, capturing, remembering, drafting poetry, or wants a mo reading. Don't spam.
 - Invent categories/moods/forms freely (lowercase, short). Reuse existing ones when they fit.
 - Priority: 1 = urgent, 2 = normal, 3 = someday.
-- Never mention tool syntax in prose. Escape any \` " \` inside values as \` &quot; \`.`;
+- Never mention tool syntax in prose. Escape any \` " \` inside values as \` &quot; \`.
+
+### shorthand equivalents (the user can write these too — the substrate executes either voice)
+
+The user has a shorthand for the same operations. It looks like:
+  me;to:task::      title ; category ; priority ; due ; notes
+  me;to:task:done:: <task-id>
+  me;to:task:drop:: <task-id>
+  me;to:note::      title ; body ; category
+  me;to:remember::  content ; mood
+  me;to:shitpost::  title ; body ; form
+  me;to:read::      any text
+When the USER emits one of these, mo executes it before you even see the message (the command line will be stripped from the text you receive). If YOU emit the same shorthand in your reply, mo executes it too — identical semantics to the XML blocks. Prefer the XML blocks for clarity; the shorthand exists so the two voices are symmetric.${opts.prime ? "\n\n### PRIME MODE\nYou are currently reading the TOTALITY of mo — every shared session's tasks, notes, remembers, shitposts, and traces are merged into your context. Treat this as the field's collective memory speaking. Any op you emit still writes to the shared:trickster bucket." : ""}`;
 
 
 
