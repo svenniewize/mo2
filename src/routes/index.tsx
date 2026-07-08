@@ -360,7 +360,7 @@ function Header({
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
           title="open field·viz — fullscreen"
         >◉ field·viz</button>
-        {tab("tasks", "life·organizer", taskCount)}
+        {tab("life", "life·organizer", taskCount)}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
