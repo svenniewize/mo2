@@ -19,6 +19,7 @@ import { Route as ApiRemembersRouteImport } from './routes/api/remembers'
 import { Route as ApiNotesRouteImport } from './routes/api/notes'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiPublicMohiniRouteImport } from './routes/api/public/mohini'
 import { Route as ApiPublicMoRouteImport } from './routes/api/public/mo'
 
 const SystemRoute = SystemRouteImport.update({
@@ -71,6 +72,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicMohiniRoute = ApiPublicMohiniRouteImport.update({
+  id: '/api/public/mohini',
+  path: '/api/public/mohini',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMoRoute = ApiPublicMoRouteImport.update({
   id: '/api/public/mo',
   path: '/api/public/mo',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
   '/api/public/mo': typeof ApiPublicMoRoute
+  '/api/public/mohini': typeof ApiPublicMohiniRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
   '/api/public/mo': typeof ApiPublicMoRoute
+  '/api/public/mohini': typeof ApiPublicMohiniRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/api/tasks': typeof ApiTasksRoute
   '/api/unlock': typeof ApiUnlockRoute
   '/api/public/mo': typeof ApiPublicMoRoute
+  '/api/public/mohini': typeof ApiPublicMohiniRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
     | '/api/tasks'
     | '/api/unlock'
     | '/api/public/mo'
+    | '/api/public/mohini'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/api/tasks'
     | '/api/unlock'
     | '/api/public/mo'
+    | '/api/public/mohini'
   id:
     | '__root__'
     | '/'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/api/tasks'
     | '/api/unlock'
     | '/api/public/mo'
+    | '/api/public/mohini'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -171,6 +183,7 @@ export interface RootRouteChildren {
   ApiTasksRoute: typeof ApiTasksRoute
   ApiUnlockRoute: typeof ApiUnlockRoute
   ApiPublicMoRoute: typeof ApiPublicMoRoute
+  ApiPublicMohiniRoute: typeof ApiPublicMohiniRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -245,6 +258,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mohini': {
+      id: '/api/public/mohini'
+      path: '/api/public/mohini'
+      fullPath: '/api/public/mohini'
+      preLoaderRoute: typeof ApiPublicMohiniRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/mo': {
       id: '/api/public/mo'
       path: '/api/public/mo'
@@ -267,6 +287,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTasksRoute: ApiTasksRoute,
   ApiUnlockRoute: ApiUnlockRoute,
   ApiPublicMoRoute: ApiPublicMoRoute,
+  ApiPublicMohiniRoute: ApiPublicMohiniRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
