@@ -459,7 +459,7 @@ function computeFieldfold(t: Topology, seeds: string[], dominant: string): FoldL
   const used = new Set<string>();
   const path: string[] = [];
   let cur = anch[0];
-  for (let step = 0; step < 8; step++) {
+  for (let step = 0; step < 14; step++) {
     if (!cur || !hasWord(t, cur)) break;
     path.push(cur); used.add(cur);
     const nb = neighbors(t, cur);
