@@ -146,9 +146,9 @@ function SystemPage() {
                 </tr>
               </thead>
               <tbody className="text-[#c8c8dc]">
-                <Row label="substrate">10 text corpora, frozen</Row>
-                <Row label="output">4 traversal paths + telemetry scalars</Row>
-                <Row label="determinism" mo="fully deterministic — same input, same output, forever" llm="stochastic — sampled from a distribution, temperature/top-p" />
+                <Row label="substrate" mo="10 text corpora, frozen" llm="web-scale pretraining corpus" />
+                <Row label="output" mo="4 traversal paths + telemetry scalars" llm="natural-language tokens" />
+                <Row label="determinism" mo="fully deterministic — same input, same output, forever" llm="stochastic — sampled with temperature/top-p" />
                 <Row label="parameters" mo="~0 (a PPMI matrix + a walker)" llm="10⁹ – 10¹² weights" />
                 <Row label="training" mo="none — build-time indexing" llm="pretraining + RLHF + fine-tunes" />
                 <Row label="knowledge" mo="only what's in the 10 corpora" llm="approximation of the whole internet" />
@@ -156,7 +156,7 @@ function SystemPage() {
                 <Row label="hallucination" mo="impossible — it can only walk edges that exist" llm="structural — the mechanism is 'plausible continuation'" />
                 <Row label="interpretability" mo="every step is inspectable arithmetic" llm="mostly opaque; interp is a research field" />
                 <Row label="cost / latency" mo="microseconds, in-process, free" llm="hundreds of ms, remote, metered" />
-                <Row label="what it's good at" mo="measuring, tagging, sensing shape" llm="speaking, reasoning, synthesizing" />
+                <Row label="good at" mo="measuring, tagging, sensing shape" llm="speaking, reasoning, synthesizing" />
               </tbody>
             </table>
           </div>
