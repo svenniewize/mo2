@@ -243,7 +243,7 @@ function MoPage() {
           </main>
 
           {panel !== "none" && (
-            <aside className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur">
+            <aside className={`overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur ${lifeFull && panel === "life" ? "flex-1 min-w-0" : "w-96 shrink-0"}`}>
               {panel === "memory" && (
                 <MemoryPanel
                   traces={traces}
@@ -284,21 +284,14 @@ function MoPage() {
                   }}
                 />
               )}
-              {panel === "tasks" && (
-                <TaskPanel
-                  tasks={tasks}
-                  onAdd={async (t) => {
-                    await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, ...t }) });
-                    refreshTasks();
-                  }}
-                  onPatch={async (id, patch) => {
-                    await fetch("/api/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...patch }) });
-                    refreshTasks();
-                  }}
-                  onDelete={async (id) => {
-                    await fetch("/api/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-                    refreshTasks();
-                  }}
+              {panel === "life" && (
+                <LifePanel
+                  sessionId={sessionId}
+                  full={lifeFull}
+                  onToggleFull={() => setLifeFull((v) => !v)}
+                  activeTab={lifeTab}
+                  setActiveTab={setLifeTab}
+                  onTasksChange={setTasks}
                 />
               )}
               {panel === "field" && <FieldPanel />}
