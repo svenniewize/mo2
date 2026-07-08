@@ -277,19 +277,20 @@ function MoPage() {
 }
 
 function Header({
-  panel, setPanel, fielfoldCount, songCount, traceCount, mode, setMode, onOpenViz,
+  panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, onOpenViz,
 }: {
   panel: string;
-  setPanel: (p: "none" | "memory" | "songs" | "field") => void;
+  setPanel: (p: "none" | "memory" | "songs" | "field" | "tasks") => void;
   fielfoldCount: number;
   songCount: number;
   traceCount: number;
+  taskCount: number;
   mode: Mode;
   setMode: (m: Mode) => void;
   onOpenViz: () => void;
 }) {
   void fielfoldCount;
-  const tab = (id: "memory" | "songs" | "field", label: string, count?: number) => (
+  const tab = (id: "memory" | "songs" | "field" | "tasks", label: string, count?: number) => (
     <button
       onClick={() => setPanel(panel === id ? "none" : id)}
       className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${
@@ -323,6 +324,7 @@ function Header({
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
           title="open field·viz — fullscreen"
         >◉ field·viz</button>
+        {tab("tasks", "life·organizer", taskCount)}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
@@ -332,25 +334,18 @@ function Header({
 }
 
 // ────────────── VizModal ──────────────
-// Fullscreen popup. Replaces the old sidebar panel + sliders.
-// "shuffle" randomizes shape params; "jump" also picks a new shape.
+// Fullscreen popup. Sacred-geometry viewer over the memory-node corpus.
 function VizModal({
-  vizMode, setVizMode, gravity, setGravity, repulsion, setRepulsion, words, onClose,
+  vizMode, setVizMode, nodes, walkPath, onClose,
 }: {
   vizMode: VizMode; setVizMode: (v: VizMode) => void;
-  gravity: number; setGravity: (g: number) => void;
-  repulsion: number; setRepulsion: (r: number) => void;
-  words: string[];
+  nodes: MemoryNode[];
+  walkPath: string[];
   onClose: () => void;
 }) {
-  const shuffle = () => {
-    setGravity(0.05 + Math.random() * 0.9);
-    setRepulsion(0.05 + Math.random() * 0.9);
-  };
   const jumpShape = () => {
     const next = VIZ_MODES[Math.floor(Math.random() * VIZ_MODES.length)].id;
     setVizMode(next);
-    shuffle();
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -366,8 +361,8 @@ function VizModal({
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md p-6 flex flex-col">
       <div className="flex items-center justify-between pb-4">
         <div>
-          <h2 className="font-mono text-sm ridge">◉ field · viz</h2>
-          <p className="font-mono text-[10px] text-muted-foreground">7 shapes · orbs = words from last breath · g={gravity.toFixed(2)} r={repulsion.toFixed(2)}</p>
+          <h2 className="font-mono text-sm ridge">◉ field · sacred geometry</h2>
+          <p className="font-mono text-[10px] text-muted-foreground">{nodes.length} live nodes · every glyph is a real memory · walk = mo's last traversal</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {VIZ_MODES.map((v) => (
@@ -378,22 +373,20 @@ function VizModal({
             >{v.label}</button>
           ))}
           <div className="w-px h-6 bg-border mx-1" />
-          <button onClick={shuffle} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="randomize this shape">🎲 shuffle</button>
-          <button onClick={jumpShape} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="random shape + randomize (space)">↯ jump</button>
+          <button onClick={jumpShape} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="random shape (space)">↯ jump</button>
           <button onClick={onClose} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="close (esc)">esc ✕</button>
         </div>
       </div>
       <div className="relative flex-1 overflow-hidden rounded-xl border border-border bg-black/40">
         <MoVisualizer
           mode={vizMode}
-          words={words}
+          nodes={nodes}
+          walkPath={walkPath}
           colors={MANIFOLDS.map((m) => m.color)}
-          gravity={gravity}
-          repulsion={repulsion}
           pressure={0.6}
         />
         <div className="absolute bottom-3 left-3 font-mono text-[10px] text-muted-foreground/60 pointer-events-none">
-          space = jump · esc = close · each orb is a word from mo's last breath
+          space = jump · esc = close · · trace  ◆ fielfold  ▣ task  → walk
         </div>
       </div>
     </div>
