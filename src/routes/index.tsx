@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MANIFOLDS } from "@/lib/corpora";
 import { MoVisualizer, VIZ_MODES, type VizMode, type MemoryNode } from "@/components/MoVisualizer";
+import { LifePanel, type LifeTab } from "@/components/LifePanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
