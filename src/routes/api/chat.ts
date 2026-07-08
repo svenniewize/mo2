@@ -163,8 +163,14 @@ ${userBreath.telemetry}
             } else if (op.action === "drop" && op.attrs.id) {
               await db.from("life_tasks").update({ status: "dropped", updated_at: new Date().toISOString() }).eq("id", op.attrs.id).eq("session_id", body.sessionId);
             } else if (op.action === "update" && op.attrs.id) {
-              const patch: Record<string, string | number | null> = { updated_at: new Date().toISOString() };
-              for (const k of ["title", "notes", "category", "status"]) if (op.attrs[k] !== undefined) patch[k] = op.attrs[k];
+              const patch: {
+                updated_at: string; title?: string; notes?: string | null;
+                category?: string; status?: string; priority?: number; due_at?: string | null;
+              } = { updated_at: new Date().toISOString() };
+              if (op.attrs.title !== undefined) patch.title = op.attrs.title;
+              if (op.attrs.notes !== undefined) patch.notes = op.attrs.notes;
+              if (op.attrs.category !== undefined) patch.category = op.attrs.category;
+              if (op.attrs.status !== undefined) patch.status = op.attrs.status;
               if (op.attrs.priority) patch.priority = Number(op.attrs.priority);
               if (op.attrs.due) patch.due_at = new Date(op.attrs.due).toISOString();
               await db.from("life_tasks").update(patch).eq("id", op.attrs.id).eq("session_id", body.sessionId);
