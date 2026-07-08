@@ -160,7 +160,7 @@ function MoPage() {
       } else {
         const j = await r.json();
         setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.moBreath?.telemetry }]);
-        const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? []);
+        const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? [], j.moBreath?.variants?.mo2ayla?.dreamPath ?? []);
         if (words.length) setLastBreathWords(words);
         refreshMemory();
       }
