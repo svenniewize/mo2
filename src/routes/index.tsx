@@ -494,6 +494,11 @@ function Header({
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
           title="open field·viz — fullscreen"
         >◉ field·viz</button>
+        <button
+          onClick={() => setGlyph(!glyph)}
+          className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${glyph ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:border-ridge hover:text-ridge"}`}
+          title="overlay common words as glyphs (◈ hat → 🎩)"
+        >{glyph ? "🎭 glyph·on" : "abc glyph"}</button>
         {tab("life", "life·organizer", taskCount)}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
