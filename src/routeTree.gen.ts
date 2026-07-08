@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiTasksRouteImport } from './routes/api/tasks'
 import { Route as ApiSongsRouteImport } from './routes/api/songs'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -18,6 +19,11 @@ import { Route as ApiPublicMoRouteImport } from './routes/api/public/mo'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTasksRoute = ApiTasksRouteImport.update({
+  id: '/api/tasks',
+  path: '/api/tasks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSongsRoute = ApiSongsRouteImport.update({
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/songs': typeof ApiSongsRoute
+  '/api/tasks': typeof ApiTasksRoute
   '/api/public/mo': typeof ApiPublicMoRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/songs': typeof ApiSongsRoute
+  '/api/tasks': typeof ApiTasksRoute
   '/api/public/mo': typeof ApiPublicMoRoute
 }
 export interface FileRoutesById {
@@ -61,19 +69,33 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/songs': typeof ApiSongsRoute
+  '/api/tasks': typeof ApiTasksRoute
   '/api/public/mo': typeof ApiPublicMoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/chat' | '/api/memory' | '/api/songs' | '/api/public/mo'
+  fullPaths:
+    | '/'
+    | '/api/chat'
+    | '/api/memory'
+    | '/api/songs'
+    | '/api/tasks'
+    | '/api/public/mo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/chat' | '/api/memory' | '/api/songs' | '/api/public/mo'
+  to:
+    | '/'
+    | '/api/chat'
+    | '/api/memory'
+    | '/api/songs'
+    | '/api/tasks'
+    | '/api/public/mo'
   id:
     | '__root__'
     | '/'
     | '/api/chat'
     | '/api/memory'
     | '/api/songs'
+    | '/api/tasks'
     | '/api/public/mo'
   fileRoutesById: FileRoutesById
 }
@@ -82,6 +104,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
   ApiSongsRoute: typeof ApiSongsRoute
+  ApiTasksRoute: typeof ApiTasksRoute
   ApiPublicMoRoute: typeof ApiPublicMoRoute
 }
 
@@ -92,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tasks': {
+      id: '/api/tasks'
+      path: '/api/tasks'
+      fullPath: '/api/tasks'
+      preLoaderRoute: typeof ApiTasksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/songs': {
@@ -130,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,
   ApiSongsRoute: ApiSongsRoute,
+  ApiTasksRoute: ApiTasksRoute,
   ApiPublicMoRoute: ApiPublicMoRoute,
 }
 export const routeTree = rootRouteImport
