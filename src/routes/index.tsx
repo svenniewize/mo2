@@ -73,6 +73,13 @@ function MoPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("ai");
+  const [glyph, setGlyph] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("mo.glyph") === "1";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("mo.glyph", glyph ? "1" : "0");
+  }, [glyph]);
   const [vizMode, setVizMode] = useState<VizMode>("flower");
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
   const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "life">("life");
