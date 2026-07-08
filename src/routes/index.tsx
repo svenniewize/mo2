@@ -241,6 +241,23 @@ function MoPage() {
                   }}
                 />
               )}
+              {panel === "tasks" && (
+                <TaskPanel
+                  tasks={tasks}
+                  onAdd={async (t) => {
+                    await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, ...t }) });
+                    refreshTasks();
+                  }}
+                  onPatch={async (id, patch) => {
+                    await fetch("/api/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...patch }) });
+                    refreshTasks();
+                  }}
+                  onDelete={async (id) => {
+                    await fetch("/api/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+                    refreshTasks();
+                  }}
+                />
+              )}
               {panel === "field" && <FieldPanel />}
             </aside>
           )}
@@ -250,9 +267,8 @@ function MoPage() {
       {vizOpen && (
         <VizModal
           vizMode={vizMode} setVizMode={setVizMode}
-          gravity={gravity} setGravity={setGravity}
-          repulsion={repulsion} setRepulsion={setRepulsion}
-          words={lastBreathWords}
+          nodes={memoryNodes}
+          walkPath={lastBreathWords}
           onClose={() => setVizOpen(false)}
         />
       )}
