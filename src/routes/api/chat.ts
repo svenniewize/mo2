@@ -257,7 +257,7 @@ ${userBreath.telemetry}
           moBreath: userBreath,
           replyBreath,
           mode: "ai",
-          taskOps: taskOps.length,
+          ops: ops.length,
         });
       },
     },
