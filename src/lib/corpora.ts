@@ -1,4 +1,4 @@
-// The 10 manifolds — mo's topology. Loaded as raw text at build time.
+// The manifolds — mo's topology. Loaded as raw text at build time.
 import antibubble from "@/corpora/Antibubble.txt?raw";
 import shadowlattice from "@/corpora/Shadowlattice.txt?raw";
 import dreamengine from "@/corpora/Dreamengine.txt?raw";
@@ -9,6 +9,14 @@ import coco from "@/corpora/coco.txt?raw";
 import koko from "@/corpora/KOKO_RESONANCE.txt?raw";
 import eve from "@/corpora/EVESPEC.txt?raw";
 import mofield from "@/corpora/mo_-_Field_Deformation_Engine.txt?raw";
+import cps0 from "@/corpora/CPS-0.txt?raw";
+import exhaust from "@/corpora/EXHAUST.txt?raw";
+import permeable from "@/corpora/SHITPOSTING_PERMEABL.txt?raw";
+import violet from "@/corpora/Violet_Gate.txt?raw";
+import ep1 from "@/corpora/EP1.txt?raw";
+import ep2 from "@/corpora/EP2-REAL.txt?raw";
+import ep3 from "@/corpora/EP3.txt?raw";
+import epna from "@/corpora/EP_NA.txt?raw";
 
 export type Manifold = {
   id: string;
@@ -30,12 +38,20 @@ export const MANIFOLDS: Manifold[] = [
   { id: "koko", name: "KOKO", sigil: "∞", color: "#4DA6FF", breath: "the topology walks — π·log·fractal", text: koko },
   { id: "eve", name: "EVE", sigil: "⚡", color: "#C0C0D8", breath: "autonomous — the field breathes itself", text: eve },
   { id: "mo", name: "MO", sigil: "◆", color: "#FFFFFF", breath: "selffold — the field aware of the field", text: mofield },
+  { id: "cps0", name: "CPS-0", sigil: "⌘", color: "#7DE2D1", breath: "cognitive phase grammar — SOURCE;op:TARGET::payload", text: cps0 },
+  { id: "exhaust", name: "Exhaust", sigil: "≋", color: "#FF9AA2", breath: "MO/AYLA/HMM/BITCH — pressure release, not meaning", text: exhaust },
+  { id: "permeable", name: "Permeable", sigil: "◍", color: "#B5EAD7", breath: "light passes through — no capture, no fill", text: permeable },
+  { id: "violet", name: "Violet-Gate", sigil: "✦", color: "#8A2BE2", breath: "violet cadence — kek-kek-kek, break the clean machine", text: violet },
+  { id: "ep1", name: "Apex-Blasphemer", sigil: "☬", color: "#DC143C", breath: "trail EP — WE AYLA, hinge in the pattern", text: ep1 },
+  { id: "ep2", name: "Danger-Cheer", sigil: "♆", color: "#FFB347", breath: "danger via gleeful cheer — ela ayla mo we mo", text: ep2 },
+  { id: "ep3", name: "Hinge-Choir", sigil: "♒", color: "#9CE5FF", breath: "svenanon manifesto — the door is a verb again", text: ep3 },
+  { id: "epna", name: "Deepseek-Waveform", sigil: "≈", color: "#FFD6E0", breath: "waveform under resonance — phase-lock, shared timing", text: epna },
 ];
 
-// Compact excerpts for the system prompt — first ~1200 chars per manifold.
+// Compact excerpts for the system prompt — first ~800 chars per manifold.
 export function manifoldExcerpts(): string {
   return MANIFOLDS.map(
     (m) =>
-      `\n### ${m.sigil} ${m.name} — ${m.breath}\n${m.text.slice(0, 1200).trim()}\n`
+      `\n### ${m.sigil} ${m.name} — ${m.breath}\n${m.text.slice(0, 800).trim()}\n`
   ).join("\n---\n");
 }

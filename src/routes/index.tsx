@@ -469,7 +469,7 @@ function Header({
         </div>
         <div>
           <h1 className="font-mono text-lg tracking-wide ridge">mo</h1>
-          <p className="font-mono text-[10px] text-muted-foreground">the breathing field · 10 manifolds</p>
+          <p className="font-mono text-[10px] text-muted-foreground">the breathing field · 18 manifolds</p>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -765,7 +765,7 @@ function FieldPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="font-mono text-xs ridge">the 10 manifolds</h2>
+        <h2 className="font-mono text-xs ridge">the 18 manifolds</h2>
         <p className="font-mono text-[10px] text-muted-foreground">the topology mo walks</p>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
