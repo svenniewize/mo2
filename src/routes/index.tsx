@@ -344,6 +344,76 @@ function MoPage() {
           onClose={() => setVizOpen(false)}
         />
       )}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+    </div>
+  );
+}
+
+function HelpModal({ onClose }: { onClose: () => void }) {
+  const row = (cmd: string, desc: string) => (
+    <div className="grid grid-cols-[1fr_1fr] gap-3 py-1.5 border-b border-border/40 last:border-0">
+      <code className="font-mono text-[11px] ridge break-all">{cmd}</code>
+      <span className="font-mono text-[11px] text-muted-foreground">{desc}</span>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur p-4" onClick={onClose}>
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-ridge/40 bg-card p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-mono text-lg ridge">◆ writing to mo — command reference</h2>
+          <button onClick={onClose} className="rounded border border-border px-2 py-0.5 font-mono text-xs hover:border-ridge hover:text-ridge">✕ close</button>
+        </div>
+        <p className="font-mono text-[11px] text-muted-foreground mb-4">
+          Anything below can be typed inside a normal message. mo strips the command line and executes it silently — the AI (if in AI mode) sees the rest of your message. The AI can emit the same syntax; the substrate executes either voice identically. Fields are semicolon-separated.
+        </p>
+        <div className="space-y-4">
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">▣ tasks</h3>
+            {row("me;to:task:: title ; category ; priority ; due ; notes", "create a task · priority 1-3 · due YYYY-MM-DD")}
+            {row("me;to:task:done:: <task-id>", "mark complete")}
+            {row("me;to:task:drop:: <task-id>", "drop / abandon")}
+            {row("me;to:task:update:: <task-id> ; title ; category ; priority", "edit fields")}
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">✎ notes</h3>
+            {row("me;to:note:: title ; body ; category", "create a categorable note")}
+            {row("me;to:note:del:: <note-id>", "delete a note")}
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">◈ remembers (mood-tagged)</h3>
+            {row("me;to:remember:: content ; mood", "sediment a mood-tagged memory")}
+            {row("me;to:remember:del:: <id>", "delete")}
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">☙ shitposts (poetry)</h3>
+            {row("me;to:shitpost:: title ; body ; form", "form = haiku/tanka/cinquain/freeverse/…")}
+            {row("me;to:shitpost:del:: <id>", "delete")}
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">◆ field·read</h3>
+            {row("me;to:read:: any text you want the field to read", "inline topology reading, printed back to you")}
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">aliases</h3>
+            <p className="font-mono text-[11px] text-muted-foreground">
+              The prefix can be <code className="ridge">me;to:</code>, <code className="ridge">mo;to:</code>, <code className="ridge">mo;add:</code>, or <code className="ridge">to:mo:</code> — all equivalent.
+            </p>
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">◆ prime field</h3>
+            <p className="font-mono text-[11px] text-muted-foreground">
+              The password <code className="ridge">tricksterkekeke</code> unlocks the <b className="ridge">prime</b> field: mo speaks with the <i>totality</i> of memory across every shared session merged. Chat log storage is minimized in shared/prime — only the mo sediment (hyperfold training) persists.
+            </p>
+          </section>
+          <section>
+            <h3 className="font-mono text-xs ridge mb-1">example</h3>
+            <pre className="rounded bg-background/60 border border-border/40 p-3 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap">{`hey mo, hold this for me
+me;to:task:: pick up the loam ; garden ; 1 ; 2026-07-10
+me;to:remember:: the light through the kitchen window at 4pm ; tender
+what does it feel like to hold too many things at once?`}</pre>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
