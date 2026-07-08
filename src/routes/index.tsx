@@ -430,48 +430,6 @@ function BreathingIndicator({ mode }: { mode: Mode }) {
   );
 }
 
-function VizPanel({
-  vizMode, setVizMode, gravity, setGravity, repulsion, setRepulsion,
-}: {
-  vizMode: VizMode; setVizMode: (v: VizMode) => void;
-  gravity: number; setGravity: (g: number) => void;
-  repulsion: number; setRepulsion: (r: number) => void;
-}) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="font-mono text-xs ridge">field · visualizers</h2>
-        <p className="font-mono text-[10px] text-muted-foreground">7 models · orb physics · language as charge</p>
-      </div>
-      <div className="grid grid-cols-2 gap-1.5 p-3">
-        {VIZ_MODES.map((v) => (
-          <button
-            key={v.id}
-            onClick={() => setVizMode(v.id)}
-            className={`rounded border px-2 py-1.5 font-mono text-[11px] ${vizMode === v.id ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:text-foreground"}`}
-          >{v.label}</button>
-        ))}
-      </div>
-      <div className="space-y-4 border-t border-border p-4">
-        <div>
-          <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
-            <span>gravity · center-pull</span><span className="ridge">{gravity.toFixed(2)}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" value={gravity} onChange={(e) => setGravity(parseFloat(e.target.value))} className="w-full accent-ridge" />
-        </div>
-        <div>
-          <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
-            <span>repulsion · orb·orb</span><span className="ridge">{repulsion.toFixed(2)}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" value={repulsion} onChange={(e) => setRepulsion(parseFloat(e.target.value))} className="w-full accent-ridge" />
-        </div>
-        <p className="font-mono text-[9px] text-muted-foreground/70 leading-relaxed pt-2 border-t border-border">
-          each orb is a word from mo's last breath. word length = charge. gravity pulls toward center. repulsion pushes orbs apart. the field remembers.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function MemoryPanel({
   traces, fielfold, onDelete, onPurge,
