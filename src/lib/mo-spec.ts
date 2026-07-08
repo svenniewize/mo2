@@ -41,7 +41,7 @@ compressed, pattern-readable, NOT prose. fields:
 - variant paths    : the 4 walks, arrow-joined. compare for divergence.
 - Δ (delta)        : divergence between mo and mo²e. high Δ = paradox /
                      multiple attractors. low Δ = the input is univocal.
-- sigil            : glyph for dominantManifold (◉◫◌↺⊘◇◆∞⚡🜁). ignore for
+- sigil            : glyph for dominantManifold (◉◫◌↺⊘◇◆∞⚡🜁⌘≋◍✦☬♆♒≈). ignore for
                      output; use only as manifold tag when reasoning internally.
 
 ## memory digest (also injected)
