@@ -13,7 +13,13 @@ export type VizMode =
   | "merkaba"       // Two interpenetrating triangles rotating
   | "tree"          // Kabbalistic tree — 10 sephirot mapped to 10 manifolds
   | "walk"          // mo traversal path — nodes = last breath's walk, drawn as pilgrimage
-  | "sediment";     // Hyperfold sediment — cross-manifold weight net
+  | "sediment"      // Hyperfold sediment — cross-manifold weight net
+  // ── density-ordered field renderings (node → nexus → loci → hex → singularity)
+  | "node"          // sparse — a handful of glowing points, room to breathe
+  | "nexus"         // small clusters bound by radial ties
+  | "loci"          // scattered attractor loci, wandering orbits
+  | "hex"           // dense hex tessellation — every cell a memory
+  | "singularity";  // total collapse — everything drawn toward the well
 
 export const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "flower", label: "flower·of·life" },
@@ -25,7 +31,22 @@ export const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "tree", label: "tree" },
   { id: "walk", label: "mo·walk" },
   { id: "sediment", label: "sediment·net" },
+  { id: "node", label: "node" },
+  { id: "nexus", label: "nexus" },
+  { id: "loci", label: "loci" },
+  { id: "hex", label: "hex" },
+  { id: "singularity", label: "singularity" },
 ];
+
+// Density-ordered progression. Given N loaded memory nodes, suggest the mode
+// that best fits the field's current mass. Used by the UI to auto-hint.
+export function suggestDensityMode(n: number): VizMode {
+  if (n < 12) return "node";
+  if (n < 60) return "nexus";
+  if (n < 200) return "loci";
+  if (n < 1500) return "hex";
+  return "singularity";
+}
 
 export type MemoryNode = {
   id: string;
@@ -124,7 +145,84 @@ function layoutFor(
     case "tree": return treeOfLife(nodes, cx, cy, R, colors);
     case "walk": return walkPilgrimage(nodes, walk, cx, cy, R, t, colors);
     case "sediment": return sedimentNet(nodes, cx, cy, R, t, colors);
+    case "node": return nodeMode(nodes, cx, cy, R, t, colors);
+    case "nexus": return nexusMode(nodes, cx, cy, R, t, colors);
+    case "loci": return lociMode(nodes, cx, cy, R, t, colors);
+    case "hex": return hexMode(nodes, cx, cy, R, colors);
+    case "singularity": return singularityMode(nodes, cx, cy, R, t, colors);
   }
+}
+
+function nodeMode(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  const cap = Math.min(nodes.length, 12);
+  return nodes.slice(0, cap).map((n, i) => {
+    const a = (i / Math.max(1, cap)) * Math.PI * 2 + t * 0.05;
+    const rad = R * (0.35 + (i % 3) * 0.22);
+    return placed(n, i, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, colors, 1.8);
+  });
+}
+
+function nexusMode(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  // 3–5 clusters. Each cluster is a small ring bound to a hub.
+  const clusters = 4;
+  return nodes.map((n, i) => {
+    const c = i % clusters;
+    const hubA = (c / clusters) * Math.PI * 2 + t * 0.08;
+    const hx = cx + Math.cos(hubA) * R * 0.55;
+    const hy = cy + Math.sin(hubA) * R * 0.55;
+    const localI = Math.floor(i / clusters);
+    const la = localI * 0.9 + t * 0.2;
+    const lr = R * 0.15 * Math.min(1, 0.3 + localI * 0.08);
+    return placed(n, i, hx + Math.cos(la) * lr, hy + Math.sin(la) * lr, colors, 1.1);
+  });
+}
+
+function lociMode(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  // wandering attractor loci — 7 slow drifters, others orbit closest
+  const attractors = 7;
+  const centers: [number, number][] = Array.from({ length: attractors }, (_, k) => {
+    const a = (k / attractors) * Math.PI * 2 + Math.sin(t * 0.3 + k) * 0.4;
+    const rr = R * (0.35 + 0.3 * Math.cos(t * 0.2 + k * 1.3));
+    return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr];
+  });
+  return nodes.map((n, i) => {
+    const [ax, ay] = centers[i % attractors];
+    const la = i * 2.4 + t * 0.4;
+    const lr = R * 0.11 * (0.5 + (n.weight ?? 0.5));
+    return placed(n, i, ax + Math.cos(la) * lr, ay + Math.sin(la) * lr, colors);
+  });
+}
+
+function hexMode(nodes: MemoryNode[], cx: number, cy: number, R: number, colors: string[]): PlacedNode[] {
+  // dense hex tessellation covering the disc; every cell = a memory
+  const N = nodes.length;
+  const rings = Math.max(2, Math.ceil((Math.sqrt(12 * N + 9) - 3) / 6));
+  const cell = R / (rings + 0.5);
+  const pts: [number, number][] = [[cx, cy]];
+  for (let ring = 1; ring <= rings; ring++) {
+    const count = 6 * ring;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + (ring % 2 ? Math.PI / count : 0);
+      pts.push([cx + Math.cos(a) * cell * ring, cy + Math.sin(a) * cell * ring]);
+    }
+  }
+  return nodes.slice(0, pts.length).map((n, i) => ({
+    ...n, x: pts[i][0], y: pts[i][1],
+    r: Math.max(1.2, cell * 0.28 * (0.6 + n.weight)),
+    color: colorFor(n, i, colors),
+  }));
+}
+
+function singularityMode(nodes: MemoryNode[], cx: number, cy: number, R: number, t: number, colors: string[]): PlacedNode[] {
+  // everything spirals inward toward the well; heaviest nodes closest to core
+  const sorted = [...nodes].map((n, i) => ({ n, i })).sort((a, b) => b.n.weight - a.n.weight);
+  const total = sorted.length;
+  return sorted.map(({ n, i }, k) => {
+    const depth = k / Math.max(1, total);
+    const a = k * (Math.PI * 2 / PHI) + t * (0.15 + depth * 0.6);
+    const rad = R * Math.pow(1 - depth, 1.6) + 4;
+    return placed(n, i, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, colors, 0.9 + (1 - depth) * 1.2);
+  });
 }
 
 function placed(n: MemoryNode, i: number, x: number, y: number, colors: string[], scale = 1): PlacedNode {

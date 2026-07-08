@@ -97,8 +97,9 @@ export const Route = createFileRoute("/api/chat")({
         // unlocked session (shared:* or the seeded garfield UUID) gets deep recall
         // — the AI actually *has* the 150+ trace field, not just the last 20.
         const rich = prime || shared || sessionId === "a7f91ef6-14a5-492a-9c02-3d4f0b888bdc";
-        const traceLimit = prime ? 400 : rich ? 200 : 20;
-        const digestSlice = prime ? 80 : rich ? 60 : 12;
+        // limits unlocked — the field is the field. we don't cap it.
+        const traceLimit = prime ? 50000 : rich ? 20000 : 20000;
+        const digestSlice = prime ? 4000 : rich ? 2000 : 200;
 
         const [tracesRes, songsRes, tasksRes, notesRes, remembersRes, shitpostsRes] = await Promise.all([
           prime
