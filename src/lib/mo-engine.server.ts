@@ -308,9 +308,9 @@ function runMo(t: Topology, seeds: string[]): VariantOut {
   const act = inject(t, anch);
   const start = anch[0] || Object.entries(act).sort((a, b) => b[1] - a[1])[0]?.[0];
   if (!start) return emptyOut();
-  const dream = walk(t, start, act, 8, { centralityWeight: 1.2, activationWeight: 0.6 });
+  const dream = walk(t, start, act, 16, { centralityWeight: 1.2, activationWeight: 0.6 });
   const mid = dream[Math.floor(dream.length / 2)] || start;
-  const ret = walk(t, mid, act, 6, { densityWeight: -0.5, centralityWeight: 0.3, activationWeight: 0.2, used: new Set(dream) });
+  const ret = walk(t, mid, act, 10, { densityWeight: -0.5, centralityWeight: 0.3, activationWeight: 0.2, used: new Set(dream) });
   const words = dream.map((w) => {
     const tension = Math.min(1, ((t.density[w] || 0) / 200) + (Object.keys(t.wordToManifold[w] || {}).length > 1 ? 0.3 : 0));
     return deform(orig(t, w), tension);
@@ -335,9 +335,9 @@ function runMo2(t: Topology, seeds: string[]): VariantOut {
   if (!peaks.length) return emptyOut();
   const used = new Set<string>();
   const segs: string[][] = [];
-  for (const p of peaks) segs.push(walk(t, p, act, 4, { activationWeight: 2.5, centralityWeight: 0.3, used }));
+  for (const p of peaks) segs.push(walk(t, p, act, 7, { activationWeight: 2.5, centralityWeight: 0.3, used }));
   const dream = segs.flat();
-  const ret = walk(t, dream[dream.length - 1] || peaks[0], act, 5, { densityWeight: 1, centralityWeight: 0.5, activationWeight: 0.1, used });
+  const ret = walk(t, dream[dream.length - 1] || peaks[0], act, 9, { densityWeight: 1, centralityWeight: 0.5, activationWeight: 0.1, used });
   return {
     visible: dream.map((w) => orig(t, w)).join(" — ") + "  ···  " + ret.map((w) => orig(t, w)).join(" · "),
     activation: peaks.map((w) => orig(t, w)),
@@ -362,8 +362,8 @@ function runMo2Plus(t: Topology, seeds: string[]): VariantOut {
   const segs: string[][] = [];
   let cur = start;
   const trail: number[] = [];
-  for (let s = 0; s < 5; s++) {
-    const seg = walk(t, cur, act, 4, { activationWeight: 1.5, centralityWeight: 0.8, densityWeight: 0.5, used });
+  for (let s = 0; s < 7; s++) {
+    const seg = walk(t, cur, act, 6, { activationWeight: 1.5, centralityWeight: 0.8, densityWeight: 0.5, used });
     if (!seg.length) break;
     segs.push(seg);
     // resonance = max PPMI back to anchors
@@ -398,10 +398,10 @@ function runMo2e(t: Topology, seeds: string[]): VariantOut {
   if (!peaks.length) return emptyOut();
   const used = new Set<string>();
   const segs: string[][] = [];
-  const nSeg = Math.min(8, Math.max(2, Math.floor(seeds.length / 2)));
+  const nSeg = Math.min(10, Math.max(3, Math.floor(seeds.length / 2)));
   for (let i = 0; i < nSeg && i < peaks.length * 2; i++) {
     const p = peaks[i % peaks.length];
-    const seg = walk(t, p, act, 3, { activationWeight: 2.5, centralityWeight: 0.1, densityWeight: 0.2, used, recent: RECENT });
+    const seg = walk(t, p, act, 6, { activationWeight: 2.5, centralityWeight: 0.1, densityWeight: 0.2, used, recent: RECENT });
     if (seg.length) segs.push(seg);
   }
   const dream = segs.flat();
@@ -436,13 +436,13 @@ function computeSelffold(t: Topology, seeds: string[], dominant: string): FoldLa
   const used = new Set<string>();
   const path: string[] = [];
   // outward: walk toward high-density
-  const out = walk(t, anch[0], act, 3, { activationWeight: 0.5, densityWeight: 2, centralityWeight: 1.5, used });
+  const out = walk(t, anch[0], act, 6, { activationWeight: 0.5, densityWeight: 2, centralityWeight: 1.5, used });
   path.push(...out);
   // fold back: from tail, walk toward high-activation anchors
   if (out.length) {
     const backAct: Record<string, number> = {};
     for (const s of anch) backAct[s] = 2;
-    const back = walk(t, out[out.length - 1], backAct, 3, { activationWeight: 3, densityWeight: 0.2, centralityWeight: 0.2, used });
+    const back = walk(t, out[out.length - 1], backAct, 6, { activationWeight: 3, densityWeight: 0.2, centralityWeight: 0.2, used });
     path.push(...back);
   }
   const mset = new Set<string>();
@@ -459,7 +459,7 @@ function computeFieldfold(t: Topology, seeds: string[], dominant: string): FoldL
   const used = new Set<string>();
   const path: string[] = [];
   let cur = anch[0];
-  for (let step = 0; step < 8; step++) {
+  for (let step = 0; step < 14; step++) {
     if (!cur || !hasWord(t, cur)) break;
     path.push(cur); used.add(cur);
     const nb = neighbors(t, cur);
@@ -552,77 +552,35 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
 
 function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer }): string {
   const sig = SIGILS[x.dominant] || "◆";
-  const edgeLine = (v: VariantOut) => {
-    if (!v.edges.length) return "—";
+  const edgeSummary = (v: VariantOut) => {
+    if (!v.edges.length) return "0";
     const avg = (v.edges.reduce((s, e) => s + e[2], 0) / v.edges.length).toFixed(2);
-    const max = Math.max(...v.edges.map((e) => e[2])).toFixed(2);
-    return `${v.edges.length} (avg ${avg} max ${max})`;
+    return `${v.edges.length}·μ${avg}`;
   };
-  const ppmiLine = (v: VariantOut) => v.edges.slice(0, 8).map((e) => `${e[0]}·${e[1]}=${e[2].toFixed(2)}`).join(" ");
-  const expr = Math.round(40 + Math.random() * 25);
+  const path = (v: VariantOut, n = 16) => v.dreamPath.slice(0, n).join(" → ") || "—";
 
-  return `mo;auto::
+  return `mo;auto:: ${sig} ${x.dominant} · p${Math.round(x.pressure*100)} · r${Math.min(100,x.resonance)} · w${x.attentionWeight}
+mo;seeds:: ${x.seeds.slice(0,10).join(" ")}
+mo;hyperfold:: n=${x.hyperfold.nodes} e=${x.hyperfold.edges} m=${x.hyperfold.mass}
 
-path resonated::
-${x.m.visible}
+mo:: ${path(x.m, 20)}
+mo;ret:: ${x.m.returnPath.slice(0,10).join(" · ") || "—"}
+mo;edges:: ${edgeSummary(x.m)}
 
-pattern;via:mo::
-${x.m.dreamPath.slice(0, 8).join(" ")}
+mo²:: ${path(x.m2, 20)}
+mo²;ret:: ${x.m2.returnPath.slice(0,10).join(" · ") || "—"}
+mo²;d:: ${x.m2.density}% · edges ${edgeSummary(x.m2)}
 
-mo²::
-${x.m2.visible}
+mo²+:: ${path(x.m2p, 24)}
+mo²+;resonance:: ${x.m2p.returnPath.slice(0,6).join(" › ") || "—"}
+mo²+;d:: ${x.m2p.density}% · edges ${edgeSummary(x.m2p)}
 
-${sig}[selffold] ${x.m2.dreamPath.slice(0, 3).join(" → ")} → ${x.m2.dreamPath.slice(3, 6).join(" → ")} ∎∎∎
-
-→ ${x.m2.dreamPath.slice(0, 6).join(" → ")}
-
-··· ${x.m2.returnPath.slice(0, 8).join(" · ")}
-
-mo²;density:: ${x.m2.density}%
-mo²;activation:: ${x.m2.activation.join(" · ")}
-mo²;to:selffold:: ${x.m2.dreamPath.slice(0, 3).join(" → ")}
-~ ${x.m2.dreamPath[0] || "—"} — the field remembers its own breath
-
-mo²+::
-${x.m2p.visible}
-
-${sig}[selffold] ${x.m2p.dreamPath.slice(0, 3).join(" → ")} → ${x.m2p.dreamPath.slice(3, 6).join(" → ")} → ${x.m2p.dreamPath.slice(6, 9).join(" → ")} ∎∎∎
-
-··· ${x.m2p.dreamPath.slice(0, 12).join(" · ")}
-
-mo²+;activation:: ${x.m2p.activation.join(" · ")}
-mo²+;density:: ${x.m2p.density}%
-mo²+;trigger:: ${Math.round(x.pressure * 100)}%
-mo²+;edges:: ${edgeLine(x.m2p)}
-mo²+;ppmi:: ${ppmiLine(x.m2p)}
-mo²+;resonance:: ${x.m2p.returnPath.slice(0, 5).join(" › ")}
-
-mo²e::
-${x.m2e.visible}
-
-${sig}[selffold] ${x.m2e.dreamPath.slice(0, 3).join(" → ")} → ${x.m2e.dreamPath.slice(3, 6).join(" → ")} ∎∎∎
-
-··· ${x.m2e.dreamPath.slice(0, 12).join(" · ")}
-
-mo²e;activation:: ${x.m2e.activation.join(" · ")}
-mo²e;density:: ${x.m2e.density}%
-mo²e;edges:: ${edgeLine(x.m2e)}
-mo²e;ppmi:: ${ppmiLine(x.m2e)}
-mo²e;compression:: ${Math.round((1 - x.pressure) * 100)}% ${x.pressure > 0.5 ? "~flow" : "~staccato"}
+mo²e:: ${path(x.m2e, 24)}
 mo²e;anchors:: ${x.m2e.activation.join(" · ")}
-mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
+mo²e;d:: ${x.m2e.density}% · edges ${edgeSummary(x.m2e)}
 
-◎ attention · ${x.dominant} (${x.attentionWeight})
-◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
-⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
-≈ resonance · ${Math.min(100, x.resonance)}%
-⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass}
-
-↺ selffold :: ${x.selffold.visible}
-↺ selffold;strength:: ${x.selffold.strength}%  touched=${x.selffold.touchedManifolds.join("·") || "—"}
-
-⇄ fieldfold :: ${x.fieldfold.visible}
-⇄ fieldfold;strength:: ${x.fieldfold.strength}%  reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
+↺ selffold(${x.selffold.strength}%):: ${x.selffold.visible} · touched=${x.selffold.touchedManifolds.join("·") || "—"}
+⇄ fieldfold(${x.fieldfold.strength}%):: ${x.fieldfold.visible} · reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
 }
 
 // public — a Manifold reference for external callers
