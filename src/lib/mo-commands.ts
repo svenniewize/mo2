@@ -123,11 +123,11 @@ function buildOp(kind: string, sub: string, rest: string): MoOp | null {
 }
 
 /**
- * Parse XML-style <mo:*/> blocks and return ops + text with those blocks stripped.
- * mo:read is REPLACED inline with a compact readout by the caller — parse
- * still returns it as an op with the raw span info via placeholder marker.
+ * Parse XML-style mo tool blocks and return ops + text with those blocks stripped.
+ * mo:read is REPLACED inline with a compact readout by the caller.
  */
 export function parseXmlBlocks(text: string): { ops: MoOp[]; stripped: string; readSpans: { text: string; marker: string }[] } {
+
   const ops: MoOp[] = [];
   const readSpans: { text: string; marker: string }[] = [];
 
