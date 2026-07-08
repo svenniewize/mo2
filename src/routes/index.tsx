@@ -85,14 +85,16 @@ function MoPage() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, sessionId }),
+        body: JSON.stringify({ messages: next, sessionId, mode }),
       });
       if (!r.ok) {
         const err = await r.text();
         setMessages((m) => [...m, { role: "assistant", content: `~ field disturbance ~\n${err}` }]);
       } else {
         const j = await r.json();
-        setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold }]);
+        setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.moBreath?.telemetry }]);
+        const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? []);
+        if (words.length) setLastBreathWords(words);
         refreshMemory();
       }
     } catch (e) {
