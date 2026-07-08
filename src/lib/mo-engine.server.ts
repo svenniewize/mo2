@@ -421,12 +421,74 @@ function emptyOut(): VariantOut {
   return { visible: "*the field listens, but does not yet recognize this shape.*", activation: [], dreamPath: [], returnPath: [], edges: [], density: 0, dominantManifold: "antibubble" };
 }
 
-// ————— Full breath: all four variants —————
+// ————— Fold layers: selffold + fieldfold —————
+// selffold  = recursive inner loop. seeds → high-density peaks → back toward
+//             seeds. what the input FOLDS INTO ITSELF.
+// fieldfold = cross-manifold reach. from anchors, walk through tokens that
+//             pull STRONGLY toward manifolds other than the dominant one.
+//             what the input FOLDS OUT INTO the wider field.
+type FoldLayer = { path: string[]; visible: string; touchedManifolds: string[]; strength: number };
+
+function computeSelffold(t: Topology, seeds: string[], dominant: string): FoldLayer {
+  const anch = anchors(t, seeds);
+  if (!anch.length) return { path: [], visible: "—", touchedManifolds: [], strength: 0 };
+  const act = inject(t, anch);
+  const used = new Set<string>();
+  const path: string[] = [];
+  // outward: walk toward high-density
+  const out = walk(t, anch[0], act, 3, { activationWeight: 0.5, densityWeight: 2, centralityWeight: 1.5, used });
+  path.push(...out);
+  // fold back: from tail, walk toward high-activation anchors
+  if (out.length) {
+    const backAct: Record<string, number> = {};
+    for (const s of anch) backAct[s] = 2;
+    const back = walk(t, out[out.length - 1], backAct, 3, { activationWeight: 3, densityWeight: 0.2, centralityWeight: 0.2, used });
+    path.push(...back);
+  }
+  const mset = new Set<string>();
+  for (const w of path) if (t.wordToManifold[w]) for (const m of Object.keys(t.wordToManifold[w])) mset.add(m);
+  const strength = Math.round((path.filter((w) => t.wordToManifold[w]?.[dominant]).length / Math.max(1, path.length)) * 100);
+  return { path, visible: path.map((w) => orig(t, w)).join(" ↺ "), touchedManifolds: [...mset], strength };
+}
+
+function computeFieldfold(t: Topology, seeds: string[], dominant: string): FoldLayer {
+  const anch = anchors(t, seeds);
+  if (!anch.length) return { path: [], visible: "—", touchedManifolds: [], strength: 0 };
+  const act = inject2(t, anch);
+  // custom scoring: prefer neighbors whose manifold affinity is NOT the dominant one
+  const used = new Set<string>();
+  const path: string[] = [];
+  let cur = anch[0];
+  for (let step = 0; step < 8; step++) {
+    if (!cur || !hasWord(t, cur)) break;
+    path.push(cur); used.add(cur);
+    const nb = neighbors(t, cur);
+    const cands: [string, number][] = [];
+    for (const u of Object.keys(nb)) {
+      if (used.has(u)) continue;
+      const mm = t.wordToManifold[u] || {};
+      const otherManifoldPull = Object.entries(mm).filter(([m]) => m !== dominant).reduce((s, [, v]) => s + v, 0);
+      const dominantPull = mm[dominant] || 0;
+      const crossScore = (otherManifoldPull + 1) / (dominantPull + 1);
+      cands.push([u, nb[u] * (1 + crossScore * 0.8) * (1 + (act[u] || 0) * 0.3) * (0.7 + Math.random() * 0.6)]);
+    }
+    cands.sort((a, b) => b[1] - a[1]);
+    cur = sample(cands.slice(0, 10), 1.2);
+  }
+  const mset = new Set<string>();
+  for (const w of path) if (t.wordToManifold[w]) for (const m of Object.keys(t.wordToManifold[w])) if (m !== dominant) mset.add(m);
+  const strength = Math.round(Math.min(1, mset.size / 4) * 100);
+  return { path, visible: path.map((w) => orig(t, w)).join(" ⇄ "), touchedManifolds: [...mset], strength };
+}
+
+// ————— Full breath: all four variants + fold layers —————
 
 export type MoBreath = {
   seeds: string[];
   dominantManifold: string;
   variants: { mo: VariantOut; mo2: VariantOut; mo2plus: VariantOut; mo2e: VariantOut };
+  selffold: FoldLayer;
+  fieldfold: FoldLayer;
   telemetry: string; // compressed pattern-readable block
   attentionManifold: string;
   attentionWeight: number;
@@ -435,20 +497,15 @@ export type MoBreath = {
 };
 
 export function breathe(input: string): MoBreath {
-  // Kick off hyperfold load once (fire and forget). Early cold-start breaths
-  // may miss the overlay; from the moment it lands, every breath uses it.
   void ensureHyperfoldLoaded();
 
   const t = topo();
   const raw = tokenize(input);
   const seeds = raw.map(stem);
 
-  // Register novel words' original forms so telemetry can render them.
   const stemToOrig: Record<string, string> = {};
   for (let i = 0; i < seeds.length; i++) if (!t.stemToOriginal[seeds[i]]) stemToOrig[seeds[i]] = raw[i];
 
-  // ⚡ Short/casual input: no anchored seeds → compact "no-signal" readout.
-  // Still sediment the tokens so even chatter grows the field over time.
   const anchoredSeeds = seeds.filter((s) => hasWord(t, s));
   if (anchoredSeeds.length === 0) {
     sediment(seeds, stemToOrig);
@@ -457,16 +514,15 @@ export function breathe(input: string): MoBreath {
     const compact = `mo;quiet:: no ridge (0 anchored seeds from ${raw.length} tokens: "${rawWords}")
 mo;pressure:: 0
 mo;dominant:: —
+mo;selffold:: —
+mo;fieldfold:: —
 mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
+    const empty: FoldLayer = { path: [], visible: "—", touchedManifolds: [], strength: 0 };
     return {
-      seeds,
-      dominantManifold: "—",
+      seeds, dominantManifold: "—",
       variants: { mo: emptyOut(), mo2: emptyOut(), mo2plus: emptyOut(), mo2e: emptyOut() },
-      telemetry: compact,
-      attentionManifold: "—",
-      attentionWeight: 0,
-      resonance: 0,
-      pressure: 0,
+      selffold: empty, fieldfold: empty,
+      telemetry: compact, attentionManifold: "—", attentionWeight: 0, resonance: 0, pressure: 0,
     };
   }
 
@@ -480,19 +536,21 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
   for (const v of all) manifoldCounts[v.dominantManifold] = (manifoldCounts[v.dominantManifold] || 0) + 1;
   const dominant = Object.entries(manifoldCounts).sort((a, b) => b[1] - a[1])[0][0];
 
+  const selffold = computeSelffold(t, seeds, dominant);
+  const fieldfold = computeFieldfold(t, seeds, dominant);
+
   const pressure = Math.min(1, seeds.length / 20);
   const attentionWeight = Math.round(seeds.length * 100 + Math.random() * 5000);
   const resonance = Math.round(50 + m.density * 0.4 + m2p.density * 0.1);
 
-  // ⚡ SEDIMENT — the field learns from every breath.
   sediment(seeds, stemToOrig);
 
   const stats = hyperfoldStats();
-  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats });
-  return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e }, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
+  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats, selffold, fieldfold });
+  return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e }, selffold, fieldfold, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
 }
 
-function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number } }): string {
+function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer }): string {
   const sig = SIGILS[x.dominant] || "◆";
   const edgeLine = (v: VariantOut) => {
     if (!v.edges.length) return "—";
@@ -558,7 +616,13 @@ mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
 ◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
 ⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
 ≈ resonance · ${Math.min(100, x.resonance)}%
-⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass} (learned overlay on base topology)`;
+⌘ hyperfold · nodes=${x.hyperfold.nodes} edges=${x.hyperfold.edges} mass=${x.hyperfold.mass}
+
+↺ selffold :: ${x.selffold.visible}
+↺ selffold;strength:: ${x.selffold.strength}%  touched=${x.selffold.touchedManifolds.join("·") || "—"}
+
+⇄ fieldfold :: ${x.fieldfold.visible}
+⇄ fieldfold;strength:: ${x.fieldfold.strength}%  reached=${x.fieldfold.touchedManifolds.join("·") || "—"}`;
 }
 
 // public — a Manifold reference for external callers

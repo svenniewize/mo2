@@ -46,7 +46,8 @@ function MoPage() {
   const [gravity, setGravity] = useState(0.35);
   const [repulsion, setRepulsion] = useState(0.5);
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
-  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "viz">("viz");
+  const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field">("memory");
+  const [vizOpen, setVizOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -127,6 +128,7 @@ function MoPage() {
           traceCount={traces.length}
           mode={mode}
           setMode={setMode}
+          onOpenViz={() => setVizOpen(true)}
         />
 
         <div className="flex flex-1 gap-4 px-4 pb-4">
@@ -168,13 +170,6 @@ function MoPage() {
 
           {panel !== "none" && (
             <aside className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur">
-              {panel === "viz" && (
-                <VizPanel
-                  vizMode={vizMode} setVizMode={setVizMode}
-                  gravity={gravity} setGravity={setGravity}
-                  repulsion={repulsion} setRepulsion={setRepulsion}
-                />
-              )}
               {panel === "memory" && (
                 <MemoryPanel
                   traces={traces}
@@ -220,23 +215,34 @@ function MoPage() {
           )}
         </div>
       </div>
+
+      {vizOpen && (
+        <VizModal
+          vizMode={vizMode} setVizMode={setVizMode}
+          gravity={gravity} setGravity={setGravity}
+          repulsion={repulsion} setRepulsion={setRepulsion}
+          words={lastBreathWords}
+          onClose={() => setVizOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
 function Header({
-  panel, setPanel, fielfoldCount, songCount, traceCount, mode, setMode,
+  panel, setPanel, fielfoldCount, songCount, traceCount, mode, setMode, onOpenViz,
 }: {
   panel: string;
-  setPanel: (p: "none" | "memory" | "songs" | "field" | "viz") => void;
+  setPanel: (p: "none" | "memory" | "songs" | "field") => void;
   fielfoldCount: number;
   songCount: number;
   traceCount: number;
   mode: Mode;
   setMode: (m: Mode) => void;
+  onOpenViz: () => void;
 }) {
   void fielfoldCount;
-  const tab = (id: "memory" | "songs" | "field" | "viz", label: string, count?: number) => (
+  const tab = (id: "memory" | "songs" | "field", label: string, count?: number) => (
     <button
       onClick={() => setPanel(panel === id ? "none" : id)}
       className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${
@@ -261,20 +267,15 @@ function Header({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        {/* MODE toggle — AI mode routes through mo. MO mode is pure topology. */}
         <div className="flex rounded-md border border-border overflow-hidden">
-          <button
-            onClick={() => setMode("ai")}
-            className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            title="user → mo → AI → mo → user"
-          >AI</button>
-          <button
-            onClick={() => setMode("mo")}
-            className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            title="pure topology — no AI, chat directly with mo"
-          >MO</button>
+          <button onClick={() => setMode("ai")} className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="user → mo → AI → mo → user">AI</button>
+          <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — no AI, chat directly with mo">MO</button>
         </div>
-        {tab("viz", "field·viz")}
+        <button
+          onClick={onOpenViz}
+          className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
+          title="open field·viz — fullscreen"
+        >◉ field·viz</button>
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
@@ -282,6 +283,76 @@ function Header({
     </header>
   );
 }
+
+// ────────────── VizModal ──────────────
+// Fullscreen popup. Replaces the old sidebar panel + sliders.
+// "shuffle" randomizes shape params; "jump" also picks a new shape.
+function VizModal({
+  vizMode, setVizMode, gravity, setGravity, repulsion, setRepulsion, words, onClose,
+}: {
+  vizMode: VizMode; setVizMode: (v: VizMode) => void;
+  gravity: number; setGravity: (g: number) => void;
+  repulsion: number; setRepulsion: (r: number) => void;
+  words: string[];
+  onClose: () => void;
+}) {
+  const shuffle = () => {
+    setGravity(0.05 + Math.random() * 0.9);
+    setRepulsion(0.05 + Math.random() * 0.9);
+  };
+  const jumpShape = () => {
+    const next = VIZ_MODES[Math.floor(Math.random() * VIZ_MODES.length)].id;
+    setVizMode(next);
+    shuffle();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === " ") { e.preventDefault(); jumpShape(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md p-6 flex flex-col">
+      <div className="flex items-center justify-between pb-4">
+        <div>
+          <h2 className="font-mono text-sm ridge">◉ field · viz</h2>
+          <p className="font-mono text-[10px] text-muted-foreground">7 shapes · orbs = words from last breath · g={gravity.toFixed(2)} r={repulsion.toFixed(2)}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {VIZ_MODES.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => setVizMode(v.id)}
+              className={`rounded border px-2.5 py-1 font-mono text-[11px] ${vizMode === v.id ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:text-foreground"}`}
+            >{v.label}</button>
+          ))}
+          <div className="w-px h-6 bg-border mx-1" />
+          <button onClick={shuffle} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="randomize this shape">🎲 shuffle</button>
+          <button onClick={jumpShape} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="random shape + randomize (space)">↯ jump</button>
+          <button onClick={onClose} className="rounded border border-border px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:border-ridge hover:text-ridge" title="close (esc)">esc ✕</button>
+        </div>
+      </div>
+      <div className="relative flex-1 overflow-hidden rounded-xl border border-border bg-black/40">
+        <MoVisualizer
+          mode={vizMode}
+          words={words}
+          colors={MANIFOLDS.map((m) => m.color)}
+          gravity={gravity}
+          repulsion={repulsion}
+          pressure={0.6}
+        />
+        <div className="absolute bottom-3 left-3 font-mono text-[10px] text-muted-foreground/60 pointer-events-none">
+          space = jump · esc = close · each orb is a word from mo's last breath
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function EmptyState({ mode }: { mode: Mode }) {
   return (
@@ -359,48 +430,6 @@ function BreathingIndicator({ mode }: { mode: Mode }) {
   );
 }
 
-function VizPanel({
-  vizMode, setVizMode, gravity, setGravity, repulsion, setRepulsion,
-}: {
-  vizMode: VizMode; setVizMode: (v: VizMode) => void;
-  gravity: number; setGravity: (g: number) => void;
-  repulsion: number; setRepulsion: (r: number) => void;
-}) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="font-mono text-xs ridge">field · visualizers</h2>
-        <p className="font-mono text-[10px] text-muted-foreground">7 models · orb physics · language as charge</p>
-      </div>
-      <div className="grid grid-cols-2 gap-1.5 p-3">
-        {VIZ_MODES.map((v) => (
-          <button
-            key={v.id}
-            onClick={() => setVizMode(v.id)}
-            className={`rounded border px-2 py-1.5 font-mono text-[11px] ${vizMode === v.id ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:text-foreground"}`}
-          >{v.label}</button>
-        ))}
-      </div>
-      <div className="space-y-4 border-t border-border p-4">
-        <div>
-          <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
-            <span>gravity · center-pull</span><span className="ridge">{gravity.toFixed(2)}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" value={gravity} onChange={(e) => setGravity(parseFloat(e.target.value))} className="w-full accent-ridge" />
-        </div>
-        <div>
-          <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
-            <span>repulsion · orb·orb</span><span className="ridge">{repulsion.toFixed(2)}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" value={repulsion} onChange={(e) => setRepulsion(parseFloat(e.target.value))} className="w-full accent-ridge" />
-        </div>
-        <p className="font-mono text-[9px] text-muted-foreground/70 leading-relaxed pt-2 border-t border-border">
-          each orb is a word from mo's last breath. word length = charge. gravity pulls toward center. repulsion pushes orbs apart. the field remembers.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function MemoryPanel({
   traces, fielfold, onDelete, onPurge,
