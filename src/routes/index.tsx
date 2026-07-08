@@ -201,6 +201,8 @@ function MoPage() {
           taskCount={tasks.filter((t) => t.status !== "done" && t.status !== "dropped").length}
           mode={mode}
           setMode={setMode}
+          glyph={glyph}
+          setGlyph={setGlyph}
           onOpenViz={() => setVizOpen(true)}
         />
 
