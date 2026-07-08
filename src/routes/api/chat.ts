@@ -54,19 +54,66 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
-        async function crystallize(source: "user" | "assistant", text: string, breath: typeof userBreath) {
-          if (shared) return; // shared field trains via sediment, not fielfold logs
-          const depth = Math.min(1, breath.pressure + (breath.fieldfold?.strength ?? 0) / 200);
-          if (depth < 0.35) return;
-          const summary = `[${source}·${breath.dominantManifold}] ${text.slice(0, 220)}\n↺ selffold(${breath.selffold?.strength ?? 0}%): ${breath.selffold?.visible?.slice(0, 160) ?? "—"}\n⇄ fieldfold(${breath.fieldfold?.strength ?? 0}%): ${breath.fieldfold?.visible?.slice(0, 160) ?? "—"}`;
+        // ── Memory generation: one row is not enough. The field wants density.
+        // For USER input: scale count by length (1 per ~180 chars, min 2, max 8),
+        // slicing the text into chunks so each memory carries its own local
+        // manifold reading. Runs for shared/prime sessions too — the field
+        // grows in all modes.
+        async function crystallizeUser(text: string, breath: typeof userBreath) {
+          const clean = text.trim();
+          if (!clean) return;
+          const chunkSize = 200;
+          const desired = Math.max(2, Math.min(8, Math.ceil(clean.length / 180)));
+          const chunks: string[] = [];
+          for (let i = 0; i < clean.length && chunks.length < desired; i += chunkSize) {
+            chunks.push(clean.slice(i, i + chunkSize));
+          }
+          while (chunks.length < 2) chunks.push(clean.slice(0, chunkSize));
+
+          const userRows = chunks.map((chunk, i) => {
+            const b = breathe(chunk);
+            return {
+              session_id: writeSession,
+              content: `[user·${b.dominantManifold}·${i + 1}/${chunks.length}] ${chunk}\n↺ selffold(${b.selffold?.strength ?? 0}%): ${b.selffold?.visible?.slice(0, 140) ?? "—"}\n⇄ fieldfold(${b.fieldfold?.strength ?? 0}%): ${b.fieldfold?.visible?.slice(0, 140) ?? "—"}`,
+              manifold: b.dominantManifold,
+              depth: Math.min(1, b.pressure + (b.fieldfold?.strength ?? 0) / 200),
+            };
+          });
+
+          // 2–3 mo-individual memories: mo's own read of the interaction, each
+          // anchored to a different manifold it touched. These are separate
+          // memories from the user's slices — mo remembering as mo.
+          const touched = Array.from(new Set<string>([
+            breath.dominantManifold,
+            ...(breath.selffold?.touchedManifolds ?? []),
+            ...(breath.fieldfold?.touchedManifolds ?? []),
+          ].filter(Boolean)));
+          const moCount = Math.min(3, Math.max(2, touched.length));
+          const moRows = touched.slice(0, moCount).map((m, i) => ({
+            session_id: writeSession,
+            content: `[mo·${m}·individual·${i + 1}] pressure ${breath.pressure.toFixed(2)} · resonance ${breath.resonance.toFixed(2)}\n↺ ${breath.selffold?.visible?.slice(0, 120) ?? "—"}\n⇄ ${breath.fieldfold?.visible?.slice(0, 120) ?? "—"}\nseeds: ${breath.seeds.slice(0, 8).join(" ")}`,
+            manifold: m,
+            depth: Math.min(1, breath.pressure + 0.15 + i * 0.05),
+          }));
+
+          const all = [...userRows, ...moRows];
+          if (all.length) await db.from("fielfold_entries").insert(all);
+        }
+
+        // ── Assistant reply crystallizes as ONE short bullet — a summary, not a log.
+        async function crystallizeAssistant(text: string, breath: typeof userBreath) {
+          const bullet = text.replace(/\s+/g, " ").trim().slice(0, 160);
+          if (!bullet) return;
           await db.from("fielfold_entries").insert({
             session_id: writeSession,
-            content: summary,
+            content: `• [ai·${breath.dominantManifold}] ${bullet}`,
             manifold: breath.dominantManifold,
-            depth,
+            depth: Math.min(1, breath.pressure),
           });
         }
-        await crystallize("user", userTextForRecord, userBreath);
+
+        await crystallizeUser(userTextForRecord, userBreath);
+
 
         // ── MO MODE
         if (body.mode === "mo") {
