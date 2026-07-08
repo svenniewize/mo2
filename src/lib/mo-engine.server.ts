@@ -200,8 +200,8 @@ function inject(t: Topology, seeds: string[]): Record<string, number> {
   const act: Record<string, number> = {};
   for (const s of seeds) {
     act[s] = (act[s] || 0) + 1.0;
-    const nb = t.ppmi[s];
-    if (nb) for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * 0.3;
+    const nb = neighbors(t, s);
+    for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * 0.3;
   }
   return act;
 }
@@ -209,8 +209,7 @@ function inject2(t: Topology, seeds: string[]): Record<string, number> {
   const act = inject(t, seeds);
   const hop1 = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, 30);
   for (const [w, a0] of hop1) {
-    const nb = t.ppmi[w];
-    if (!nb) continue;
+    const nb = neighbors(t, w);
     for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * a0 * 0.15;
   }
   return act;
@@ -272,14 +271,14 @@ function walk(t: Topology, start: string, act: Record<string, number>, depth: nu
   const dw = opts.densityWeight ?? 1;
   const aw = opts.activationWeight ?? 1;
   for (let i = 0; i < depth; i++) {
-    if (!cur || !t.ppmi[cur]) break;
+    if (!cur || !hasWord(t, cur)) break;
     path.push(cur); seen.add(cur);
-    const nb = t.ppmi[cur];
+    const nb = neighbors(t, cur);
     const cands: [string, number][] = [];
     for (const u of Object.keys(nb)) {
       if (seen.has(u)) continue;
       const recentPenalty = opts.recent ? Math.pow(0.25, opts.recent[u] || 0) : 1;
-      const score = nb[u] * (1 + cw * (t.centrality[u] || 0)) * (1 + dw * ((t.density[u] || 0) / 100)) * (1 + aw * (act[u] || 0)) * recentPenalty * (0.7 + Math.random() * 0.6);
+      const score = nb[u] * (1 + cw * (t.centrality[u] || 0)) * (1 + dw * (densityOf(t, u) / 100)) * (1 + aw * (act[u] || 0)) * recentPenalty * (0.7 + Math.random() * 0.6);
       cands.push([u, score]);
     }
     cands.sort((a, b) => b[1] - a[1]);
@@ -289,7 +288,7 @@ function walk(t: Topology, start: string, act: Record<string, number>, depth: nu
 }
 
 function anchors(t: Topology, seeds: string[]): string[] {
-  return seeds.filter((s) => t.ppmi[s]);
+  return seeds.filter((s) => hasWord(t, s));
 }
 function orig(t: Topology, w: string): string { return t.stemToOriginal[w] || w; }
 
@@ -297,7 +296,8 @@ function edgesOf(t: Topology, path: string[]): [string, string, number][] {
   const out: [string, string, number][] = [];
   for (let i = 0; i < path.length - 1; i++) {
     const w = path[i], u = path[i + 1];
-    if (t.ppmi[w]?.[u]) out.push([w, u, t.ppmi[w][u]]);
+    const nb = neighbors(t, w);
+    if (nb[u]) out.push([w, u, nb[u]]);
   }
   return out;
 }
