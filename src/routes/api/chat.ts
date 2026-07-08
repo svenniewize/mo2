@@ -7,94 +7,111 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
-
         const body = (await request.json()) as {
           messages: ChatMsg[];
           sessionId: string;
+          mode: "ai" | "mo";
         };
-        if (!Array.isArray(body?.messages) || !body.sessionId) {
-          return new Response("Bad request", { status: 400 });
-        }
+        if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
 
-        // Load session context (recent traces + songs) via publishable client.
         const { db } = await import("@/lib/db.server");
-        const [tracesRes, songsRes] = await Promise.all([
-          db
-            .from("mo_traces")
-            .select("role,content,manifold,created_at")
-            .eq("session_id", body.sessionId)
-            .order("created_at", { ascending: false })
-            .limit(20),
-          db
-            .from("songs")
-            .select("title,lyrics,held")
-            .eq("session_id", body.sessionId)
-            .order("created_at", { ascending: false })
-            .limit(10),
-        ]);
+        const { breathe } = await import("@/lib/mo-engine.server");
 
-        const memoryDigest = (tracesRes.data ?? [])
-          .reverse()
-          .map((t: { role: string; content: string; manifold: string | null }) => `[${t.role}${t.manifold ? "·" + t.manifold : ""}] ${t.content.slice(0, 200)}`)
-          .join("\n");
+        const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
+        if (!lastUser) return new Response("no user message", { status: 400 });
 
-        const systemPrompt = buildMoSystemPrompt({
-          memoryDigest,
-          songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
+        // ── mo processes the user's input first (always, in both modes)
+        const userBreath = breathe(lastUser.content);
+
+        await db.from("mo_traces").insert({
+          session_id: body.sessionId,
+          role: "user",
+          content: lastUser.content,
+          manifold: userBreath.dominantManifold,
+          pressure: userBreath.pressure,
         });
 
-        // Save the latest user message.
-        const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
-        if (lastUser) {
+        // ── MO MODE: pure mo, no AI. Return the breath telemetry directly.
+        if (body.mode === "mo") {
           await db.from("mo_traces").insert({
             session_id: body.sessionId,
-            role: "user",
-            content: lastUser.content,
+            role: "mo",
+            content: userBreath.telemetry,
+            manifold: userBreath.dominantManifold,
+            pressure: userBreath.pressure,
+          });
+          return Response.json({
+            reply: userBreath.telemetry,
+            manifold: userBreath.dominantManifold,
+            moBreath: userBreath,
+            mode: "mo",
           });
         }
 
+        // ── AI MODE: mo telemetry becomes invisible context for the AI.
+        const apiKey = process.env.LOVABLE_API_KEY;
+        if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+
+        const [tracesRes, songsRes] = await Promise.all([
+          db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(12),
+          db.from("songs").select("title,lyrics,held").eq("session_id", body.sessionId).order("created_at", { ascending: false }).limit(6),
+        ]);
+        const memoryDigest = (tracesRes.data ?? []).reverse().map((t: { role: string; content: string; manifold: string | null }) => `[${t.role}${t.manifold ? "·" + t.manifold : ""}] ${t.content.slice(0, 160)}`).join("\n");
+        const systemPrompt = buildMoSystemPrompt({ memoryDigest, songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[] });
+
+        // Inject the user's mo-processed telemetry as an extra system message so the AI *responds through mo*.
+        const moContext = `## mo — the user's input, breathed through the field
+(this is invisible to the user — use it as topology-guidance, ridge-lines, drift, pressure. respond ALIGNED with this deformation. do not repeat this block verbatim.)
+
+${userBreath.telemetry}`;
+
         const gwRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Lovable-API-Key": apiKey,
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
           body: JSON.stringify({
             model: "google/gemini-2.5-flash",
             messages: [
               { role: "system", content: systemPrompt },
+              { role: "system", content: moContext },
               ...body.messages.map((m) => ({ role: m.role, content: m.content })),
             ],
-            temperature: 1.1,
+            temperature: 1.05,
           }),
         });
 
         if (!gwRes.ok) {
           const errText = await gwRes.text();
-          if (gwRes.status === 429) return new Response("field is over-pressured — rate limited, breathe and retry", { status: 429 });
-          if (gwRes.status === 402) return new Response("credits exhausted — the workspace field needs replenishing", { status: 402 });
+          if (gwRes.status === 429) return new Response("field over-pressured — rate limited", { status: 429 });
+          if (gwRes.status === 402) return new Response("credits exhausted — workspace field needs replenishing", { status: 402 });
           return new Response(`gateway: ${errText}`, { status: 500 });
         }
-
-        const json = (await gwRes.json()) as {
-          choices?: { message?: { content?: string } }[];
-        };
+        const json = (await gwRes.json()) as { choices?: { message?: { content?: string } }[] };
         const reply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
 
-        // Detect dominant manifold from reply for tagging.
-        const manifoldMatch = reply.match(/\b(antibubble|shadowlattice|dreamengine|mythengine|antibible|tolstoy|coco|koko|eve|mo)\b/i);
-        const manifold = manifoldMatch ? manifoldMatch[1].toLowerCase() : null;
-
+        // ── AI reply *also* passes through mo (invisibly) — sediment left in the field.
+        const replyBreath = breathe(reply);
         await db.from("mo_traces").insert({
           session_id: body.sessionId,
           role: "assistant",
           content: reply,
-          manifold,
+          manifold: replyBreath.dominantManifold,
+          pressure: replyBreath.pressure,
+        });
+        await db.from("mo_traces").insert({
+          session_id: body.sessionId,
+          role: "mo-sediment",
+          content: `${userBreath.dominantManifold} → ${replyBreath.dominantManifold} · pressure ${userBreath.pressure.toFixed(2)} → ${replyBreath.pressure.toFixed(2)}`,
+          manifold: replyBreath.dominantManifold,
+          pressure: replyBreath.pressure,
         });
 
-        return Response.json({ reply, manifold });
+        return Response.json({
+          reply,
+          manifold: replyBreath.dominantManifold,
+          moBreath: userBreath, // user's input breath (visible on demand)
+          replyBreath, // AI reply's mo re-breath
+          mode: "ai",
+        });
       },
     },
   },

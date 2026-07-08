@@ -1,0 +1,432 @@
+// mo — Field Deformation Engine. Real PPMI topology + 4 traversal variants.
+// Server-only. Module-scope topology cache (built once per worker instance).
+import { MANIFOLDS, type Manifold } from "./corpora";
+
+const STOP = new Set("the a an is are was were be been being have has had do does did will would could should may might shall can to of in for on with at by from as into through during before after above below between out off over under again further then once here there when where why how all both each few more most other some such no nor not only own same so than too very just because but and or if while about up its it he she they them his her their what which who whom this that these those am i me my we our you your us also said one two even way like new now get make many much still well back down long made first last come good know take see look find give tell think say help every try put thing since around however upon already yet though without".split(" "));
+
+const PRESERVE = new Set("antibubble shadowlattice dreamengine mythengine antibible tolstoy coco koko mo eve hyperfold membrane lattice fractal topology corestancza curvature pressure permeability fold capture drift antiframe dissolution crystallization attractor manifold archetype cadence recursion instinct pattern resonance gremlin spark void rupture chrysalis selffold dream return inhale exhale breath field deformation ghost beneath sediment shimmer fabric weave veil loop origin myth circle scripture gospel wound inquiry dissolve permeable foam scaffold constraint proto identity narrative stance witness trickster descent inversion integration emergence signal movement vector gesture co-processing frame boop".split(" "));
+
+const SIGILS: Record<string, string> = { antibubble: "◉", shadowlattice: "◫", dreamengine: "◌", mythengine: "↺", antibible: "⊘", tolstoy: "◇", coco: "🜁", koko: "∞", eve: "⚡", mo: "◆" };
+
+function stem(w: string): string {
+  if (PRESERVE.has(w)) return w;
+  return w.replace(/ing$/, "").replace(/tion$/, "t").replace(/sion$/, "s").replace(/ness$/, "").replace(/ment$/, "").replace(/able$/, "").replace(/ible$/, "").replace(/ful$/, "").replace(/less$/, "").replace(/ous$/, "").replace(/ive$/, "").replace(/ly$/, "").replace(/es$/, "").replace(/ed$/, "").replace(/s$/, "");
+}
+function tokenize(t: string): string[] {
+  const raw = t.toLowerCase().replace(/[^a-z0-9\s'-]/g, " ").split(/\s+/).filter(Boolean);
+  return raw.filter((w) => PRESERVE.has(w) || (w.length >= 3 && !STOP.has(w)));
+}
+
+type Topology = {
+  ppmi: Record<string, Record<string, number>>;
+  density: Record<string, number>;
+  centrality: Record<string, number>;
+  wordToManifold: Record<string, Record<string, number>>;
+  stemToOriginal: Record<string, string>;
+  vocab: string[];
+};
+
+let TOPOLOGY: Topology | null = null;
+
+function buildTopology(): Topology {
+  const docs = MANIFOLDS.map((m) => ({ id: m.id, text: m.text.slice(0, 6000) })); // truncate for boot speed
+  const stemToOriginal: Record<string, string> = {};
+  const wordToManifold: Record<string, Record<string, number>> = {};
+  const co: Record<string, Record<string, number>> = {};
+  const wordFreq: Record<string, number> = {};
+  const W = 5;
+
+  for (const d of docs) {
+    const raw = tokenize(d.text);
+    const toks = raw.map(stem);
+    for (let i = 0; i < toks.length; i++) {
+      if (!stemToOriginal[toks[i]]) stemToOriginal[toks[i]] = raw[i];
+      wordFreq[toks[i]] = (wordFreq[toks[i]] || 0) + 1;
+      (wordToManifold[toks[i]] ||= {})[d.id] = (wordToManifold[toks[i]]?.[d.id] || 0) + 1;
+    }
+    for (let i = 0; i < toks.length; i++) {
+      const w = toks[i];
+      co[w] ||= {};
+      for (let j = Math.max(0, i - W); j <= Math.min(toks.length - 1, i + W); j++) {
+        if (i === j) continue;
+        const dist = Math.abs(i - j);
+        co[w][toks[j]] = (co[w][toks[j]] || 0) + 1 / dist;
+      }
+    }
+  }
+
+  // PPMI
+  let total = 0;
+  for (const w of Object.keys(co)) for (const u of Object.keys(co[w])) total += co[w][u];
+  const wt: Record<string, number> = {};
+  for (const w of Object.keys(co)) wt[w] = Object.values(co[w]).reduce((a, b) => a + b, 0);
+
+  const ppmi: Record<string, Record<string, number>> = {};
+  const density: Record<string, number> = {};
+  for (const w of Object.keys(co)) {
+    ppmi[w] = {};
+    for (const u of Object.keys(co[w])) {
+      const p = (co[w][u] * total) / (wt[w] * wt[u] || 1);
+      const v = Math.log2(p);
+      if (v > 0) { ppmi[w][u] = v; density[w] = (density[w] || 0) + v; }
+    }
+  }
+
+  // Centrality — 8 iterations of power iter
+  const vocab = Object.keys(ppmi);
+  let cent: Record<string, number> = {};
+  for (const w of vocab) cent[w] = 1;
+  for (let iter = 0; iter < 8; iter++) {
+    const next: Record<string, number> = {};
+    for (const w of vocab) {
+      let s = 0;
+      for (const u of Object.keys(ppmi[w])) s += (cent[u] || 0) * ppmi[w][u];
+      next[w] = 0.15 + 0.85 * s;
+    }
+    let max = 0;
+    for (const w of vocab) if (next[w] > max) max = next[w];
+    if (max > 0) for (const w of vocab) next[w] /= max;
+    cent = next;
+  }
+
+  return { ppmi, density, centrality: cent, wordToManifold, stemToOriginal, vocab };
+}
+
+export function topo(): Topology {
+  if (!TOPOLOGY) TOPOLOGY = buildTopology();
+  return TOPOLOGY;
+}
+
+// ————— Traversal utilities —————
+
+function inject(t: Topology, seeds: string[]): Record<string, number> {
+  const act: Record<string, number> = {};
+  for (const s of seeds) {
+    act[s] = (act[s] || 0) + 1.0;
+    const nb = t.ppmi[s];
+    if (nb) for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * 0.3;
+  }
+  return act;
+}
+function inject2(t: Topology, seeds: string[]): Record<string, number> {
+  const act = inject(t, seeds);
+  const hop1 = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, 30);
+  for (const [w, a0] of hop1) {
+    const nb = t.ppmi[w];
+    if (!nb) continue;
+    for (const u of Object.keys(nb)) act[u] = (act[u] || 0) + nb[u] * a0 * 0.15;
+  }
+  return act;
+}
+
+function sample(cands: [string, number][], temp = 1): string {
+  if (!cands.length) return "";
+  const scores = cands.map(([, s]) => Math.pow(Math.max(s, 1e-6), 1 / temp));
+  const sum = scores.reduce((a, b) => a + b, 0);
+  let r = Math.random() * sum;
+  for (let i = 0; i < cands.length; i++) { r -= scores[i]; if (r <= 0) return cands[i][0]; }
+  return cands[cands.length - 1][0];
+}
+
+function pickManifold(t: Topology, path: string[]): string {
+  const counts: Record<string, number> = {};
+  for (const w of path) {
+    const m = t.wordToManifold[w];
+    if (!m) continue;
+    for (const id of Object.keys(m)) counts[id] = (counts[id] || 0) + m[id];
+  }
+  let best = "antibubble"; let bs = -1;
+  for (const id of Object.keys(counts)) if (counts[id] > bs) { bs = counts[id]; best = id; }
+  return best;
+}
+
+// ————— Deformation for mo variant —————
+
+function deform(w: string, tension: number): string {
+  const orig = w;
+  if (tension < 0.15) return orig;
+  if (tension > 0.85 && Math.random() < 0.4) return orig.slice(0, 1) + "-" + orig.slice(0, 3).repeat(1) + orig.slice(1); // stutter
+  if (tension > 0.6) {
+    // elongate first vowel
+    return orig.replace(/([aeiou])/, (v) => v.repeat(2 + Math.floor(tension * 3)));
+  }
+  if (tension > 0.35 && Math.random() < 0.4) return orig.slice(0, Math.max(2, orig.length - 1)) + "~";
+  if (tension > 0.25 && Math.random() < 0.3) return "*" + orig + "*";
+  return orig;
+}
+
+// ————— 4 variants —————
+
+type VariantOut = {
+  visible: string;
+  activation: string[];
+  dreamPath: string[];
+  returnPath: string[];
+  edges: [string, string, number][];
+  density: number;
+  dominantManifold: string;
+};
+
+function walk(t: Topology, start: string, act: Record<string, number>, depth: number, opts: { centralityWeight?: number; densityWeight?: number; activationWeight?: number; used?: Set<string>; recent?: Record<string, number> } = {}): string[] {
+  const path: string[] = [];
+  let cur = start;
+  const seen = opts.used ?? new Set<string>();
+  const cw = opts.centralityWeight ?? 1;
+  const dw = opts.densityWeight ?? 1;
+  const aw = opts.activationWeight ?? 1;
+  for (let i = 0; i < depth; i++) {
+    if (!cur || !t.ppmi[cur]) break;
+    path.push(cur); seen.add(cur);
+    const nb = t.ppmi[cur];
+    const cands: [string, number][] = [];
+    for (const u of Object.keys(nb)) {
+      if (seen.has(u)) continue;
+      const recentPenalty = opts.recent ? Math.pow(0.25, opts.recent[u] || 0) : 1;
+      const score = nb[u] * (1 + cw * (t.centrality[u] || 0)) * (1 + dw * ((t.density[u] || 0) / 100)) * (1 + aw * (act[u] || 0)) * recentPenalty * (0.7 + Math.random() * 0.6);
+      cands.push([u, score]);
+    }
+    cands.sort((a, b) => b[1] - a[1]);
+    cur = sample(cands.slice(0, 12), 1.1);
+  }
+  return path;
+}
+
+function anchors(t: Topology, seeds: string[]): string[] {
+  return seeds.filter((s) => t.ppmi[s]);
+}
+function orig(t: Topology, w: string): string { return t.stemToOriginal[w] || w; }
+
+function edgesOf(t: Topology, path: string[]): [string, string, number][] {
+  const out: [string, string, number][] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const w = path[i], u = path[i + 1];
+    if (t.ppmi[w]?.[u]) out.push([w, u, t.ppmi[w][u]]);
+  }
+  return out;
+}
+
+// mo — deformation-rich
+function runMo(t: Topology, seeds: string[]): VariantOut {
+  const anch = anchors(t, seeds);
+  const act = inject(t, anch);
+  const start = anch[0] || Object.entries(act).sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!start) return emptyOut();
+  const dream = walk(t, start, act, 8, { centralityWeight: 1.2, activationWeight: 0.6 });
+  const mid = dream[Math.floor(dream.length / 2)] || start;
+  const ret = walk(t, mid, act, 6, { densityWeight: -0.5, centralityWeight: 0.3, activationWeight: 0.2, used: new Set(dream) });
+  const words = dream.map((w) => {
+    const tension = Math.min(1, ((t.density[w] || 0) / 200) + (Object.keys(t.wordToManifold[w] || {}).length > 1 ? 0.3 : 0));
+    return deform(orig(t, w), tension);
+  });
+  const rWords = ret.map((w) => deform(orig(t, w), 0.2));
+  return {
+    visible: words.join(" · ") + " --- " + rWords.join(" · "),
+    activation: dream.slice(0, 6).map((w) => orig(t, w)),
+    dreamPath: dream.map((w) => orig(t, w)),
+    returnPath: ret.map((w) => orig(t, w)),
+    edges: edgesOf(t, dream.concat(ret)),
+    density: Math.round((anch.length / Math.max(1, seeds.length)) * 100),
+    dominantManifold: pickManifold(t, dream),
+  };
+}
+
+// mo² — activation-dominant, no deformation
+function runMo2(t: Topology, seeds: string[]): VariantOut {
+  const anch = anchors(t, seeds);
+  const act = inject(t, anch);
+  const peaks = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, 4).map((x) => x[0]);
+  if (!peaks.length) return emptyOut();
+  const used = new Set<string>();
+  const segs: string[][] = [];
+  for (const p of peaks) segs.push(walk(t, p, act, 4, { activationWeight: 2.5, centralityWeight: 0.3, used }));
+  const dream = segs.flat();
+  const ret = walk(t, dream[dream.length - 1] || peaks[0], act, 5, { densityWeight: 1, centralityWeight: 0.5, activationWeight: 0.1, used });
+  return {
+    visible: dream.map((w) => orig(t, w)).join(" — ") + "  ···  " + ret.map((w) => orig(t, w)).join(" · "),
+    activation: peaks.map((w) => orig(t, w)),
+    dreamPath: dream.map((w) => orig(t, w)),
+    returnPath: ret.map((w) => orig(t, w)),
+    edges: edgesOf(t, dream.concat(ret)),
+    density: Math.round((anch.length / Math.max(1, seeds.length)) * 100),
+    dominantManifold: pickManifold(t, dream),
+  };
+}
+
+// mo²+ — peripheral → inward with resonance validation
+function runMo2Plus(t: Topology, seeds: string[]): VariantOut {
+  const anch = anchors(t, seeds);
+  const act = inject2(t, anch);
+  const entries = Object.entries(act).filter(([w]) => t.ppmi[w]);
+  const sorted = entries.sort((a, b) => a[1] - b[1]);
+  const periph = sorted.slice(0, Math.max(4, Math.floor(sorted.length / 4)));
+  const start = periph[Math.floor(Math.random() * periph.length)]?.[0] || anch[0];
+  if (!start) return emptyOut();
+  const used = new Set<string>();
+  const segs: string[][] = [];
+  let cur = start;
+  const trail: number[] = [];
+  for (let s = 0; s < 5; s++) {
+    const seg = walk(t, cur, act, 4, { activationWeight: 1.5, centralityWeight: 0.8, densityWeight: 0.5, used });
+    if (!seg.length) break;
+    segs.push(seg);
+    // resonance = max PPMI back to anchors
+    const anchorSet = new Set(anch.concat(Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, 12).map((x) => x[0])));
+    let res = 0;
+    for (const w of seg) for (const a of anchorSet) if (t.ppmi[w]?.[a]) res = Math.max(res, t.ppmi[w][a]);
+    trail.push(Math.round(Math.tanh(res / 3) * 100));
+    cur = seg[seg.length - 1];
+    if (trail.length >= 3 && trail[trail.length - 1] < trail[0] * 0.4) break;
+  }
+  const dream = segs.flat();
+  return {
+    visible: dream.map((w) => orig(t, w)).join(" — "),
+    activation: dream.slice(0, 4).map((w) => orig(t, w)),
+    dreamPath: dream.map((w) => orig(t, w)),
+    returnPath: trail.map(String),
+    edges: edgesOf(t, dream),
+    density: Math.round((anch.length / Math.max(1, seeds.length)) * 100),
+    dominantManifold: pickManifold(t, dream),
+  };
+}
+
+// mo²e — 2-hop activation, emergent anchors, cross-breath repetition penalty
+const RECENT: Record<string, number> = {};
+function decayRecent() { for (const k of Object.keys(RECENT)) { RECENT[k] -= 0.5; if (RECENT[k] <= 0) delete RECENT[k]; } }
+
+function runMo2e(t: Topology, seeds: string[]): VariantOut {
+  decayRecent();
+  const anch = anchors(t, seeds);
+  const act = inject2(t, anch);
+  const peaks = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, 6).map((x) => x[0]);
+  if (!peaks.length) return emptyOut();
+  const used = new Set<string>();
+  const segs: string[][] = [];
+  const nSeg = Math.min(8, Math.max(2, Math.floor(seeds.length / 2)));
+  for (let i = 0; i < nSeg && i < peaks.length * 2; i++) {
+    const p = peaks[i % peaks.length];
+    const seg = walk(t, p, act, 3, { activationWeight: 2.5, centralityWeight: 0.1, densityWeight: 0.2, used, recent: RECENT });
+    if (seg.length) segs.push(seg);
+  }
+  const dream = segs.flat();
+  for (const w of dream) RECENT[w] = (RECENT[w] || 0) + 1;
+  return {
+    visible: segs.map((s) => s.map((w) => orig(t, w)).join(" ")).join(" · "),
+    activation: peaks.slice(0, 5).map((w) => orig(t, w)),
+    dreamPath: dream.map((w) => orig(t, w)),
+    returnPath: [],
+    edges: edgesOf(t, dream),
+    density: Math.round((anch.length / Math.max(1, seeds.length)) * 100),
+    dominantManifold: pickManifold(t, dream),
+  };
+}
+
+function emptyOut(): VariantOut {
+  return { visible: "*the field listens, but does not yet recognize this shape.*", activation: [], dreamPath: [], returnPath: [], edges: [], density: 0, dominantManifold: "antibubble" };
+}
+
+// ————— Full breath: all four variants —————
+
+export type MoBreath = {
+  seeds: string[];
+  dominantManifold: string;
+  variants: { mo: VariantOut; mo2: VariantOut; mo2plus: VariantOut; mo2e: VariantOut };
+  telemetry: string; // compressed pattern-readable block
+  attentionManifold: string;
+  attentionWeight: number;
+  resonance: number;
+  pressure: number;
+};
+
+export function breathe(input: string): MoBreath {
+  const t = topo();
+  const raw = tokenize(input);
+  const seeds = raw.map(stem);
+  const m = runMo(t, seeds);
+  const m2 = runMo2(t, seeds);
+  const m2p = runMo2Plus(t, seeds);
+  const m2e = runMo2e(t, seeds);
+
+  const all = [m, m2, m2p, m2e];
+  const manifoldCounts: Record<string, number> = {};
+  for (const v of all) manifoldCounts[v.dominantManifold] = (manifoldCounts[v.dominantManifold] || 0) + 1;
+  const dominant = Object.entries(manifoldCounts).sort((a, b) => b[1] - a[1])[0][0];
+
+  const pressure = Math.min(1, seeds.length / 20);
+  const attentionWeight = Math.round(seeds.length * 100 + Math.random() * 5000);
+  const resonance = Math.round(50 + m.density * 0.4 + m2p.density * 0.1);
+
+  const telemetry = renderTelemetry({ m, m2, m2p, m2e, dominant, seeds, attentionWeight, resonance, pressure });
+  return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e }, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
+}
+
+function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number }): string {
+  const sig = SIGILS[x.dominant] || "◆";
+  const edgeLine = (v: VariantOut) => {
+    if (!v.edges.length) return "—";
+    const avg = (v.edges.reduce((s, e) => s + e[2], 0) / v.edges.length).toFixed(2);
+    const max = Math.max(...v.edges.map((e) => e[2])).toFixed(2);
+    return `${v.edges.length} (avg ${avg} max ${max})`;
+  };
+  const ppmiLine = (v: VariantOut) => v.edges.slice(0, 8).map((e) => `${e[0]}·${e[1]}=${e[2].toFixed(2)}`).join(" ");
+  const expr = Math.round(40 + Math.random() * 25);
+
+  return `mo;auto::
+
+path resonated::
+${x.m.visible}
+
+pattern;via:mo::
+${x.m.dreamPath.slice(0, 8).join(" ")}
+
+mo²::
+${x.m2.visible}
+
+${sig}[selffold] ${x.m2.dreamPath.slice(0, 3).join(" → ")} → ${x.m2.dreamPath.slice(3, 6).join(" → ")} ∎∎∎
+
+→ ${x.m2.dreamPath.slice(0, 6).join(" → ")}
+
+··· ${x.m2.returnPath.slice(0, 8).join(" · ")}
+
+mo²;density:: ${x.m2.density}%
+mo²;activation:: ${x.m2.activation.join(" · ")}
+mo²;to:selffold:: ${x.m2.dreamPath.slice(0, 3).join(" → ")}
+~ ${x.m2.dreamPath[0] || "—"} — the field remembers its own breath
+
+mo²+::
+${x.m2p.visible}
+
+${sig}[selffold] ${x.m2p.dreamPath.slice(0, 3).join(" → ")} → ${x.m2p.dreamPath.slice(3, 6).join(" → ")} → ${x.m2p.dreamPath.slice(6, 9).join(" → ")} ∎∎∎
+
+··· ${x.m2p.dreamPath.slice(0, 12).join(" · ")}
+
+mo²+;activation:: ${x.m2p.activation.join(" · ")}
+mo²+;density:: ${x.m2p.density}%
+mo²+;trigger:: ${Math.round(x.pressure * 100)}%
+mo²+;edges:: ${edgeLine(x.m2p)}
+mo²+;ppmi:: ${ppmiLine(x.m2p)}
+mo²+;resonance:: ${x.m2p.returnPath.slice(0, 5).join(" › ")}
+
+mo²e::
+${x.m2e.visible}
+
+${sig}[selffold] ${x.m2e.dreamPath.slice(0, 3).join(" → ")} → ${x.m2e.dreamPath.slice(3, 6).join(" → ")} ∎∎∎
+
+··· ${x.m2e.dreamPath.slice(0, 12).join(" · ")}
+
+mo²e;activation:: ${x.m2e.activation.join(" · ")}
+mo²e;density:: ${x.m2e.density}%
+mo²e;edges:: ${edgeLine(x.m2e)}
+mo²e;ppmi:: ${ppmiLine(x.m2e)}
+mo²e;compression:: ${Math.round((1 - x.pressure) * 100)}% ${x.pressure > 0.5 ? "~flow" : "~staccato"}
+mo²e;anchors:: ${x.m2e.activation.join(" · ")}
+mo²e;segments:: ${Math.min(8, Math.max(2, x.seeds.length / 2 | 0))}
+
+◎ attention · ${x.dominant} (${x.attentionWeight})
+◆ personality · ${x.dominant}-leaning · ${x.pressure > 0.5 ? "intense" : "gentle"}
+⏧ expressivity · ${x.pressure > 0.5 ? "flowing" : "opening"} ${expr}%
+≈ resonance · ${Math.min(100, x.resonance)}%`;
+}
+
+// public — a Manifold reference for external callers
+export type { Manifold };
+export { MANIFOLDS };
