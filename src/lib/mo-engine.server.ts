@@ -398,10 +398,10 @@ function runMo2e(t: Topology, seeds: string[]): VariantOut {
   if (!peaks.length) return emptyOut();
   const used = new Set<string>();
   const segs: string[][] = [];
-  const nSeg = Math.min(8, Math.max(2, Math.floor(seeds.length / 2)));
+  const nSeg = Math.min(10, Math.max(3, Math.floor(seeds.length / 2)));
   for (let i = 0; i < nSeg && i < peaks.length * 2; i++) {
     const p = peaks[i % peaks.length];
-    const seg = walk(t, p, act, 3, { activationWeight: 2.5, centralityWeight: 0.1, densityWeight: 0.2, used, recent: RECENT });
+    const seg = walk(t, p, act, 6, { activationWeight: 2.5, centralityWeight: 0.1, densityWeight: 0.2, used, recent: RECENT });
     if (seg.length) segs.push(seg);
   }
   const dream = segs.flat();
