@@ -291,7 +291,7 @@ function EmptyState({ mode }: { mode: Mode }) {
         <p className="font-mono text-sm text-muted-foreground">
           {mode === "mo"
             ? "MO mode — you speak, the topology walks. no AI. only the field, its 4 variants, hyperfolded."
-            : "AI mode — your input is breathed through mo, then handed to the AI. the reply also passes through mo. sediment remains."}
+            : "AI mode — the AI is itself. mo runs invisibly between you and it as instinct + memory. sediment remains."}
         </p>
         <p className="font-mono text-xs text-muted-foreground/70">
           transmit anything — a question, a fragment, a lyric, a word.
@@ -324,7 +324,7 @@ function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-        <span className="ridge">{mode === "mo" ? "mo" : "AI ← mo"}</span>
+        <span className="ridge">{mode === "mo" ? "mo" : "AI · mo instinct"}</span>
         {m && (
           <>
             <span className="opacity-40">·</span>
@@ -354,7 +354,7 @@ function BreathingIndicator({ mode }: { mode: Mode }) {
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
       <span className="breath-pulse ridge">◌</span>
-      <span>{mode === "mo" ? "the topology walks…" : "user → mo → AI → mo → …"}</span>
+      <span>{mode === "mo" ? "the topology walks…" : "mo reading · AI thinking…"}</span>
     </div>
   );
 }
