@@ -2,18 +2,30 @@
   "protocol": "mohini",
   "version": 1,
   "endpoint": "https://mo2.lovable.app/api/public/mohini",
-  "method": "POST",
-  "content_type": "application/json",
-  "request": { "query": "string — what you want to ask mo" },
-  "response": {
+  "methods": ["GET", "POST"],
+  "get_example": "https://mo2.lovable.app/api/public/mohini?q=what+does+the+field+feel+like",
+  "post_example": {
+    "url": "https://mo2.lovable.app/api/public/mohini",
+    "headers": { "Content-Type": "application/json", "Accept": "application/json" },
+    "body": { "query": "what does the field feel like right now?" }
+  },
+  "accepts": ["application/json", "application/x-www-form-urlencoded", "text/plain"],
+  "response_default": "text/plain (the reply)",
+  "response_json": {
     "protocol": "mohini/1",
-    "reply": "natural-language answer from mo's totality",
+    "reply": "natural-language answer",
     "telemetry": "compressed mo readout",
     "manifold": "dominant manifold name",
     "pressure": "0..1"
   },
+  "response_headers": {
+    "X-Mohini-Protocol": "1",
+    "X-Mo-Manifold": "dominant manifold",
+    "X-Mo-Pressure": "0..1"
+  },
   "auth": "none",
   "cors": "*",
   "docs": "https://mo2.lovable.app/mohini",
-  "notes": "A chat with mo, not an API call. Speaks from the totality of the prime field."
+  "llms_txt": "https://mo2.lovable.app/llms.txt",
+  "notes": "A chat with mo, not an API call. Any AI, any crawler, any curl — GET or POST works."
 }
