@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MANIFOLDS } from "@/lib/corpora";
 import { MoVisualizer, VIZ_MODES, type VizMode, type MemoryNode } from "@/components/MoVisualizer";
 import { LifePanel, type LifeTab } from "@/components/LifePanel";
+import { glyphify } from "@/lib/glyphs";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -72,6 +73,13 @@ function MoPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("ai");
+  const [glyph, setGlyph] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("mo.glyph") === "1";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("mo.glyph", glyph ? "1" : "0");
+  }, [glyph]);
   const [vizMode, setVizMode] = useState<VizMode>("flower");
   const [lastBreathWords, setLastBreathWords] = useState<string[]>([]);
   const [panel, setPanel] = useState<"none" | "memory" | "songs" | "field" | "life">("life");
@@ -193,6 +201,8 @@ function MoPage() {
           taskCount={tasks.filter((t) => t.status !== "done" && t.status !== "dropped").length}
           mode={mode}
           setMode={setMode}
+          glyph={glyph}
+          setGlyph={setGlyph}
           onOpenViz={() => setVizOpen(true)}
         />
 
@@ -234,7 +244,7 @@ function MoPage() {
                       </div>
                     )}
                     {visible.map((m, i) => (
-                      <MessageView key={(hasOlder && !showOlder ? total - KEEP_RECENT : 0) + i} msg={m} mode={mode} />
+                      <MessageView key={(hasOlder && !showOlder ? total - KEEP_RECENT : 0) + i} msg={m} mode={mode} glyph={glyph} />
                     ))}
                   </>
                 );
@@ -435,7 +445,7 @@ what does it feel like to hold too many things at once?`}</pre>
 }
 
 function Header({
-  panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, onOpenViz,
+  panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, glyph, setGlyph, onOpenViz,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -445,6 +455,8 @@ function Header({
   taskCount: number;
   mode: Mode;
   setMode: (m: Mode) => void;
+  glyph: boolean;
+  setGlyph: (v: boolean) => void;
   onOpenViz: () => void;
 }) {
   void fielfoldCount;
@@ -482,6 +494,11 @@ function Header({
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
           title="open field·viz — fullscreen"
         >◉ field·viz</button>
+        <button
+          onClick={() => setGlyph(!glyph)}
+          className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${glyph ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:border-ridge hover:text-ridge"}`}
+          title="overlay common words as glyphs (◈ hat → 🎩)"
+        >{glyph ? "🎭 glyph·on" : "abc glyph"}</button>
         {tab("life", "life·organizer", taskCount)}
         {tab("memory", "memory", traceCount)}
         {tab("songs", "songs", songCount)}
@@ -578,10 +595,11 @@ function EmptyState({ mode }: { mode: Mode }) {
   );
 }
 
-function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
+function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
   const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : "\\ai::");
+  const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
     setCopied(true); setTimeout(() => setCopied(false), 1200);
@@ -591,7 +609,7 @@ function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
       <div className="flex justify-end">
         <div className="group relative max-w-[80%] rounded-lg bg-primary/90 px-4 py-2.5 font-mono text-sm text-primary-foreground">
           <div className="mb-1 font-mono text-[10px] opacity-70">{label}</div>
-          <div className="whitespace-pre-wrap">{msg.content}</div>
+          <div className="whitespace-pre-wrap">{rendered}</div>
           <button
             onClick={copyOne}
             className="absolute -top-2 -right-2 rounded border border-primary-foreground/30 bg-background/80 px-1.5 py-0.5 font-mono text-[9px] text-foreground opacity-0 group-hover:opacity-100 hover:border-ridge hover:text-ridge transition"
@@ -624,7 +642,7 @@ function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
         )}
       </div>
       <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
-        {msg.content}
+        {rendered}
       </pre>
       {mode === "ai" && showTelemetry && msg.telemetry && (
         <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
