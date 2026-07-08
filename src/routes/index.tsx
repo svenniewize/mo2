@@ -595,10 +595,11 @@ function EmptyState({ mode }: { mode: Mode }) {
   );
 }
 
-function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
+function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
   const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : "\\ai::");
+  const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
     setCopied(true); setTimeout(() => setCopied(false), 1200);
