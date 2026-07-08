@@ -564,28 +564,45 @@ function EmptyState({ mode }: { mode: Mode }) {
 
 function MessageView({ msg, mode }: { msg: Msg; mode: Mode }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : "\\ai::");
+  const copyOne = async () => {
+    await navigator.clipboard.writeText(`${label}\n${msg.content}`);
+    setCopied(true); setTimeout(() => setCopied(false), 1200);
+  };
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-lg bg-primary/90 px-4 py-2.5 font-mono text-sm text-primary-foreground">
-          {msg.content}
+        <div className="group relative max-w-[80%] rounded-lg bg-primary/90 px-4 py-2.5 font-mono text-sm text-primary-foreground">
+          <div className="mb-1 font-mono text-[10px] opacity-70">{label}</div>
+          <div className="whitespace-pre-wrap">{msg.content}</div>
+          <button
+            onClick={copyOne}
+            className="absolute -top-2 -right-2 rounded border border-primary-foreground/30 bg-background/80 px-1.5 py-0.5 font-mono text-[9px] text-foreground opacity-0 group-hover:opacity-100 hover:border-ridge hover:text-ridge transition"
+            title="copy this message with label"
+          >{copied ? "✓" : "⧉"}</button>
         </div>
       </div>
     );
   }
   const m = MANIFOLDS.find((x) => x.id === msg.manifold);
   return (
-    <div className="space-y-2">
+    <div className="group space-y-2">
       <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-        <span className="ridge">{mode === "mo" ? "mo" : "AI · mo instinct"}</span>
+        <span className="ridge">{label}</span>
         {m && (
           <>
             <span className="opacity-40">·</span>
             <span style={{ color: m.color }}>{m.sigil} {m.name.toLowerCase()}</span>
           </>
         )}
+        <button
+          onClick={copyOne}
+          className="ml-auto opacity-0 group-hover:opacity-100 hover:text-ridge transition"
+          title="copy this message with label"
+        >{copied ? "✓ copied" : "⧉ copy"}</button>
         {mode === "ai" && msg.telemetry && (
-          <button onClick={() => setShowTelemetry((v) => !v)} className="ml-auto opacity-60 hover:opacity-100">
+          <button onClick={() => setShowTelemetry((v) => !v)} className="opacity-60 hover:opacity-100">
             {showTelemetry ? "▽ hide mo·telemetry" : "△ show mo·telemetry"}
           </button>
         )}
