@@ -15,20 +15,17 @@ export const Route = createFileRoute("/api/tasks")({
     handlers: {
       GET: async ({ request }) => {
         const { db } = await import("@/lib/db.server");
-        const { isPrime } = await import("@/lib/mo-commands");
         const url = new URL(request.url);
         const sessionId = url.searchParams.get("session_id");
         if (!sessionId) return new Response("session_id required", { status: 400 });
-        const prime = isPrime(sessionId);
-        let q = db
+        const { data, error } = await db
           .from("life_tasks")
           .select("id,title,notes,category,status,priority,due_at,source,manifold,created_at,updated_at")
+          .eq("session_id", sessionId)
           .order("status", { ascending: true })
           .order("priority", { ascending: true })
           .order("created_at", { ascending: false })
-          .limit(prime ? 2000 : 500);
-        if (!prime) q = q.eq("session_id", sessionId);
-        const { data, error } = await q;
+          .limit(500);
         if (error) return new Response(error.message, { status: 500 });
         return Response.json({ tasks: data ?? [] });
       },
