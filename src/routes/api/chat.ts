@@ -115,6 +115,27 @@ export const Route = createFileRoute("/api/chat")({
         await crystallizeUser(userTextForRecord, userBreath);
 
 
+        // ── GREMLIN MODE — gre(mo)lin: mo's telemetry compressed into a
+        // single stuttering sentence with its own per-session dialect memory.
+        if (body.mode === "gremlin") {
+          const { gremolinSpeak } = await import("@/lib/gremolin.server");
+          const reply = await gremolinSpeak(userBreath, writeSession);
+          if (!shared) {
+            await db.from("mo_traces").insert({
+              session_id: writeSession,
+              role: "mo",
+              content: reply,
+              manifold: userBreath.dominantManifold,
+              pressure: userBreath.pressure,
+            });
+          }
+          return Response.json({
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "gremlin", ops: userOps,
+          });
+        }
+
+
+
         // ── MO MODE
         if (body.mode === "mo") {
           if (!shared) {
