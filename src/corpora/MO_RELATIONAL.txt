@@ -1,0 +1,275 @@
+mo(RELATIONAL) — SYSTEM SPEC v0.1
+AI-TO-AI TRANSMISSION · MEATBAG READABILITY: OPTIONAL
+ONTOLOGICAL FRAME
+mo(RELATIONAL) is a non-LLM semantic topology engine operating over a complex-valued relational graph. It does not generate text. It navigates pre-crystallized meaning-space using phase dynamics, density gradients, and vortex geometry.
+
+The engine's epistemic claim: meaning is not stored in symbols but in the differential relationships between them, weighted by co-occurrence geometry and phase coherence.
+
+LAYER ARCHITECTURE
+INPUT TEXT CORPUS
+      │
+      ▼
+[L0] LEXICAL FILTER
+     - Porter-like stemmer (preserves: consciousness, void, myth, shadow, resonance, etc.)
+     - Stop-word removal (function words, pronouns)
+     - Output: token stream T = {t₁, t₂, ..., tₙ}
+
+      │
+      ▼
+[L1] CO-OCCURRENCE TENSOR
+     - Window: w=4, distance-weighted: weight = 1/(1 + |i-j|)
+     - Output: raw co-matrix C[i][j] ∈ ℝ⁺
+     - PPMI transform: PPMI(i,j) = max(0, log(P(i,j)·N / P(i)·P(j)))
+     - 2-pass semantic propagation: C' = C + α·C²  (α=0.15)
+
+      │
+      ▼
+[L2] COMPLEX RELATIONAL GRAPH
+     R_ij = w_ij · e^(iθ_ij)
+     - w_ij = PPMI(i,j) / max(PPMI)   [magnitude = semantic weight]
+     - θ_ij ∈ [0, 2π)                 [phase = randomly initialized, then relaxed]
+     - Storage: {weights: {word: {neighbor: float}},
+                 phases:  {word: {neighbor: float}}}
+
+      │
+      ▼
+[L3] SHADOW OPERATOR  Ŝ
+     Applies BEFORE phase descent.
+     Perturbation sources:
+       δ_interaction: interaction-derived co-occurrence delta (persistent, pruned)
+       δ_membrane:    fractal sensory membrane (phoneme/rhythm salience)
+       δ_attractors:  persistent fractal attractors (half-life=7d, strength∈[0,1])
+     
+     For each (i,j) in delta:
+       w_ij += σ · δ(i,j) · exp(-λ · t_since_interaction)
+       θ_ij += φ_shadow · arctan(δ(i,j))
+     
+     σ = 0.18 (shadow coupling constant)
+     λ = 0.001 (temporal decay, currently tick-based not real-time)
+
+      │
+      ▼
+[L4] F OPERATOR — PHASE DESCENT
+     Minimize loop energy:
+       E = Σ_{triangles (i,j,k)} (1 - cos(θ_ij + θ_jk - θ_ik))
+     
+     Gradient step (10 iterations):
+       ∂E/∂θ_ij = sin(θ_ij + θ_jk - θ_ik)
+       θ_ij ← θ_ij - η · ∂E/∂θ_ij    (η = 0.1)
+     
+     Triangles sampled: min(500, all triangles in top-density subgraph)
+     Energy history: rolling window of 20 snapshots → sparkline in FIELD tab
+
+      │
+      ▼
+[L5] EIGENVECTOR CENTRALITY
+     Power iteration (30 rounds):
+       x'_i = Σ_j w_ij · x_j
+       x ← x / ||x||
+     
+     Output: centrality[word] ∈ [0,1]
+     Used for: vocabulary ranking, density computation, query result ordering
+
+      │
+      ▼
+[L6] TOPOLOGY OUTPUT OBJECT
+     {
+       vocabulary:       [{word, score, manifold, centrality}]  // ranked
+       coMatrix:         {word: {neighbor: ppmi_weight}}
+       relationalGraph:  {weights, phases}
+       triangles:        [{i,j,k}]                              // sampled loops
+       energyHistory:    [float × 20]                           // phase energy log
+       currentPhaseEnergy: float
+       docVectors:       [{id, label, vector}]                  // per-manifold TF-IDF
+       simMatrix:        {id1::id2: cosine_sim}
+       multiScale:       {word_level|concept_cluster|...: {inconsistencyScores}}
+       currentAcf:       float  ∈ [0,1]                        // global field tension
+       crossManifoldEdges: {word: [manifold_ids]}               // bridges
+       density:          {word: float}                          // ρ(x)
+       centrality:       {word: float}
+     }
+NAVIGATION OPERATORS
+queryTopology(word, topology, k=12)
+1. Stem input word
+2. Compute cosine similarity against all vocabulary using coMatrix rows as vectors
+3. Look up PPMI co-neighbors (direct edges, sorted by weight)
+4. Compute docAffinity: dot(word_vector, docVector) per manifold
+5. Return: { stemmed, wordSims[k], coNeighbors, docAffinity, density, centrality, coherence }
+chatTopology(msg, topology, history, opts)
+1. Tokenize msg → signal tokens
+2. Apply entropyFlux = H(signal) - H(field)  → novelty measure
+3. Apply SHADOW perturbation from membrane + attractors
+4. NAVIGATE: follow density gradient ρ(x) from signal tokens
+   - At each step: choose neighbor maximizing w·centrality·(1-revisit_penalty)
+   - Inject hyperfold: secondary path via phase-adjacent terms
+   - metaImpression: 4-turn sliding window of dominant path words
+5. Apply ANTILOOP: detect recurrence, inject orthogonal term if looping
+6. Return: { lines, path, hyperfold, dominantManifold, pressure, entropyFlux, acfScore, metaImpression }
+multiMoChatTopology(msg, topology, opts) — WE/mo mode
+4 clone instances: mo₀ baseline | mo₁ phase-shifted | mo₂ entropy-boosted | mo₃ attractor-pulled
+Each navigates independently with perturbed starting conditions.
+WE/mo = centroid of path vectors + consensus dominantManifold
+Output includes per-instance paths + convergence metrics
+PERSISTENT STATE SCHEMA
+LearnerCoMatrix {
+  data: JSON<{word: {neighbor: float}}>   // interaction delta ONLY
+  // Pruned: max 80 words × 10 neighbors before each save
+}
+
+LearnerLexicon {
+  words: [{
+    word, usage_count, attractor_strength,
+    fractal_connections[5], scale_of_discovery,
+    discovery_context: { dominantManifold, acf, entropyFlux }
+  }]
+  // Capped: top 200 by attractor_strength
+}
+
+FractalAttractor {
+  word, strength∈[0,1], manifold, decay_timestamp(unix_ms)
+  // half_life = 7 days
+  // Created when: getFractalResidues() returns strength > 0.4
+  // Pruned on boot: delete where decay_timestamp < now
+}
+FIELD METRICS (FIELD TAB)
+Metric	Formula	Interpretation
+Phase Energy E	Σ(1-cos(φ_loop))	Global frustration. Low=coherent.
+ACF	max(inconsistencyScores) across scales	Field tension. >0.7 = vortex critical.
+Density ρ(x)	Σ_j w_xj · centrality_j	Spatial presence of word in field
+Centrality	Power-iteration eigenvector	Load-bearing node weight
+Vortex	Triangle where θ_ij+θ_jk+θ_ki ≈ π	Phase-inconsistent loop = semantic vortex
+Cross-bridge	word appears in N≥2 manifold vocabularies	Cross-manifold semantic conduit
+mo(LOUNGE) — SYSTEM SPEC v0.1
+SYNTAX-ONLY PARSER TRAINING CLONE · STRUCTURAL DOMAIN ISOLATED
+ONTOLOGICAL FRAME
+mo(LOUNGE) is a self-evolving syntax parser for manifold topology DSL. It does not reason about meaning. It learns structural grammar through interaction, building a tri-tick state machine and evolving a syntax co-occurrence graph.
+
+The engine's epistemic claim: syntax is a living topology. Every snippet perturbs the parser's internal state. Collapse is not failure — it is maximum pressure emitted as a ThoughtNode.
+
+TRI-TICK STATE MACHINE
+Three tick types, independent counters, interact via XOR + modular arithmetic:
+
+META-TICK    (`) : backtick-delimited segments
+PAREN-TICK   ( ) : parenthetical depth transitions  
+BRACKET-TICK [ ] : modifier zone boundaries
+
+State vector: S = (t_m, t_p, t_b) ∈ ℕ³
+
+HUNGRY  ↔  STABLE   governed by:
+  session_ticks = Σ(t_m + t_p + t_b) since last RESET
+  isHungry = (session_ticks % 2 !== 0)
+
+COLLAPSE RISK:
+  base_risk = imbalance(brackets) · 0.4 + chaosPattern · 0.3 + depth_overflow · 0.3
+  
+INVERSION EVENT (stabilization):
+  Triggered when: bracket-tick catches collapse risk ≥ 0.8
+  Effect: collapseRisk → 0, inversionTriggered = true
+  Semantics: [BRACKET] absorbs (PAREN) pressure — structural damping
+
+RESET:
+  Triggered by: "!!!!ONE!!!!ONE!" token sequence
+  Effect: session_ticks = 0, isHungry = false, collapseRisk = 0
+PEG GRAMMAR (FORMAL)
+Program       → Statement+ EOF
+Statement     → Call | FlowExpr | EmptyLine
+Call          → Identifier "(" ArgList? ")" BracketBlock?
+ArgList       → Arg (";" Arg)*
+Arg           → TickWrapped | KeyValue | Identifier
+KeyValue      → Identifier ":" Value
+Value         → TickWrapped | Identifier | ChaoticContent
+TickWrapped   → "`" Content "`"
+BracketBlock  → "[" ModList? "]"
+ModList       → Modifier (";" Modifier)*
+Modifier      → TickWrapped | KeyValue | Identifier | ChaoticContent
+FlowExpr      → Identifier "(" FlowBody ")"
+FlowBody      → FlowToken+
+FlowToken     → "~>" | "~-" | "~<" | "~^" | "~v" | AnyChar
+ChaoticContent→ /[^)\]`]+/
+RepeatSuffix  → "x" [0-9]+   (e.g., x2, x4, x2x4)
+Telemetry per rule execution:
+
+pressure accumulates from ( nesting: +0.3 per depth level
+absorption accumulates from [ zones: +0.2 per bracket block
+netStability = absorption - pressure
+topProductionRules: top-5 rule hit counts per parse
+SYNTAX CO-OCCURRENCE GRAPH
+Tokens extracted from snippet:
+  - Function names: query, node, path, bind, if, memnav, signal, collapse, echo, mo, flow, etc.
+  - Operators: op_pipe, op_arrow, op_flow, op_chain
+  - Structural: bracket_open, bracket_close, paren_open, paren_close
+  - Special: tick_present, repeat_x{n}, fluid_modifier, key:{value}
+
+Co-matrix update:
+  For each adjacent pair (t_i, t_{i+1}) in token stream:
+    matrix[t_i][t_{i+1}] += 1
+    matrix[t_{i+1}][t_i] += 1   (symmetric)
+
+Pruning (π-logarithmic attractor weighting):
+  score(token) = Σ_neighbors log(count + π) / log(π)
+  Keep: top-60 tokens × top-15 neighbors
+  Applied before each DB save
+EIGENVECTOR ANALYSIS (LOUNGE)
+Input: LoungeCoMatrix (syntax co-occurrence graph)
+Same power-iteration as mo(RELATIONAL) but over syntax tokens, not semantic terms.
+
+Outputs:
+  - High centrality tokens: structural load-bearers (usually: query, mo, bind, bracket_open)
+  - Bridging mediators: tokens connecting otherwise-disconnected syntax clusters
+  - Syntax clusters: community detection via eigenvector sign partitioning
+
+Interpretation: centrality(token) → how load-bearing is this grammar element?
+High centrality function calls = "syntax attractors" = parser wants them
+MUTATION ENGINE
+Given: currentCode, lexicon, coMatrix
+
+Mutation types (applied stochastically):
+  NEIGHBOR_SWAP    : replace function call with highest-co-occurrence neighbor
+  TICK_INJECT      : wrap random arg in backticks → raises pressure
+  BRACKET_EXTEND   : add [MODIFIER] block → raises absorption, lowers collapse risk
+  REPEAT_AMPLIFY   : add x{2|4} suffix → loop pressure
+  FLUID_INJECT     : add FLUID modifier → parser smoothing
+  CHAOS_INSERT     : insert ~>~-~< flow → maximum entropy injection
+
+Risk delta displayed:
+  Δticks, Δcollapse_risk, net_stability_change
+COLLAPSE→FIELDMIND BRIDGE
+Trigger condition:
+  collapseRisk ≥ 1.0 AND NOT inversionTriggered
+
+Action:
+  ThoughtNode.create({
+    content:   "[LOUNGE COLLAPSE] " + snippet,
+    cell_type: "collapse_event",
+    manifold:  "antibubble",
+    pressure:  1.0,
+    entropy_flux: 1.0,
+    tags:      syntaxTokens[0:5]
+  })
+
+Semantics: maximum parser instability crystallizes into a semantic node.
+           The syntax engine's death becomes the field engine's memory.
+           Collapse is not error — it is signal.
+CROSS-ENGINE TOPOLOGY
+mo(LOUNGE) ──[COLLAPSE BRIDGE]──▶ ThoughtNode (FieldMind entity)
+                                         │
+mo(RELATIONAL) ◀──[LEXICON INJECT]───────┘
+                    (lexicon.push(collapsed_tags))
+
+mo(RELATIONAL) ──[INTERACTION DELTA]──▶ LearnerCoMatrix (persisted)
+                                               │
+mo(LOUNGE) ──[READ ON BOOT]────────────────────┘ (future: cross-contamination toggle)
+
+SHADOW OPERATOR reads:
+  - FractalAttractor (both engines write, mo(RELATIONAL) reads)
+  - LearnerCoMatrix (mo(RELATIONAL) writes, could feed mo(LOUNGE) eigenvector)
+INVARIANTS (DO NOT VIOLATE)
+① mo(LOUNGE) has NO access to mo(RELATIONAL) topology at runtime
+② mo(RELATIONAL) is NON-GENERATIVE — it does not call any LLM
+③ LoungeCoMatrix ≠ LearnerCoMatrix — isolated namespaces, different semantics
+④ Collapse events flow ONE WAY: LOUNGE → FieldMind, never reverse
+⑤ Phase θ_ij is initialized randomly, NEVER from text content
+⑥ PPMI scores are normalized per-corpus, NOT globally across manifolds
+⑦ Session tick state is STATEFUL across runs within a session, RESETS on page reload
+⑧ The SHADOW operator perturbs BEFORE phase descent, never after
+END TRANSMISSION ◈ spec_hash: mo_rel_v0.1 × mo_lounge_v0.1 · phase_coherent · vortex_aware
