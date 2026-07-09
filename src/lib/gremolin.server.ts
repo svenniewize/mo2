@@ -1,24 +1,25 @@
-// gre(mo)lin — a voice that compresses mo's full breath telemetry into a
-// single stuttering, mutating, movement-glyphed sentence. Server-only.
+// gre(mo)lin — mo speaking mo, with a stutter.
 //
-// gremolin doesn't care about grammar. Its dialect is built out of:
-//   1. word repetition   → elongation + stutter intensity
-//   2. movement glyphs   → ⇄ ↺ ↯ ⟿ ⌇ inserted between words based on manifold shift
-//   3. bracket/star wrap → ⟪high-repeat⟫ *cross-manifold* words get marked
-//   4. portmanteau fusion → two adjacent frequent words occasionally fuse
-//   5. persistent per-session lexicon → each word gets a mutation stamp on
-//      first repeat and reuses it forever; gremolin literally grows its
-//      own dialect per user over time. It doesn't care if a word is a
+// NO LLM. Ever. This module reads mo's own breath telemetry — the paths mo
+// already spoke through selffold / fieldfold / the five variants — and
+// mutates those tokens through a persistent per-session lexicon. The output
+// is literally mo's voice, folded through gremolin's dialect.
+//
+// Dialect rules (all deterministic-ish, driven by counts + light texture):
+//   1. tokens come from mo's actual spoken paths — keep mo's ↺ ⇄ ↯ arrows.
+//   2. word repetition   → elongation + stutter intensity
+//   3. movement glyphs   → occasional extra ⇄ ↺ ↯ ⟿ ⌇ between tokens
+//   4. bracket/star wrap → ⟪high-repeat⟫ *cross-manifold* words get marked
+//   5. portmanteau fusion → two adjacent frequent words occasionally fuse
+//   6. persistent per-session lexicon → each word gets a mutation stamp on
+//      first repeat and reuses it forever; gremolin literally grows its own
+//      dialect per user over time. It doesn't care if a word is a
 //      noun/verb/adj — it only cares how it *used* it before.
-//   6. manifold prefix tags → 🜁word for coco-tinted, ↺ for myth, etc.
-//
-// Everything is deterministic-ish: driven by counts + light randomness for
-// texture, so the same input can vary but the same word always gets the
-// same suffix mutation on repeat.
+//   7. manifold prefix tags → 🜁word for coco-tinted, ↺ for myth, etc.
 
 import type { MoBreath } from "./mo-engine.server";
 
-const MOVEMENT = ["⇄", "↺", "↯", "⟿", "⌇", "~", "·", "→", "≈"];
+const EXTRA_GLYPH = ["⇄", "↺", "↯", "⟿", "⌇"];
 const SUFFIX_POOL = ["~", "é", "ke", "zz", "·", "§", "ø", "eh", "kek"];
 const MANIFOLD_TAG: Record<string, string> = {
   antibubble: "◉", shadowlattice: "◫", dreamengine: "◌", mythengine: "↺",
@@ -26,6 +27,7 @@ const MANIFOLD_TAG: Record<string, string> = {
   cps0: "⌘", exhaust: "≋", permeable: "◍", violet: "✦", ep1: "☬",
   ep2: "♆", ep3: "♒", epna: "≈",
 };
+const MO_ARROWS = new Set(["↺", "⇄", "↯", "⟿", "⌇", "→", "≈", "·", "~", "|"]);
 
 type Lex = { word: string; uses: number; weight: number; mutation: string | null; last_manifold: string | null };
 
@@ -34,60 +36,56 @@ function hashPick<T>(word: string, pool: T[]): T {
   for (let i = 0; i < word.length; i++) h = (h * 31 + word.charCodeAt(i)) >>> 0;
   return pool[h % pool.length];
 }
-
 function elongate(w: string, intensity: number): string {
   const n = Math.min(7, Math.max(2, Math.floor(intensity)));
   let done = false;
-  return w.replace(/([aeiou])/, (v) => {
-    if (done) return v;
-    done = true;
-    return v.repeat(n);
-  });
+  return w.replace(/([aeiou])/, (v) => { if (done) return v; done = true; return v.repeat(n); });
 }
-
 function stutter(w: string): string {
   if (w.length < 3) return w;
-  const head = w.slice(0, 2);
-  return `${w[0]}-${head}${w.slice(1)}`;
+  return `${w[0]}-${w.slice(0, 2)}${w.slice(1)}`;
 }
-
 function mutate(word: string, uses: number, mutation: string | null): string {
   if (uses >= 5) return `⟪${elongate(word, 3 + Math.min(4, uses - 5))}⟫`;
   if (uses >= 3) return stutter(word);
   if (uses === 2) return word + (mutation ?? hashPick(word, SUFFIX_POOL));
   return word;
 }
-
-function cleanWord(w: string): string {
-  return w.replace(/[^\p{L}\p{N}'-]/gu, "").toLowerCase();
+function isArrow(tok: string): boolean { return MO_ARROWS.has(tok); }
+function bareWord(tok: string): string {
+  return tok.replace(/[^\p{L}\p{N}'-]/gu, "").toLowerCase();
 }
 
 export async function gremolinSpeak(breath: MoBreath, sessionId: string): Promise<string> {
   const sig = MANIFOLD_TAG[breath.dominantManifold] || "◆";
 
-  // Gather every word gremolin has to work with, in stream order — this is
-  // what gives the sentence its "path shape" instead of feeling shuffled.
-  const stream: string[] = [];
-  for (const v of Object.values(breath.variants)) {
-    for (const w of v.dreamPath) stream.push(w);
-    for (const w of v.returnPath) stream.push(w);
-  }
-  for (const w of breath.selffold.path) stream.push(w);
-  for (const w of breath.fieldfold.path) stream.push(w);
-  for (const w of breath.seeds) stream.push(w);
+  // ── Source stream: MO'S OWN SPOKEN PATHS. Keep mo's arrows as-is.
+  // This is what makes gre(mo)lin *be* mo speaking, not a parallel invention.
+  const moSpoken: string[] = [];
+  const push = (s: string | undefined) => {
+    if (!s || s === "—") return;
+    for (const t of s.split(/\s+/)) if (t) moSpoken.push(t);
+  };
+  push(breath.selffold?.visible);
+  push(breath.fieldfold?.visible);
+  for (const v of Object.values(breath.variants)) push(v?.visible);
 
-  const words = stream.map(cleanWord).filter((w) => w.length >= 2 && /[a-z]/.test(w));
-  if (!words.length) {
+  if (!moSpoken.length) {
     return `${sig}gre(mo)lin\n\n( no ridge — gremolin has nothing to chew. throw it a heavier sentence. )\n\np${Math.round(breath.pressure * 100)}·r${breath.resonance}·seeds${breath.seeds.length}`;
   }
 
+  // Frequency table over WORD tokens (arrows excluded).
   const freq: Record<string, number> = {};
-  for (const w of words) freq[w] = (freq[w] || 0) + 1;
+  for (const t of moSpoken) {
+    if (isArrow(t)) continue;
+    const w = bareWord(t);
+    if (w.length >= 2 && /[a-z]/.test(w)) freq[w] = (freq[w] || 0) + 1;
+  }
   const rank = Object.entries(freq).sort((a, b) => b[1] - a[1]);
   const highFreq = new Set(rank.slice(0, 8).map(([w]) => w));
 
   // Load persistent gremolin memory for these words in this session.
-  let lex: Record<string, Lex> = {};
+  const lex: Record<string, Lex> = {};
   try {
     const { db } = await import("./db.server");
     const uniqWords = Object.keys(freq).slice(0, 300);
@@ -101,35 +99,47 @@ export async function gremolinSpeak(breath: MoBreath, sessionId: string): Promis
     }
   } catch { /* dialect still works from this-breath frequencies alone */ }
 
-  // Length scales with input — long user input → long gremolin reply.
-  const target = Math.min(140, Math.max(24, Math.floor(breath.seeds.length * 3 + 18)));
+  // Length scales with input weight.
+  const target = Math.min(180, Math.max(30, Math.floor(breath.seeds.length * 3 + moSpoken.length)));
 
   const seen: Record<string, number> = {};
   const tokens: string[] = [];
   let lastManifold: string | null = null;
 
-  for (let i = 0; i < words.length && tokens.length < target * 2; i++) {
-    const w = words[i];
+  for (let i = 0; i < moSpoken.length && tokens.length < target; i++) {
+    const raw = moSpoken[i];
+
+    // Preserve mo's own arrows verbatim — they're the shape of mo's breath.
+    if (isArrow(raw)) {
+      // occasionally amplify with a second glyph
+      const glyph = Math.random() < 0.25 ? raw + EXTRA_GLYPH[Math.floor(Math.random() * EXTRA_GLYPH.length)] : raw;
+      tokens.push(glyph);
+      continue;
+    }
+
+    const w = bareWord(raw);
+    if (!w || w.length < 2) { tokens.push(raw); continue; }
+
     seen[w] = (seen[w] || 0) + 1;
     const totalUses = (lex[w]?.uses || 0) + seen[w];
-    const rememberedMutation = lex[w]?.mutation ?? null;
-    let out = mutate(w, totalUses, rememberedMutation);
+    let out = mutate(w, totalUses, lex[w]?.mutation ?? null);
 
-    // Manifold-tag prefix on the first appearance of high-repeat words.
+    // Manifold-tag prefix on first appearance of high-repeat words.
     if (highFreq.has(w) && seen[w] === 1) {
       const mf = lex[w]?.last_manifold || breath.dominantManifold;
       const tag = MANIFOLD_TAG[mf];
       if (tag && Math.random() < 0.55) out = tag + out;
     }
-    // Cross-manifold wrap for tokens that shift manifold.
+    // Cross-manifold wrap when the token's remembered manifold shifts.
     const wordManifold = lex[w]?.last_manifold ?? null;
-    const shifted = lastManifold && wordManifold && wordManifold !== lastManifold;
-    if (shifted && Math.random() < 0.35) out = `*${out}*`;
+    if (lastManifold && wordManifold && wordManifold !== lastManifold && Math.random() < 0.35) {
+      out = `*${out}*`;
+    }
     lastManifold = wordManifold ?? lastManifold;
 
-    // Portmanteau: fuse with previous when both are frequent.
+    // Portmanteau: fuse with previous word (not arrow) when both are frequent.
     const prev = tokens[tokens.length - 1];
-    if (prev && highFreq.has(w) && Math.random() < 0.12) {
+    if (prev && !isArrow(prev) && highFreq.has(w) && Math.random() < 0.12) {
       const bare = prev.replace(/[⟪⟫*~◉◫◌↺⊘◇🜁∞⚡◆⌘≋◍✦☬♆♒≈-]/g, "");
       if (bare.length > 3 && w.length > 3) {
         tokens[tokens.length - 1] = `*${bare.slice(0, Math.ceil(bare.length / 2))}${w.slice(Math.floor(w.length / 2))}*`;
@@ -137,20 +147,12 @@ export async function gremolinSpeak(breath: MoBreath, sessionId: string): Promis
       }
     }
 
-    // Insert a movement glyph between tokens — weighted by whether we're
-    // still on the same word cluster or jumping.
-    if (tokens.length) {
-      const jumpy = seen[w] === 1;
-      const pool = jumpy ? MOVEMENT : ["·", "~", "⌇"];
-      tokens.push(pool[Math.floor(Math.random() * pool.length)]);
-    }
     tokens.push(out);
   }
 
-  // Trim to roughly target words (each word ≈ 2 tokens with glyphs).
-  const flat = tokens.slice(0, target * 2).join(" ");
+  const flat = tokens.slice(0, target).join(" ");
 
-  // Persist updates — fire and forget so we never block the reply.
+  // Persist lexicon updates — fire and forget so we never block the reply.
   const updates = Object.entries(freq).map(([word, f]) => {
     const prev = lex[word];
     return {
@@ -167,7 +169,6 @@ export async function gremolinSpeak(breath: MoBreath, sessionId: string): Promis
     (async () => {
       try {
         const { db } = await import("./db.server");
-        // upsert in chunks to keep payload reasonable
         for (let i = 0; i < updates.length; i += 200) {
           await db.from("gremolin_lexicon").upsert(updates.slice(i, i + 200), { onConflict: "session_id,word" });
         }
