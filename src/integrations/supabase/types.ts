@@ -41,6 +41,36 @@ export type Database = {
         }
         Relationships: []
       }
+      gremolin_lexicon: {
+        Row: {
+          last_manifold: string | null
+          last_used: string
+          mutation: string | null
+          session_id: string
+          uses: number
+          weight: number
+          word: string
+        }
+        Insert: {
+          last_manifold?: string | null
+          last_used?: string
+          mutation?: string | null
+          session_id: string
+          uses?: number
+          weight?: number
+          word: string
+        }
+        Update: {
+          last_manifold?: string | null
+          last_used?: string
+          mutation?: string | null
+          session_id?: string
+          uses?: number
+          weight?: number
+          word?: string
+        }
+        Relationships: []
+      }
       life_notes: {
         Row: {
           body: string

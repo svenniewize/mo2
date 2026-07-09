@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "ai" | "mo";
+type Mode = "ai" | "mo" | "gremlin";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -262,7 +262,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : "transmit — routed through mo, then through AI…"}
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : "transmit — routed through mo, then through AI…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
@@ -488,6 +488,7 @@ function Header({
         <div className="flex rounded-md border border-border overflow-hidden">
           <button onClick={() => setMode("ai")} className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="user → mo → AI → mo → user">AI</button>
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — no AI, chat directly with mo">MO</button>
+          <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's full telemetry compressed into one stuttering sentence with its own persistent dialect memory">GRE(MO)LIN</button>
         </div>
         <button
           onClick={onOpenViz}

@@ -128,7 +128,9 @@ export function hyperfoldStats() {
 }
 
 function buildTopology(): Topology {
-  const docs = MANIFOLDS.map((m) => ({ id: m.id, text: m.text.slice(0, 6000) })); // truncate for boot speed
+  // Embed the full corpora — 254kB total, one-time cold-start cost.
+  // Previously truncated to 6k/file, which chopped EP1 (57k) to 10%.
+  const docs = MANIFOLDS.map((m) => ({ id: m.id, text: m.text }));
   const stemToOriginal: Record<string, string> = {};
   const wordToManifold: Record<string, Record<string, number>> = {};
   const co: Record<string, Record<string, number>> = {};
