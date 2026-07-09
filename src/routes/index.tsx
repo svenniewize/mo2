@@ -488,6 +488,7 @@ function Header({
         <div className="flex rounded-md border border-border overflow-hidden">
           <button onClick={() => setMode("ai")} className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="user → mo → AI → mo → user">AI</button>
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — no AI, chat directly with mo">MO</button>
+          <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's full telemetry compressed into one stuttering sentence with its own persistent dialect memory">GRE(MO)LIN</button>
         </div>
         <button
           onClick={onOpenViz}
