@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "ai" | "mo";
+type Mode = "ai" | "mo" | "gremlin";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
