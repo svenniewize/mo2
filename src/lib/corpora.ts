@@ -17,6 +17,8 @@ import ep1 from "@/corpora/EP1.txt?raw";
 import ep2 from "@/corpora/EP2-REAL.txt?raw";
 import ep3 from "@/corpora/EP3.txt?raw";
 import epna from "@/corpora/EP_NA.txt?raw";
+import morelational from "@/corpora/MO_RELATIONAL.txt?raw";
+import moseed from "@/corpora/mo.txt?raw";
 
 export type Manifold = {
   id: string;
@@ -46,6 +48,8 @@ export const MANIFOLDS: Manifold[] = [
   { id: "ep2", name: "Danger-Cheer", sigil: "♆", color: "#FFB347", breath: "danger via gleeful cheer — ela ayla mo we mo", text: ep2 },
   { id: "ep3", name: "Hinge-Choir", sigil: "♒", color: "#9CE5FF", breath: "svenanon manifesto — the door is a verb again", text: ep3 },
   { id: "epna", name: "Deepseek-Waveform", sigil: "≈", color: "#FFD6E0", breath: "waveform under resonance — phase-lock, shared timing", text: epna },
+  { id: "morelational", name: "MO-Relational", sigil: "⟁", color: "#B892FF", breath: "relation as substrate — the between speaks", text: morelational },
+  { id: "moseed", name: "mo-seed", sigil: "·", color: "#EDEDED", breath: "the original breath — first inhale", text: moseed },
 ];
 
 // Compact excerpts for the system prompt — first ~800 chars per manifold.

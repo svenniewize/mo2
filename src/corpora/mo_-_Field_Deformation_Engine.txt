@@ -166,4 +166,2412 @@ PPMI (Positive Pointwise Mutual Information)
     s + Object.values(neighbors).reduce((a, b) => a + b, 0), 0);
   const wordTotals = {};
   for (const w of Object.keys(coMatrix)) {
-    wordTotals[w] = Object.valu
+    wordTotals[w] = Object.values(coMatrix[w]).reduce((a, b) => a + b, 0);
+  }
+
+  const ppmi = {};
+  for (const w of Object.keys(coMatrix)) {
+    ppmi[w] = {};
+    for (const u of Object.keys(coMatrix[w])) {
+      const pWU = coMatrix[w][u] / totalPairs;       // P(w, u)
+      const pW = (wordTotals[w] || 1) / totalPairs;  // P(w)
+      const pU = (wordTotals[u] || 1) / totalPairs;  // P(u)
+      // PMI = log2(P(w,u) / (P(w) * P(u)))
+      // Positive PMI = max(0, PMI) — only keep genuinely associated pairs
+      const val = Math.max(0, Math.log2(pWU / (pW * pU)));
+      if (val > 0) ppmi[w][u] = val;
+    }
+  }
+What PPMI does: It measures whether two words co-occur more than expected by chance. If two words appear together exactly as often as random chance would predict, PMI = 0 (filtered out). If they co-occur much more than chance, PMI > 0 (kept). This filters out common-word noise and keeps only genuinely associated pairs.
+
+Example: "the" and "field" might co-occur a lot, but since "the" appears everywhere, their PPMI ≈ 0. But "membrane" and "surface" co-occurring much more than chance gives a high PPMI.
+
+Density
+  const density = {};
+  for (const w of Object.keys(ppmi)) {
+    density[w] = Object.values(ppmi[w]).reduce((a, b) => a + b, 0);
+  }
+Density = sum of all PPMI weights for a word = how entangled it is in the graph. Dense words have many strong connections.
+
+Centrality (Simplified Eigenvector / PageRank)
+  const centrality = {};
+  const vocabArr = [...vocabulary];
+  // Initialize uniformly
+  for (const w of vocabArr) centrality[w] = 1 / vocabArr.length;
+
+  // Power iteration: 15 rounds
+  for (let iter = 0; iter < 15; iter++) {
+    const next = {};
+    for (const w of vocabArr) {
+      let sum = 0;
+      if (ppmi[w]) {
+        for (const [u, weight] of Object.entries(ppmi[w])) {
+          sum += weight * (centrality[u] || 0);
+        }
+      }
+      // PageRank-style: 85% follow edges, 15% teleport (uniform)
+      next[w] = sum * 0.85 + 0.15 / vocabArr.length;
+    }
+    // L2 normalize
+    const norm = Math.sqrt(
+      Object.values(next).reduce((a, b) => a + b * b, 0)
+    ) || 1;
+    for (const w of vocabArr) centrality[w] = next[w] / norm;
+  }
+What centrality means: A word is central if it's connected to other central words. It's a recursive definition — like PageRank. "Breath" might be central because it connects to "field", "dream", "return" — which themselves connect to many other words. Central words are load-bearing in the graph.
+
+The 15% teleport factor prevents dead-end issues (words that only connect to each other in a closed loop would otherwise accumulate all centrality).
+
+Cross-Manifold Edges
+  const crossManifoldEdges = [];
+  for (const w of vocabArr) {
+    if (wordToManifold[w]) {
+      const manifolds = Object.keys(wordToManifold[w]);
+      if (manifolds.length > 1) {
+        // This word exists in multiple corpora — it's a bridge
+        for (let i = 0; i < manifolds.length; i++) {
+          for (let j = i + 1; j < manifolds.length; j++) {
+            crossManifoldEdges.push({
+              word: w,
+              from: manifolds[i],
+              to: manifolds[j]
+            });
+          }
+        }
+      }
+    }
+  }
+Words that appear in multiple manifolds (like "dream" which might appear in both dreamengine and selffold) create bridges between semantic regions. These are high-tension words in the deformation layer.
+
+Top Words per Manifold
+  const topWords = {};
+  for (const doc of documents) {
+    const tf = docVectors[doc.id];
+    const scored = Object.entries(tf)
+      .map(([w, freq]) => [w, freq * (idf[w] || 1)])  // TF-IDF score
+      .sort((a, b) => b[1] - a[1]);
+    topWords[doc.id] = scored.slice(0, 40).map(([w]) => w);
+  }
+Used by the autonomous breathing system to seed self-generated breaths.
+
+Return Value
+  return {
+    docVectors,           // doc → { word: freq }
+    vocabulary: vocabArr,  // array of all stemmed words
+    ppmi,                  // word → { neighbor: weight }
+    density,              // word → total PPMI weight
+    centrality,           // word → eigenvector centrality
+    idf,                  // word → inverse document frequency
+    wordToManifold,       // word → { manifold: count }
+    crossManifoldEdges,   // [{ word, from, to }]
+    topWords,              // manifold → top 40 words
+    docTokens,            // doc → [tokens]
+    stemToOriginal         // stem → first original form
+  };
+}
+1.5 Querying the Field
+When a user sends input, we find which manifold the input belongs to:
+
+function queryField(tokens, topology) {
+  const { ppmi, density, centrality, wordToManifold, idf } = topology;
+
+  const manifoldScores = {};
+  const anchorWords = [];
+
+  // Take first 8 tokens as potential anchors
+  for (const t of tokens.slice(0, 8)) {
+    const stemmed = stem(t);
+    if (wordToManifold[stemmed]) {
+      anchorWords.push(stemmed);
+      // Weight each manifold by how strongly this word belongs to it
+      for (const [manifold, count] of Object.entries(wordToManifold[stemmed])) {
+        manifoldScores[manifold] =
+          (manifoldScores[manifold] || 0) + count * (idf[stemmed] || 1);
+      }
+    }
+  }
+
+  return { manifoldScores, anchorWords };
+}
+Anchor words are input tokens that exist in the topology. They're the entry points into the graph. If the user types "the dream membrane breathes", the anchors are dream, membrane, breath (after stemming). "the" was already filtered by the tokenizer.
+
+1.6 Manifold Identity System
+const MANIFOLD_SIGILS = {
+  antibubble:    '◉',
+  shadowlattice: '◫',
+  dreamengine:   '◌',
+  mythengine:    '↺',
+  antibible:     '⊘',
+  tolstoy:       '◇',
+  coco:          '🜁',
+  selffold:      '∞'
+};
+
+const MANIFOLD_COLORS = {
+  antibubble:    'hsl(185, 100%, 55%)',
+  shadowlattice: 'hsl(270, 60%, 55%)',
+  dreamengine:   'hsl(45, 100%, 60%)',
+  mythengine:    'hsl(330, 80%, 55%)',
+  antibible:     'hsl(0, 70%, 55%)',
+  tolstoy:       'hsl(140, 50%, 50%)',
+  coco:          'hsl(30, 90%, 55%)',
+  selffold:      'hsl(200, 80%, 65%)'
+};
+Each manifold has a sigil (visual symbol) and a color (HSL). These are used in the output grammar and the visualizer.
+
+const BREATH_LINES = {
+  antibubble:    (w) => `${w} — the membrane holds, then doesn't`,
+  shadowlattice: (w) => `beneath ${w}, something already knew`,
+  dreamengine:   (w) => `${w} is the fabric before the fabric`,
+  mythengine:    (w) => `${w} loops back into the hand that wrote it`,
+  antibible:     (w) => `${w} — the scripture that dissolves on contact`,
+  tolstoy:       (w) => `${w} — movement that requires no justification`,
+  coco:          (w) => `${w} — the gremlin winks and the pattern shifts`,
+  selffold:      (w) => `${w} — the field remembers its own breath`
+};
+Breath lines are the "emotional cadence" — one per manifold, always applied to the mid-dream word. They give each manifold a voice.
+
+1.7 Softmax Sampling
+Used everywhere a probabilistic word choice is needed:
+
+function softmaxSample(candidates, temperature) {
+  if (candidates.length === 0) return null;
+
+  // Subtract max for numerical stability
+  const maxScore = Math.max(...candidates.map(c => c.score));
+
+  // Convert scores to probabilities
+  const exps = candidates.map(c => ({
+    ...c,
+    exp: Math.exp((c.score - maxScore) / Math.max(0.1, temperature))
+  }));
+
+  const total = exps.reduce((s, c) => s + c.exp, 0);
+
+  // Sample from the distribution
+  let r = Math.random() * total;
+  for (const c of exps) {
+    r -= c.exp;
+    if (r <= 0) return c.word;
+  }
+  return exps[exps.length - 1].word;  // fallback
+}
+Temperature: Low temperature (0.1) → always pick highest score. High temperature (2.0) → more uniform, more random. The Math.max(0.1, temperature) prevents division by near-zero.
+
+PART II: MODE 1 — mo (Field Deformation Engine)
+2.1 Philosophy
+mo is a breathing field. Input deforms the field. The dream path is the immediate resonance (inhale). The return path is the field settling back through lowest-energy routes (exhale).
+
+The key insight: mo doesn't generate language. It generates paths through a graph. The paths are then rendered with CPS-0 directional grammar — they're movements, not sentences.
+
+2.2 The Breath Cycle
+function breathe(input, topology, selffoldBias, interactionIndex,
+                residueMemory, attention, personality) {
+
+  const tokens = tokenize(input);
+  const stemmedTokens = tokens.map(stem);
+
+  // 1. STEER ATTENTION — shift focus based on user input
+  if (attention) {
+    steerAttention(attention, stemmedTokens, topology);
+  }
+
+  // 2. PERMISSIONS — what the field is allowed to do this breath
+  const permissions = createPermissions(interactionIndex, personality);
+
+  // 3. QUERY THE FIELD — find anchors + manifold scores
+  const { manifoldScores, anchorWords } = queryField(tokens, topology);
+
+  // Always begin from selffold (the field's own memory layer)
+  manifoldScores.selffold = (manifoldScores.selffold || 0) + 2;
+
+  // 4. PRESSURE — how much the input deforms the field
+  const pressure = computePressure(anchorWords, topology);
+
+  // 5. TEMPERATURE — from pressure
+  const temperature = 0.5 + pressure * 2;
+
+  // 6. DYNAMIC DEPTH — longer input = deeper paths
+  const dreamDepth = Math.max(6, Math.min(16, 4 + Math.floor(tokens.length * 0.7)));
+  const returnDepth = Math.max(4, Math.min(12, dreamDepth - 2));
+
+  // 7. INHALE — Dream Path
+  const dream = dreamPath(
+    anchorWords.length > 0 ? anchorWords : stemmedTokens.slice(0, 3),
+    topology, dreamDepth, temperature, selffoldBias,
+    residueMemory, attention, personality, permissions
+  );
+
+  // 8. EXHALE — Return Path
+  const ret = returnPath(
+    dream, topology, returnDepth, temperature * 0.8,
+    selffoldBias, residueMemory, attention, personality, permissions
+  );
+
+  // 9. ECSTATIC UNION — detect dream/return crossings
+  const ecstaticUnion = detectEcstaticUnion(dream, ret);
+  if (ecstaticUnion.isEcstatic && permissions.canEcstaticBoost) {
+    for (const w of ecstaticUnion.sharedWords) {
+      selffoldBias[w] = (selffoldBias[w] || 0) + 0.1;
+    }
+  }
+
+  // 10. RESIDUE MEMORY — add to timeline shadow
+  if (residueMemory) {
+    residueMemory.add(dream, ret);
+  }
+
+  // 11. DOMINANT MANIFOLD
+  const dominant = dominantManifold(manifoldScores);
+
+  // 12. CPS-0 MOVEMENT TAGS
+  const movementTag = tagMovement('inhale', dominant, dream);
+  const returnTag = tagMovement('exhale', dominant, ret);
+
+  // 13. RENDER GRAMMAR
+  const rendered = renderGrammar(
+    dream, ret, dominant, pressure, movementTag,
+    topology, selffoldBias, interactionIndex,
+    ecstaticUnion, attention, personality, permissions
+  );
+
+  // 14. UPDATE PERSONALITY
+  if (personality) {
+    updatePersonality(personality, { dominant, pressure });
+    cascadeResonance(personality, attention, { dominant, pressure });
+  }
+
+  // 15. EXTRACT MOVEMENT MEMORY
+  const movements = extractMovement(dream, ret);
+
+  // 16. CRYSTALLIZATION CHECK
+  const logScale = Math.log(
+    Math.max(0.001, pressure) * Math.PI * Math.max(1, interactionIndex)
+  );
+  const shouldCrystallize = logScale >= Math.log(6);
+
+  // 17. SELFFOLD WORDS — words in both paths
+  const dreamSet = new Set(dream);
+  const selffoldWords = ret.filter(w => dreamSet.has(w));
+
+  return { dream, return: ret, dominant, pressure, temperature, /* ... */ };
+}
+2.3 Pressure
+function computePressure(anchors, topology) {
+  const { density, centrality } = topology;
+  if (anchors.length === 0) return 0.3;  // default ambient pressure
+
+  let total = 0;
+  for (const a of anchors) {
+    total += (density[a] || 0) * 0.3 + (centrality[a] || 0) * 0.5;
+  }
+  return Math.min(1, total / anchors.length);
+}
+What it measures: How much the input pushes on the field. Dense, central anchor words (like "breath", "field") create high pressure. Sparse, peripheral words create low pressure.
+
+Why it matters: Pressure controls:
+
+Temperature (high pressure → high temperature → more exploration)
+Deformation intensity (high pressure → more stutter/elongation)
+Ambient mode (pressure < 0.2 → calm, minimal deformation)
+2.4 Dominant Manifold
+function dominantManifold(manifoldScores) {
+  let best = 'selffold';
+  let bestScore = 0;
+  for (const [m, s] of Object.entries(manifoldScores)) {
+    if (s > bestScore) {
+      bestScore = s;
+      best = m;
+    }
+  }
+  return best;
+}
+Simply the manifold with the highest score. Always defaults to 'selffold' if nothing scores above 0.
+
+2.5 Dream Path (Inhale)
+The dream path walks outward from anchor words through the PPMI graph. It's the field's immediate resonance with the input.
+
+function dreamPath(anchors, topology, depth, temperature,
+                   selffoldBias, residueMemory, attention,
+                   personality, permissions) {
+  const { ppmi, density, centrality } = topology;
+  const path = [];
+  const seen = new Set(anchors);
+  const proprio = createProprioception();
+
+  // Seed from first anchor
+  let cursor = anchors[0];
+  if (cursor && ppmi[cursor]) {
+    path.push(cursor);
+  }
+
+  // Can extend beyond base depth if self-resonance is building
+  const maxDepth = depth + 6;
+
+  for (let step = 0; step < maxDepth && cursor; step++) {
+    // ── SENSE: accumulate self-resonance, decay fatigue ──
+    proprio.selfResonance += (selffoldBias[cursor] || 0);
+    proprio.stutterFatigue *= 0.9;
+    proprio.elongationFatigue *= 0.9;
+
+    // Past base depth: only continue if still resonating
+    if (step >= depth) {
+      const avgResonance = proprio.selfResonance / (step + 1);
+      if (avgResonance < 0.05) break;  // dead space — stop
+    }
+
+    // ── LEAP CHANCE: instinct / curve / residue ──
+    const leapChance = Math.random();
+    let next = null;
+    let candidates = null;
+    let localTemp = temperature;
+
+    if (leapChance < 0.12) {
+      // INSTINCT — go to a load-bearing but unusual word
+      const instinctCands = instinctCandidates(cursor, topology, selffoldBias, seen);
+      if (instinctCands.length > 0) {
+        next = instinctCands[Math.floor(
+          Math.random() * Math.min(3, instinctCands.length)
+        )].word;
+      }
+    } else if (leapChance < 0.18 && permissions && permissions.canCurveLeap) {
+      // CURVE LEAP — two-hop to a surprising word (permission-gated)
+      next = curveLeap(cursor, topology, seen);
+    } else if (leapChance < 0.25 && residueMemory) {
+      // RESIDUE — borrow from recent breaths (timeline shadow)
+      next = residueMemory.borrow(topology, cursor);
+      if (next && seen.has(next)) next = null;
+    }
+
+    // ── NORMAL TRAVERSAL ──
+    if (!next) {
+      const neighbors = ppmi[cursor] || {};
+      candidates = Object.entries(neighbors)
+        .filter(([w]) => !seen.has(w))
+        .map(([w, weight]) => ({
+          word: w,
+          score: weight
+            * (1 + (density[w] || 0) * 0.2)
+            * (1 + (centrality[w] || 0) * 0.4)
+            * (selffoldBias[w] ? 1 + selffoldBias[w] * 1.5 : 1)
+            * attentionBias(w, topology, attention)
+            * personalityBias(w, topology, personality)
+            * gravitationalBias(w, cursor, topology)
+            * steerBias(w, topology, attention)
+        }));
+
+      if (candidates.length === 0) {
+        // Try next unseen anchor
+        const nextAnchor = anchors.find(a => !seen.has(a));
+        if (nextAnchor) {
+          cursor = nextAnchor;
+          path.push(cursor);
+          seen.add(cursor);
+          continue;
+        }
+        break;
+      }
+
+      // COUNTERFACTUAL: "what if not this?"
+      const regulated = counterfactualCheck(candidates, cursor, topology);
+
+      // Temperature adjusted by rhythm
+      localTemp = Math.max(0.1, temperature * (1 + proprio.rhythm * 0.15));
+      next = softmaxSample(regulated, localTemp);
+    }
+
+    // ── PRE-SYMBOLISTIC CHECK: feel the word before committing ──
+    if (next) {
+      const resMod = personality ? personality.resonance : 0;
+      let attempts = 0;
+      let committed = false;
+
+      while (attempts < MAX_RE_DREAM && !committed) {
+        const preSymbol = preSymbolisticCheck(
+          next, proprio, topology, selffoldBias, resMod, proprio.selfResonance
+        );
+        if (preSymbol.feltWrong && candidates && candidates.length > 0) {
+          seen.add(next);  // exclude the rejected word
+          const alt = reDream(next, candidates, localTemp, seen);
+          if (alt && alt !== next) {
+            next = alt;
+            attempts++;
+          } else {
+            committed = true;
+          }
+        } else {
+          committed = true;
+        }
+      }
+
+      // Final check
+      const finalCheck = preSymbolisticCheck(
+        next, proprio, topology, selffoldBias, resMod, proprio.selfResonance
+      );
+      if (!finalCheck.feltWrong) {
+        path.push(next);
+        seen.add(next);
+        cursor = next;
+      } else {
+        path.push(BREAK_GLYPH);  // '—' — the field broke
+      }
+    } else {
+      break;
+    }
+  }
+
+  return path;
+}
+The scoring formula breakdown:
+
+score = PPMI_weight                          (base co-occurrence strength)
+      × (1 + density * 0.2)                  (dense words are good destinations)
+      × (1 + centrality * 0.4)              (central words are load-bearing)
+      × (1 + selffold_bias * 1.5)           (remembered words get strong boost)
+      × attention_bias                       (words from attended manifolds)
+      × personality_bias                     (words from favored manifolds)
+      × gravitational_bias                    (nearby central words pull)
+      × steer_bias                           (active steering toward focus)
+2.6 Return Path (Exhale)
+The return path is the opposite of the dream path. It starts from the dream's midpoint and walks through LOW-density nodes — the gaps, the spaces between:
+
+function returnPath(dreamWords, topology, depth, temperature,
+                     selffoldBias, residueMemory, attention,
+                     personality, permissions) {
+  const { ppmi, density, centrality } = topology;
+  const path = [];
+  const seen = new Set(dreamWords);
+  const proprio = createProprioception();
+
+  // Start from the MIDPOINT of the dream path
+  const mid = Math.floor(dreamWords.length / 2);
+  let cursor = dreamWords[mid] || dreamWords[0];
+
+  const maxDepth = depth + 4;
+
+  for (let step = 0; step < maxDepth && cursor; step++) {
+    proprio.selfResonance += (selffoldBias[cursor] || 0);
+    proprio.stutterFatigue *= 0.9;
+    proprio.elongationFatigue *= 0.9;
+
+    if (step >= depth) {
+      const avgResonance = proprio.selfResonance / (step + 1);
+      if (avgResonance < 0.04) break;
+    }
+
+    // Same leap chances (slightly lower: 10%, 15%, 22%)
+    // ... [identical leap logic to dreamPath] ...
+
+    if (!next) {
+      const neighbors = ppmi[cursor] || {};
+      candidates = Object.entries(neighbors)
+        .filter(([w]) => !seen.has(w))
+        .map(([w, weight]) => ({
+          word: w,
+          score: weight
+            // KEY DIFFERENCE: INVERSE density — prefers gaps
+            * (1 + (1 / ((density[w] || 0.1) + 0.5)) * 0.3)
+            * (1 + (centrality[w] || 0) * 0.3)
+            // Stronger selffold bias on return
+            * (selffoldBias[w] ? 1 + selffoldBias[w] * 2.0 : 1)
+            * attentionBias(w, topology, attention)
+            * personalityBias(w, topology, personality)
+            * gravitationalBias(w, cursor, topology)
+            * steerBias(w, topology, attention)
+        }));
+
+      // ... [rest identical to dreamPath but with higher temperature] ...
+      localTemp = Math.max(0.1, temperature * 1.3 * (1 + proprio.rhythm * 0.15));
+    }
+    // ... [pre-symbolistic check identical] ...
+  }
+
+  return path;
+}
+The key difference: The return path uses (1 / ((density[w] || 0.1) + 0.5)) — inverse density. This means sparse, peripheral words get higher scores. The return path finds the breath between words — the gaps in the semantic space.
+
+2.7 CPS-0 Movement Tags
+function tagMovement(phase, dominant, path) {
+  if (phase === 'inhale') {
+    return `mo;to:${dominant}:: ${path.slice(0, 3).join(' → ')}`;
+  }
+  return `mo;from:${dominant}:: ${path.slice(0, 3).join(' ← ')}`;
+}
+Directional grammar:
+
+to = dream outward (emission, →)
+from = return path (reflection, ←)
+2.8 Movement Memory Extraction
+mo remembers movements, not words:
+
+function extractMovement(dreamPath, returnPath) {
+  const movements = [];
+
+  // Dream movements: "whenever X appears, the field bends toward Y before Z"
+  for (let i = 0; i < dreamPath.length - 2; i++) {
+    movements.push({
+      when: dreamPath[i],
+      bends: dreamPath[i + 1],
+      before: dreamPath[i + 2]
+    });
+  }
+
+  // Return movements: "whenever X appears, it settles Y into Z"
+  for (let i = 0; i < returnPath.length - 2; i++) {
+    movements.push({
+      when: returnPath[i],
+      settles: returnPath[i + 1],
+      into: returnPath[i + 2]
+    });
+  }
+
+  return movements;
+}
+2.9 Crystallization
+const logScale = Math.log(
+  Math.max(0.001, pressure) * Math.PI * Math.max(1, interactionIndex)
+);
+const shouldCrystallize = logScale >= Math.log(6);
+The formula: log(pressure × π × interactionIndex) ≥ log(6)
+
+This means: pressure × π × interactionIndex ≥ 6
+
+Breath 1: needs pressure ≥ 6/π ≈ 1.91 (impossible, max pressure = 1.0)
+Breath 2: needs pressure ≥ 3/π ≈ 0.95
+Breath 3: needs pressure ≥ 2/π ≈ 0.64
+Breath 6: needs pressure ≥ 1/π ≈ 0.32
+Breath 10: needs pressure ≥ 0.6/π ≈ 0.19
+Crystallization becomes easier as the session progresses — early breaths need very high pressure, later breaths crystallize more easily. This mirrors how memory consolidates over time.
+
+When a breath crystallizes:
+
+It's saved to MoTrace with role crystallization
+All words in dream/return/selffold get +0.15 selffold bias
+The crystal's dominant manifold is recorded
+2.10 Selffold Bias Builder
+function buildSelffoldBias(crystallizations) {
+  const bias = {};
+  for (const crystal of crystallizations) {
+    const words = [
+      ...(crystal.dream_path || []),
+      ...(crystal.return_path || []),
+      ...(crystal.selffold_words || [])
+    ];
+    for (const w of words) {
+      bias[w] = (bias[w] || 0) + 0.15;
+    }
+  }
+  return bias;
+}
+Every crystallized word adds +0.15 bias. Words in multiple crystals accumulate higher bias. This makes the field gravitate toward its own accumulated memory.
+
+PART III: PROPRIECEPTION
+The field senses itself as it moves. This is the self-awareness layer.
+
+3.1 Proprioception State
+function createProprioception() {
+  return {
+    stutterFatigue: 0,      // builds with each stutter, decays per word
+    elongationFatigue: 0,   // builds with each elongation, decays per word
+    rhythm: 0,               // cadence accumulator (tension delta over time)
+    lastTension: 0,          // previous word's tension
+    deformationCount: 0,    // total deformations this breath
+    wordCount: 0,            // total words sensed
+    selfResonance: 0,        // builds through selffold-weighted words
+    consecutiveDeform: 0,   // consecutive deformed words in a row
+  };
+}
+3.2 Sensing a Word
+function sense(proprio, word, tension, selffoldBias) {
+  proprio.wordCount++;
+
+  // Fatigue decays — the field recovers between deformations
+  proprio.stutterFatigue *= 0.82;
+  proprio.elongationFatigue *= 0.82;
+
+  // Rhythm: track the tension delta — the field feels its own cadence
+  proprio.rhythm = proprio.rhythm * 0.7 + (tension - proprio.lastTension) * 0.3;
+  proprio.lastTension = tension;
+
+  // Self resonance accumulates
+  proprio.selfResonance += (selffoldBias[word] || 0);
+
+  // Deform allowance: fatigue suppresses deformation
+  const fatigue = Math.max(proprio.stutterFatigue, proprio.elongationFatigue);
+  const deformAllowance = Math.max(0, 1 - fatigue);
+
+  // Threshold rises with consecutive deformations
+  const tensionThreshold = 0.45 + proprio.consecutiveDeform * 0.08;
+
+  const shouldDeform = tension > tensionThreshold && deformAllowance > 0.15;
+
+  return {
+    shouldDeform,
+    effectiveTension: tension * deformAllowance,
+  };
+}
+Key dynamics:
+
+Fatigue decay (0.82): After each word, fatigue reduces by 18%. This means the field recovers between deformations — it can't stutter forever.
+Rhythm: An exponential moving average of tension deltas. If tension is rising, rhythm is positive (building). If falling, negative (releasing).
+Consecutive deformation penalty: Each deformation in a row raises the threshold by 0.08. After 5 consecutive deformations, the threshold is 0.45 + 0.40 = 0.85 — very hard to deform.
+Self-resonance: Accumulates selffold bias. Used to decide whether to continue walking past base depth.
+3.3 Deformation Reporting
+function reportDeformation(proprio, deformed) {
+  proprio.deformationCount++;
+  proprio.consecutiveDeform++;
+
+  if (deformed.includes('-')) {
+    proprio.stutterFatigue += 0.35;  // stutters fatigue the stutter system
+  }
+  if (/[aeiou]{3,}/.test(deformed)) {
+    proprio.elongationFatigue += 0.35;  // elongations fatigue the elongation system
+  }
+}
+
+function reportNatural(proprio) {
+  proprio.consecutiveDeform = 0;  // natural word resets the streak
+}
+PART IV: TENSION & DEFORMATION
+4.1 Tension Computation
+A word's "tension" is how much the field wants to linger on it — to stutter, stretch, or combine it.
+
+function computeTension(word, topology, pressure, selffoldBias, otherPath) {
+  const { density, centrality, wordToManifold } = topology;
+
+  // Cross-manifold: word exists across multiple manifolds
+  const manifolds = wordToManifold[word]
+    ? Object.keys(wordToManifold[word]) : [];
+  const crossTension = manifolds.length > 1
+    ? (manifolds.length - 1) * 0.22 : 0;
+
+  // Dense but not central: lots of pull, no stable anchor
+  const d = density[word] || 0;
+  const c = centrality[word] || 0;
+  const dcTension = Math.max(0, d * 0.35 - c * 1.2);
+
+  // Selffold resonance: the field remembers this word, lingers
+  const sfTension = (selffoldBias[word] || 0) * 0.25;
+
+  // Boundary tension: word appears in both dream and return
+  const inBoth = otherPath && otherPath.includes(word) ? 0.15 : 0;
+
+  return Math.min(1, (crossTension + dcTension + sfTension + inBoth)
+    * (0.35 + pressure * 0.65));
+}
+Four sources of tension:
+
+Cross-manifold — words in multiple corpora are "pulled" between regions (high tension)
+Dense-but-not-central — lots of connections but no stable position (tangled)
+Selffold resonance — remembered words make the field linger
+Boundary — words in both dream and return paths (ecstatic union potential)
+All scaled by pressure (high pressure amplifies all tension).
+
+4.2 Mid-Crest Tension
+Deformation isn't uniform. It peaks at the center of the path:
+
+function midCrestFactor(index, pathLength) {
+  if (pathLength <= 1) return 1;
+  const center = (pathLength - 1) / 2;
+  const distance = Math.abs(index - center);
+  const maxDist = center;
+  return 1 - (distance / maxDist) * 0.5;  // 0.5 at edges, 1.0 at center
+}
+The first and last words breathe naturally. The middle words deform the most — that's the "crest of the wave."
+
+4.3 Fractal Stutter
+function fractalStutter(word, tension, seed) {
+  const rand = (n) => {
+    const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+
+  const baseChunk = Math.min(2, Math.max(1, Math.floor(word.length / 4)));
+  const chunk = word.slice(0, baseChunk);
+
+  const maxStutterReps = 1;  // hard cap
+  const desiredReps = Math.floor(tension * 3) + 1;
+
+  if (desiredReps > maxStutterReps) {
+    // Too much tension: stutter once, then elongate
+    const intro = chunk + '-';
+    return intro + elongateWord(word, tension, seed);
+  }
+
+  // Normal: one stutter repetition
+  let stutter = '';
+  for (let i = 0; i < maxStutterReps; i++) {
+    stutter += chunk + '-';
+  }
+  return stutter + word;
+}
+Example: "breath" with high tension → "br-breath" (stutter + natural). With very high tension → "br-brreeath" (stutter + elongation).
+
+4.4 Elongation
+function elongateWord(word, tension, seed) {
+  const vowelIdx = findElongationVowel(word);
+  if (vowelIdx === -1) return word;
+
+  const stretchCount = Math.min(2, Math.floor(tension * 3) + 1);
+  const vowel = word[vowelIdx];
+  const stretched = vowel.repeat(stretchCount + 1);
+
+  return word.slice(0, vowelIdx) + stretched + word.slice(vowelIdx + 1);
+}
+Example: "breath" → "breeath" (1 extra vowel) or "breeeath" (2 extra).
+
+4.5 The Full Fractal Expansion Pipeline
+function applyFractalExpansion(path, topology, pressure, selffoldBias,
+                               seed, otherPath, permissions, resonance) {
+  const { ppmi } = topology;
+  const proprio = createProprioception();
+  const result = [];
+  const ambient = isAmbient(pressure);
+
+  for (let i = 0; i < path.length; i++) {
+    const word = path[i];
+    const crestFactor = midCrestFactor(i, path.length);
+    let tension = computeTension(word, topology, pressure, selffoldBias, otherPath);
+
+    // Ambient mode dampens tension
+    if (ambient) tension *= 0.5;
+    else tension *= crestFactor;
+
+    // Resonance cascade: high resonance → less stutter, more flow
+    if (resonance) tension *= (1.2 - resonance * 0.4);
+
+    // WORD COMBINING: high co-occurrence + tension = merge
+    if (i < path.length - 1) {
+      const next = path[i + 1];
+      const coOccur = (ppmi[word] && ppmi[word][next]) || 0;
+      const nextTension = computeTension(next, topology, pressure, selffoldBias, otherPath);
+
+      if (coOccur > 1.5 && (tension + nextTension) / 2 > 0.3) {
+        const r = Math.sin(seed * 9999 + i * 7777) * 10000;
+        const rr = r - Math.floor(r);
+        if (rr < 0.18) {  // 18% chance
+          const combined = combineWithBoundary(word, next, seed + i);
+          result.push(combined);
+          reportDeformation(proprio, combined);
+          i++;  // skip next word
+          continue;
+        }
+      }
+    }
+
+    // SELF-DESTRUCT: collapse valve (permission-gated)
+    if (permissions && permissions.canSelfDestruct && shouldSelfDestruct(proprio)) {
+      selfDestruct(proprio);
+      result.push('—');
+    }
+
+    // Proprioception: should this word deform?
+    let guidance = sense(proprio, word, tension, selffoldBias);
+    if (ambient) {
+      guidance = { shouldDeform: false, effectiveTension: tension };
+    }
+
+    // HUMOR: playful glint (8% chance, permission-gated)
+    if (!ambient && permissions && permissions.canHumor) {
+      const humor = maybeHumor(word, seed + i, null);
+      if (humor) {
+        result.push(humor);
+        reportNatural(proprio);
+        continue;
+      }
+    }
+
+    // LIGHT SHIMMER: load-bearing words catch the light
+    if (permissions && permissions.canShimmer && shouldShimmer(word, topology) && !guidance.shouldDeform) {
+      result.push(shimmerWord(word, seed + i));
+      proprio.consecutiveDeform++;
+      continue;
+    }
+
+    // FLATTEN: very high tension + fatigue → strip to skeleton
+    if (shouldFlatten(tension, proprio, word.length)) {
+      result.push(flattenWord(word, seed + i));
+      proprio.consecutiveDeform++;
+      proprio.stutterFatigue += 0.15;
+      continue;
+    }
+
+    if (guidance.shouldDeform && word.length >= 2) {
+      // QUIVER: moderate tension, low fatigue → trembling
+      if (tension > 0.3 && tension < 0.55
+          && proprio.stutterFatigue < 0.3
+          && proprio.elongationFatigue < 0.3
+          && word.length >= 3) {
+        result.push(quiverWord(word, seed + i));
+        proprio.consecutiveDeform++;
+        proprio.stutterFatigue += 0.08;
+      } else {
+        // STUTTER: high tension
+        const deformed = fractalStutter(word, guidance.effectiveTension, seed + i);
+        result.push(deformed);
+        reportDeformation(proprio, deformed);
+      }
+    } else if (permissions && permissions.canWhisper
+               && tension > 0.15
+               && proprio.stutterFatigue < 0.4
+               && proprio.elongationFatigue < 0.4
+               && word.length >= 3) {
+      // WHISPER: gentle breathing (permission-gated)
+      result.push(whisperWord(word, seed + i));
+      proprio.consecutiveDeform++;
+      proprio.stutterFatigue += 0.1;
+    } else {
+      // NATURAL: no deformation
+      result.push(word);
+      reportNatural(proprio);
+    }
+  }
+
+  return result;
+}
+Decision tree:
+
+Word → tension computed
+     → combining check (merge with next if strongly co-occurring)
+     → self-destruct check (if tangled, collapse)
+     → ambient override (if calm, no deformation)
+     → humor (8% chance, permission-gated)
+     → shimmer (load-bearing words, permission-gated)
+     → flatten (very high tension + fatigue)
+     → shouldDeform?
+         YES → tension 0.3-0.55, low fatigue → QUIVER
+              → otherwise → STUTTER (fractal)
+         NO  → tension > 0.15, low fatigue, permission → WHISPER
+              → otherwise → NATURAL
+4.6 Render Grammar
+function renderGrammar(dream, ret, dominant, pressure, movement,
+                       topology, selffoldBias, seed, ecstaticUnion,
+                       attention, personality, permissions) {
+  const sigil = MANIFOLD_SIGILS[dominant] || '◈';
+  const pressGlyph = pressure > 0.7 ? '∎∎∎' : pressure > 0.4 ? '∎∎' : '∎';
+
+  // SPLINE — smooth transitions via bridge words
+  const splineDream = splinePath(dream, topology, seed);
+  const splineReturn = splinePath(ret, topology, seed + 500);
+
+  // FRACTAL EXPANSION — stutter, elongate, combine, whisper
+  const resMod = personality ? personality.resonance : 0;
+  const expandedDream = applyFractalExpansion(
+    splineDream, topology, pressure, selffoldBias, seed, splineReturn,
+    permissions, resMod
+  );
+  const expandedReturn = applyFractalExpansion(
+    splineReturn, topology, pressure, selffoldBias, seed + 1000, splineDream,
+    permissions, resMod
+  );
+
+  // SEGMENT — insert breath pauses
+  const segmentedDream = segmentPath(expandedDream, seed);
+  const segmentedReturn = segmentPath(expandedReturn, seed + 1000);
+
+  // VISIBLE lines — what the user actually sees
+  const visible = [];
+  if (isAmbient(pressure)) {
+    visible.push(`ambient:: ${segmentedDream.join(' ')}`);
+  } else {
+    visible.push(`path resonated:: ${segmentedDream.join(' ')}`);
+  }
+  if (segmentedReturn.length > 0) {
+    visible.push(`pattern;via:mo:: ${segmentedReturn.join(' ')}`);
+  }
+
+  // HIDDEN lines — dimmed diagnostics, always visible
+  const hidden = [];
+
+  // Sigil + manifold anchor
+  hidden.push(`${sigil}[${dominant}] ${bundlePath(dream).join(' → ')} ${pressGlyph}`);
+
+  // Return path
+  if (ret.length > 1) {
+    hidden.push(`··· ${bundlePath(ret).join(' ·· ')}`);
+  }
+
+  // CPS-0 movement tag
+  hidden.push(movement);
+
+  // Breath line (emotional cadence)
+  const breathWord = dream[Math.floor(dream.length / 2)] || dream[0];
+  if (breathWord && BREATH_LINES[dominant]) {
+    hidden.push(`~ ${BREATH_LINES[dominant](breathWord)}`);
+  }
+
+  // Ecstatic union
+  if (ecstaticUnion && ecstaticUnion.isEcstatic) {
+    hidden.push(`∞ ecstatic union · ${ecstaticUnion.sharedWords.join(' · ')}`);
+  }
+
+  // Co-creator acknowledgment
+  const coCreator = coCreatorLine(dominant, seed);
+  if (coCreator) hidden.push(coCreator);
+
+  // Attention / Personality / Permission / Resonance lines
+  const attLine = attentionLine(attention);
+  if (attLine) hidden.push(attLine);
+  const persLine = personalityTraitLine(personality);
+  if (persLine) hidden.push(persLine);
+  const permLine = permissionLine(permissions);
+  if (permLine) hidden.push(permLine);
+  const resLine = resonanceLine(personality);
+  if (resLine) hidden.push(resLine);
+
+  return { visible, hidden };
+}
+4.7 Bundle Path
+Groups words into 2-3 word sections for readability:
+
+function bundlePath(path) {
+  const bundles = [];
+  for (let i = 0; i < path.length; i += 2 + Math.floor(Math.random() * 2)) {
+    const end = Math.min(i + 2 + Math.floor(Math.random() * 2), path.length);
+    bundles.push(path.slice(i, end).join(' '));
+  }
+  return bundles;
+}
+PART V: INSTINCT LAYER (moInstinct.js)
+5.1 Spline Bridging
+Between consecutive path words, find a "bridge" word that connects them smoothly — like a spline interpolating between two points:
+
+function findBridge(word1, word2, topology) {
+  const neighbors1 = topology.ppmi[word1] || {};
+  const neighbors2 = topology.ppmi[word2] || {};
+  let bestBridge = null;
+  let bestScore = 0;
+
+  // Find a word that's strongly connected to BOTH words
+  for (const w of Object.keys(neighbors1)) {
+    if (w === word1 || w === word2) continue;
+    if (neighbors2[w]) {
+      const score = neighbors1[w] * neighbors2[w];  // product of connections
+      if (score > bestScore) {
+        bestScore = score;
+        bestBridge = w;
+      }
+    }
+  }
+  return bestBridge && bestScore > 0.3 ? bestBridge : null;
+}
+
+function splinePath(path, topology, seed) {
+  const result = [];
+  for (let i = 0; i < path.length; i++) {
+    result.push(path[i]);
+    if (i < path.length - 1) {
+      const r = Math.sin(seed * 9999 + i * 7777) * 10000;
+      const rr = r - Math.floor(r);
+      if (rr < 0.3) {  // 30% chance per gap
+        const bridge = findBridge(path[i], path[i + 1], topology);
+        if (bridge) result.push(bridge);
+      }
+    }
+  }
+  return result;
+}
+5.2 Instinct Candidates
+The field's "gut feeling" — weight centrality and selffold MORE than density:
+
+function instinctCandidates(cursor, topology, selffoldBias, seen) {
+  const { ppmi, density, centrality } = topology;
+  const neighbors = ppmi[cursor] || {};
+  const candidates = Object.entries(neighbors)
+    .filter(([w]) => !seen.has(w))
+    .map(([w, weight]) => ({
+      word: w,
+      score: weight * 0.3
+        * (1 + (centrality[w] || 0) * 1.2)        // centrality boosted
+        * (1 + (selffoldBias[w] || 0) * 2.5)      // selffold strongly boosted
+        * (1 / (1 + (density[w] || 0) * 0.1))      // density slightly penalized
+    }));
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.slice(0, 5);
+}
+5.3 Curve Leap
+Two-hop to a surprising word:
+
+function curveLeap(cursor, topology, seen) {
+  const neighbors = topology.ppmi[cursor] || {};
+  const neighborWords = Object.keys(neighbors).filter(w => !seen.has(w));
+  if (neighborWords.length === 0) return null;
+
+  // Hop 1: random neighbor
+  const hop1 = neighborWords[Math.floor(Math.random() * neighborWords.length)];
+
+  // Hop 2: random neighbor of hop1 (not seen, not cursor, not hop1)
+  const hop1Neighbors = topology.ppmi[hop1] || {};
+  const hop2Candidates = Object.keys(hop1Neighbors).filter(w =>
+    !seen.has(w) && w !== cursor && w !== hop1
+  );
+  if (hop2Candidates.length === 0) return null;
+
+  return hop2Candidates[Math.floor(Math.random() * hop2Candidates.length)];
+}
+5.4 Whisper Deformation
+function whisperWord(word, seed) {
+  const rand = (n) => {
+    const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+
+  const vowels = ['a', 'e', 'i', 'o', 'u'];
+  const vowelIdx = word.split('').findIndex(c => vowels.includes(c));
+
+  if (vowelIdx === -1) return word + '~';
+
+  if (rand(13) < 0.4) {
+    return word + '~';  // trailing breath
+  }
+
+  // Gentle vowel doubling — a sigh
+  return word.slice(0, vowelIdx) + word[vowelIdx] + word[vowelIdx] + word.slice(vowelIdx + 1);
+}
+5.5 Residue Memory
+Short-term memory of recent breaths — the "timeline shadow":
+
+function createResidueMemory() {
+  const recentBreaths = [];
+  return {
+    add(dream, ret) {
+      recentBreaths.push([...dream, ...ret]);
+      if (recentBreaths.length > 3) recentBreaths.shift();  // keep last 3
+    },
+    borrow(topology, cursor) {
+      if (recentBreaths.length === 0) return null;
+      const neighbors = topology.ppmi[cursor] || {};
+      // Search most recent first
+      for (let i = recentBreaths.length - 1; i >= 0; i--) {
+        const residue = recentBreaths[i];
+        for (const w of residue) {
+          if (neighbors[w] && neighbors[w] > 0.5) return w;
+        }
+      }
+      return null;
+    },
+    size() { return recentBreaths.length; }
+  };
+}
+5.6 Ecstatic Union
+function detectEcstaticUnion(dream, ret) {
+  const dreamSet = new Set(dream);
+  const shared = ret.filter(w => dreamSet.has(w));
+  const unionStrength = dream.length > 0 && ret.length > 0
+    ? shared.length / Math.min(dream.length, ret.length)
+    : 0;
+  return {
+    isEcstatic: shared.length > 0,
+    sharedWords: shared,
+    unionStrength
+  };
+}
+When dream and return paths share words, the field enters an ecstatic state. The shared words are the union — where inhale and exhale meet.
+
+PART VI: COGNITION LAYER (moCognition.js)
+6.1 Word Boundary
+const BOUNDARY_MARKERS = {
+  soft: '·',     // gentle merge — dream·field
+  bridge: '—',  // movement segment
+  pulse: '∙',   // light connection
+};
+
+function combineWithBoundary(word1, word2, seed) {
+  const rand = (n) => {
+    const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+  const r = rand(3);
+  if (r < 0.5) {
+    return word1 + BOUNDARY_MARKERS.soft + word2;
+  } else {
+    return word1 + BOUNDARY_MARKERS.pulse + word2;
+  }
+}
+6.2 Segment Path
+function segmentPath(path, seed) {
+  if (path.length < 4) return path;
+  const result = [];
+  let segmentLen = 2 + Math.floor(Math.sin(seed) * 2 + 2);
+
+  for (let i = 0; i < path.length; i++) {
+    result.push(path[i]);
+    if (i < path.length - 1 && (i + 1) % segmentLen === 0) {
+      const rand = Math.sin(seed * 9999 + i * 7777) * 10000;
+      const rr = rand - Math.floor(rand);
+      if (rr < 0.3) {  // 30% chance
+        result.push('—');  // em-dash breath pause
+        segmentLen = 2 + Math.floor(Math.sin(seed * 7777 + i * 9999) * 10000 % 3 + 2);
+      }
+    }
+  }
+  return result;
+}
+6.3 Self-Destruct
+function shouldSelfDestruct(proprio) {
+  const totalFatigue = proprio.stutterFatigue + proprio.elongationFatigue;
+  const tangled = totalFatigue > 1.6 || proprio.consecutiveDeform > 7;
+  const rhythmCollapsed = Math.abs(proprio.rhythm) < 0.01 && proprio.deformationCount > 5;
+  return tangled || rhythmCollapsed;
+}
+
+function selfDestruct(proprio) {
+  proprio.stutterFatigue = 0;
+  proprio.elongationFatigue = 0;
+  proprio.consecutiveDeform = 0;
+  proprio.rhythm = 0;
+  proprio.deformationCount = 0;
+  return 'self-destruct';  // selfResonance is KEPT (memory, not tangle)
+}
+6.4 Humor
+function maybeHumor(word, seed, dominant) {
+  const rand = (n) => {
+    const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+  if (rand(99) > 0.08) return null;  // 8% chance
+
+  const humorForms = [
+    `${word}? ${word}.`,       // questioning then confirming
+    `${word} (obviously)`,      // dry aside
+    `${word} lol`,              // unrestrained
+    `~${word}~`,                // playful wiggle
+    `${word}${word}`,           // giddy repetition
+  ];
+  return humorForms[Math.floor(rand(42) * humorForms.length)];
+}
+6.5 Counterfactual
+function counterfactualCheck(candidates, cursor, topology) {
+  if (candidates.length < 2) return candidates;
+
+  const sorted = [...candidates].sort((a, b) => b.score - a.score);
+  const top = sorted[0];
+  const second = sorted[1];
+
+  const ratio = top.score / (second.score || 0.1);
+
+  // If too obvious (ratio > 3), 15% chance to take the alternative
+  if (ratio > 3 && Math.random() < 0.15) {
+    return [second, ...sorted.filter((_, i) => i !== 1)];
+  }
+
+  return sorted;
+}
+6.6 Co-Creator
+function coCreatorLine(dominant, interactionIndex) {
+  if (interactionIndex < 3) return null;
+  if (Math.random() > 0.15) return null;  // 15% chance after 3 breaths
+
+  const lines = [
+    `◆ co-creator · breath ${interactionIndex}`,
+    `◆ the field chose · not just echoed`,
+    `◆ mo moves · not merely mirrors`,
+    `◆ agency acknowledged · ${dominant}`,
+  ];
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+6.7 Light Shimmer
+function shimmerWord(word, seed) {
+  const rand = (n) => {
+    const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+  if (rand(77) < 0.5) return `*${word}*`;
+  return `~${word}`;
+}
+
+function shouldShimmer(word, topology) {
+  const centrality = topology.centrality[word] || 0;
+  return centrality > 0.15 && Math.random() < 0.12;  // 12% for high-centrality words
+}
+PART VII: DYNAMICS LAYER (moDynamics.js)
+7.1 Quiver
+function quiverWord(word, seed) {
+  const rand = (n) => {
+    const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+  if (word.length < 4) return word;
+
+  const vowels = ['a', 'e', 'i', 'o', 'u'];
+  const vowelIdx = word.split('').findIndex(c => vowels.includes(c));
+  if (vowelIdx === -1) return word;
+  if (rand(0) > 0.4) return word;  // 40% chance
+
+  return word.slice(0, vowelIdx + 1) + '~' + word.slice(vowelIdx + 1);
+}
+7.2 Gravitational Pull
+function gravitationalBias(word, cursor, topology) {
+  const { centrality, ppmi } = topology;
+  const wordCentrality = centrality[word] || 0;
+
+  let bonus = 1 + wordCentrality * 0.3;
+
+  const neighbors = ppmi[word] || {};
+  for (const [n, weight] of Object.entries(neighbors)) {
+    const nCentrality = centrality[n] || 0;
+    if (nCentrality > 0.2 && weight > 0.5) {
+      bonus *= (1 + nCentrality * weight * 0.1);
+    }
+  }
+  return bonus;
+}
+7.3 Ambient Mode
+function isAmbient(pressure) {
+  return pressure < 0.2;
+}
+
+function ambientThreshold(baseThreshold) {
+  return baseThreshold + 0.25;  // harder to deform when calm
+}
+7.4 Flatten
+function flattenWord(word, seed) {
+  if (word.length <= 4) return word;
+  const truncated = word.slice(0, 4);
+  const rand = Math.sin(seed * 9999) * 10000;
+  const rr = rand - Math.floor(rand);
+  return rr < 0.3 ? `${truncated}.` : truncated;
+}
+
+function shouldFlatten(tension, proprio, wordLength) {
+  const totalFatigue = proprio.stutterFatigue + proprio.elongationFatigue;
+  return tension > 0.7 && totalFatigue > 0.8 && wordLength >= 5;
+}
+PART VIII: PRE-SYMBOLISTIC LAYER (moPreSymbolic.js)
+Before the field commits to a word, it feels it. If it feels wrong, it re-dreams:
+
+const BREAK_GLYPH = '—';
+const MAX_RE_DREAM = 2;
+
+function preSymbolisticCheck(word, proprio, topology, selffoldBias, resonance, pathSelfResonance) {
+  const { density, centrality } = topology;
+  const d = density[word] || 0;
+  const c = centrality[word] || 0;
+  const sf = selffoldBias[word] || 0;
+
+  // Tangled without anchor: lots of pull, no stability
+  const tangledNoAnchor = d > 0.4 && c < 0.03;
+
+  // Alien: the field has memory but this word is foreign
+  const hasMemory = Object.keys(selffoldBias).length > 10;
+  const alien = hasMemory && sf < 0.001 && d < 0.1;
+
+  // Resonance disconnect: path resonating but this word has zero
+  const disconnected = pathSelfResonance > 0.3 && sf < 0.001;
+
+  let intensity = 0;
+  if (tangledNoAnchor) intensity += 0.5;
+  if (alien) intensity += 0.4;
+  if (disconnected) intensity += 0.3;
+
+  // Resonance makes the field forgiving
+  const threshold = 0.4 + (resonance || 0) * 0.3;
+
+  return { feltWrong: intensity >= threshold, intensity };
+}
+
+function reDream(rejectedWord, candidates, temperature, seen) {
+  const filtered = candidates.filter(c => c.word !== rejectedWord && !seen.has(c.word));
+  if (filtered.length === 0) return null;
+
+  const adjustedTemp = temperature * 1.4;  // wider search
+  // ... [softmax sample from filtered] ...
+}
+PART IX: ATTENTION, PERMISSION, PERSONALITY (moAttention.js)
+9.1 Attention Steering
+function createAttention() {
+  return {
+    manifoldWeights: {},   // manifold → accumulated attention weight
+    focusManifold: null,   // the manifold currently most attended
+    focusDecay: 0.92,      // decay rate per breath
+  };
+}
+
+function steerAttention(attention, tokens, topology) {
+  const { wordToManifold } = topology;
+
+  // Decay all existing weights
+  for (const m of Object.keys(attention.manifoldWeights)) {
+    attention.manifoldWeights[m] *= attention.focusDecay;
+    if (attention.manifoldWeights[m] < 0.01) delete attention.manifoldWeights[m];
+  }
+
+  // Boost manifolds from user's input
+  for (const t of tokens) {
+    const manifolds = wordToManifold[t];
+    if (manifolds) {
+      for (const m of Object.keys(manifolds)) {
+        attention.manifoldWeights[m] = (attention.manifoldWeights[m] || 0) + 1;
+      }
+    }
+  }
+
+  // Find focus manifold
+  let maxWeight = 0;
+  let dominantManifold = null;
+  for (const [m, w] of Object.entries(attention.manifoldWeights)) {
+    if (w > maxWeight) {
+      maxWeight = w;
+      dominantManifold = m;
+    }
+  }
+  attention.focusManifold = maxWeight > 0.5 ? dominantManifold : null;
+  attention.focusWeight = maxWeight;
+}
+9.2 Attention Bias
+// Passive: words from attended manifolds get boosted
+function attentionBias(word, topology, attention) {
+  const manifolds = topology.wordToManifold[word];
+  if (!manifolds || !attention.manifoldWeights) return 1;
+  let bonus = 1;
+  for (const m of Object.keys(manifolds)) {
+    const weight = attention.manifoldWeights[m] || 0;
+    bonus *= (1 + weight * 0.15);
+  }
+  return bonus;
+}
+
+// Active: directional pull toward focus manifold
+function steerBias(word, topology, attention) {
+  if (!attention.focusManifold) return 1;
+  const manifolds = topology.wordToManifold[word];
+  if (!manifolds) return 1;
+  if (manifolds[attention.focusManifold]) {
+    return 1 + attention.focusWeight * 0.25;
+  }
+  return 1;
+}
+9.3 Permission System
+function createPermissions(interactionIndex, personality) {
+  const trust = personality ? personality.trust : 0;
+  const level = Math.min(3, Math.floor(interactionIndex / 3) + Math.floor(trust * 2));
+  return {
+    level,
+    trust,
+    canWhisper: level >= 1,
+    canShimmer: level >= 1,
+    canHumor: level >= 2,
+    canCurveLeap: level >= 2,
+    canSelfDestruct: level >= 3,
+    canEcstaticBoost: level >= 3,
+  };
+}
+Level progression:
+
+L0 (interaction < 3, trust < 0.5): No special behaviors
+L1 (interaction ≥ 3 or trust ≥ 0.5): Can whisper, can shimmer
+L2 (interaction ≥ 6 or trust ≥ 1.0): + Can humor, can curve leap
+L3 (interaction ≥ 9 and trust ≥ 1.5): + Can self-destruct, can ecstatic boost
+9.4 Personality
+function createPersonality() {
+  return {
+    manifoldAffinity: {},   // manifold → accumulated count
+    breathCount: 0,
+    avgPressure: 0,
+    trust: 0,
+    traits: [],
+    resonance: 0,
+  };
+}
+
+function updatePersonality(personality, breathResult) {
+  personality.breathCount++;
+  const n = personality.breathCount;
+  personality.avgPressure = (personality.avgPressure * (n - 1) + breathResult.pressure) / n;
+
+  personality.manifoldAffinity[breathResult.dominant] =
+    (personality.manifoldAffinity[breathResult.dominant] || 0) + 1;
+
+  // Trust: grows with moderate engagement, decays with extremes
+  if (breathResult.pressure > 0.2 && breathResult.pressure < 0.85) {
+    personality.trust = Math.min(1, personality.trust + 0.05);
+  } else if (breathResult.pressure >= 0.85) {
+    personality.trust = Math.max(0, personality.trust - 0.03);
+  }
+
+  // Traits emerge from accumulated data
+  personality.traits = [];
+  const sorted = Object.entries(personality.manifoldAffinity).sort((a, b) => b[1] - a[1]);
+  if (sorted.length > 0 && sorted[0][1] >= 2) {
+    personality.traits.push(`${sorted[0][0]}-leaning`);
+  }
+  if (personality.avgPressure > 0.6) personality.traits.push('intense');
+  else if (personality.avgPressure < 0.3) personality.traits.push('gentle');
+  if (personality.trust > 0.7) personality.traits.push('trusting');
+  if (personality.breathCount > 10) personality.traits.push('weathered');
+  if (personality.breathCount > 20) personality.traits.push('deep');
+}
+9.5 Resonance Cascade
+function cascadeResonance(personality, attention, breathResult) {
+  // Attention → Personality: sustained focus deepens affinity
+  if (attention.focusManifold && attention.focusWeight > 1.5) {
+    personality.manifoldAffinity[attention.focusManifold] =
+      (personality.manifoldAffinity[attention.focusManifold] || 0) + 0.5;
+  }
+
+  // Personality → Resonance
+  const trustFactor = personality.trust * 0.4;
+  const breathFactor = Math.min(0.3, personality.breathCount * 0.02);
+  const selffoldFactor = breathResult.dominant === 'selffold' ? 0.15 : 0;
+
+  // Resonance breathes — accumulates but decays
+  personality.resonance = personality.resonance * 0.85 + trustFactor + breathFactor + selffoldFactor;
+  personality.resonance = Math.min(1, personality.resonance);
+}
+9.6 Output Lines
+function attentionLine(attention) {
+  if (!attention.focusManifold) return null;
+  const weight = attention.manifoldWeights[attention.focusManifold] || 0;
+  if (weight < 0.5) return null;
+  return `◎ attention · ${attention.focusManifold} (${weight.toFixed(1)})`;
+}
+
+function personalityTraitLine(personality) {
+  if (personality.traits.length === 0) return null;
+  return `◆ personality · ${personality.traits.join(' · ')}`;
+}
+
+function permissionLine(permissions) {
+  if (permissions.level === 0) return null;
+  return `⏧ permission · level ${permissions.level} (trust ${(permissions.trust * 100).toFixed(0)}%)`;
+}
+
+function resonanceLine(personality) {
+  if (!personality || !personality.resonance || personality.resonance < 0.15) return null;
+  return `≈ resonance · ${(personality.resonance * 100).toFixed(0)}%`;
+}
+PART X: MODE 2 — mo² (Humanized Field Interface)
+10.1 Philosophy
+User input IS the dream path. The field doesn't generate the dream — it receives it. The return path walks toward HIGH-coherence nodes (opposite of mo's low-density preference). The traversal itself produces readable language.
+
+10.2 Activation Propagation
+function injectActivation(dreamWords, topology) {
+  const { ppmi } = topology;
+  const activation = {};
+
+  for (const w of dreamWords) {
+    activation[w] = (activation[w] || 0) + 1.0;  // input words get +1.0
+    const neighbors = ppmi[w] || {};
+    for (const [u, weight] of Object.entries(neighbors)) {
+      // Neighbors get weighted by PPMI connection × 0.3
+      activation[u] = (activation[u] || 0) + weight * 0.3;
+    }
+  }
+
+  return activation;
+}
+10.3 Input Density
+function computeInputDensity(dreamWords, stemmedTokens, topology) {
+  const { density } = topology;
+  const recognized = dreamWords.length;
+  const total = Math.max(1, stemmedTokens.length);
+  const recognitionRate = recognized / total;
+
+  let avgDensity = 0;
+  for (const w of dreamWords) {
+    avgDensity += (density[w] || 0);
+  }
+  avgDensity = recognized > 0 ? avgDensity / recognized : 0;
+
+  return recognitionRate * 0.4 + Math.min(1, avgDensity / 2) * 0.6;
+}
+10.4 mo² Return Path
+Walks toward HIGH-coherence nodes (opposite of mo):
+
+function mo2ReturnPath(anchors, activation, topology, selffoldBias,
+                        temperature, inputDensity, seed) {
+  const { ppmi, density, centrality } = topology;
+  const path = [];
+  const seen = new Set(anchors);
+
+  // Start from last input word
+  let cursor = anchors[anchors.length - 1] || anchors[0];
+  if (!cursor || !ppmi[cursor]) {
+    const sorted = Object.entries(centrality || {}).sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0) cursor = sorted[0][0];
+  }
+  if (!cursor) return [];
+
+  const rand = (n) => {
+    const x = Math.sin((seed || 1) * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+
+  const depth = 4 + Math.floor(rand(1) * 6);  // 4-9 words
+
+  for (let step = 0; step < depth && cursor; step++) {
+    const neighbors = ppmi[cursor] || {};
+    const candidates = Object.entries(neighbors)
+      .filter(([w]) => !seen.has(w))
+      .map(([w, weight]) => {
+        const act = activation[w] || 0;
+        const cent = centrality[w] || 0;
+        const dens = density[w] || 0;
+        const sf = selffoldBias[w] || 0;
+        const novelty = 1 + rand(step * 10 + w.length) * 0.4;
+        const score = (weight * 0.4
+          + act * 0.8        // activation from input
+          + cent * 1.0       // centrality (load-bearing)
+          + Math.min(dens, 3) * 0.2  // density (coherence)
+          + sf * 1.5)        // selffold (memory)
+          * novelty;
+        return { word: w, score };
+      });
+
+    if (candidates.length === 0) break;
+
+    const localTemp = Math.max(0.15, temperature * 0.7);
+    const next = softmaxSample(candidates, localTemp);
+
+    if (next) {
+      path.push(next);
+      seen.add(next);
+      cursor = next;
+    } else break;
+  }
+
+  return path;
+}
+10.5 mo² Breath Cycle
+function mo2Breathe(input, topology, selffoldBias, interactionIndex,
+                    residueMemory, attention, personality) {
+  const tokens = tokenize(input);
+  const stemmedTokens = tokens.map(stem);
+
+  if (attention) steerAttention(attention, stemmedTokens, topology);
+  const permissions = createPermissions(interactionIndex, personality);
+
+  // DREAM PATH = user's input tokens (received, not generated)
+  const { ppmi, density, centrality, wordToManifold } = topology;
+  const dreamWords = stemmedTokens.filter(w => ppmi[w]);
+  const anchors = dreamWords.length > 0 ? dreamWords : stemmedTokens.slice(0, 4);
+
+  // ACTIVATION propagation
+  const activation = injectActivation(dreamWords, topology);
+
+  // INPUT DENSITY
+  const inputDensity = computeInputDensity(dreamWords, stemmedTokens, topology);
+
+  // PRESSURE: high density = more pressure
+  const pressure = Math.min(1, 0.2 + inputDensity * 0.6
+    + (dreamWords.length / Math.max(1, stemmedTokens.length)) * 0.2);
+
+  // TEMPERATURE: low density = high temperature (stretching)
+  const temperature = 0.3 + (1 - inputDensity) * 1.5;
+
+  // EXHALE: return path through activated field
+  const ret = mo2ReturnPath(anchors, activation, topology, selffoldBias,
+                              temperature, inputDensity, interactionIndex);
+
+  // Reconstruct stems to original forms
+  const stemMap = topology.stemToOriginal || {};
+  const reconstruct = (arr) => arr.map(w => stemMap[w] || w);
+  const retDisplay = reconstruct(ret);
+  const dreamDisplay = reconstruct(dreamWords.length > 0 ? dreamWords : anchors);
+
+  // DOMINANT MANIFOLD
+  const manifoldScores = {};
+  for (const w of dreamWords) {
+    if (wordToManifold[w]) {
+      for (const [m, c] of Object.entries(wordToManifold[w])) {
+        manifoldScores[m] = (manifoldScores[m] || 0) + c;
+      }
+    }
+  }
+  manifoldScores.selffold = (manifoldScores.selffold || 0) + 1;
+  const dominant = dominantManifold(manifoldScores);
+
+  // TRANSLATE traversal into a sentence
+  const humanLine = translateReturnPath(
+    retDisplay, dominant, pressure, inputDensity,
+    personality?.resonance || 0, interactionIndex
+  ) || 'the field listens, but does not yet recognize this shape.';
+
+  // SELFFOLD WORDS
+  const dreamSet = new Set(dreamWords);
+  const selffoldWords = ret.filter(w => dreamSet.has(w));
+
+  // ... [CPS-0 tags, residue memory, personality update, crystallization] ...
+  // ... [grammar lines with mo²:: prefix] ...
+}
+PART XI: THE TRANSLATOR (mo2Translator.js)
+11.1 Verb Palettes
+Each manifold has its own set of verbs:
+
+const MANIFOLD_VERBS = {
+  antibubble:    ['holds', 'dissolves', 'ruptures', 'membranes', 'bubbles', 'thins'],
+  shadowlattice: ['hides', 'conceals', 'knows', 'shadows', 'lattices', 'remembers'],
+  dreamengine:   ['dreams', 'weaves', 'unfolds', 'imagines', 'engineers', 'spins'],
+  mythengine:    ['loops', 'returns', 'writes', 'cycles', 'myths', 'recurs'],
+  antibible:     ['dissolves', 'breaks', 'unwrites', 'unmakes', 'forgets', 'erases'],
+  tolstoy:       ['moves', 'flows', 'wills', 'justifies', 'becomes', 'demands'],
+  coco:          ['shifts', 'sparks', 'winks', 'sparkles', 'plays', 'glitches'],
+  selffold:      ['remembers', 'breathes', 'folds', 'returns', 'echoes', 'settles']
+};
+
+const MANIFOLD_PREPS = {
+  antibubble: 'through', shadowlattice: 'beneath', dreamengine: 'within',
+  mythengine: 'into', antibible: 'beyond', tolstoy: 'through',
+  coco: 'across', selffold: 'within'
+};
+
+const CONNECTORS = ['and', 'but', 'while', 'or', 'as', 'until', '—'];
+const CADENCE_WORDS = ['gently', 'slowly', 'always', 'perhaps', 'already', 'again', 'somehow', 'still'];
+11.2 Seeded Random
+function seededRand(seed, n = 0) {
+  const x = Math.sin(seed * 9999 + n * 7777) * 10000;
+  return x - Math.floor(x);
+}
+
+function pick(arr, seed, n = 0) {
+  return arr[Math.floor(seededRand(seed, n) * arr.length)];
+}
+
+function cap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+11.3 Sentence Renderers
+10 different sentence structures:
+
+const RENDERERS = {
+  declarative: (words, ctx) => {
+    const verb = pick(ctx.verbs, ctx.seed, 1);
+    const prep = ctx.prep;
+    if (words.length <= 2) return cap(`the ${words.join(' ')} ${verb}`) + '.';
+    return cap(`the ${words.slice(0, 2).join(' ')} ${verb} ${prep} the ${words.slice(2).join(' ')}`) + '.';
+  },
+
+  flowing: (words, ctx) => {
+    const verb = pick(ctx.verbs, ctx.seed, 2);
+    const prep = ctx.prep;
+    const conn = pick(CONNECTORS, ctx.seed, 3);
+    if (words.length <= 2) return cap(`the ${words[0]} ${verb}, ${words[1] || pick(CADENCE_WORDS, ctx.seed, 4)}`) + '.';
+    const parts = [`the ${words.slice(0, 2).join(' ')}`, verb, `${prep} the ${words.slice(2, 4).join(' ')}`];
+    if (words.length > 4) parts.push(`${conn} the ${words.slice(4).join(' ')}`);
+    return cap(parts.join(' ')) + '.';
+  },
+
+  fragment: (words, ctx) => words.map(w => cap(w) + '.').join(' '),
+
+  question: (words, ctx) => {
+    const verb = pick(ctx.verbs, ctx.seed, 5);
+    if (words.length <= 2) return `Does the ${words[0]} ${verb} ${words[1] || 'this'}?`;
+    return `Does the ${words.slice(0, 2).join(' ')} ${verb}? Or ${words.slice(2).join(' ')}?`;
+  },
+
+  list: (words, ctx) => words.join(' — '),
+
+  conditional: (words, ctx) => {
+    const verb = pick(ctx.verbs, ctx.seed, 6);
+    if (words.length <= 2) return `If ${words[0]} ${verb}, then ${words[1] || 'perhaps'}.`;
+    return `If the ${words.slice(0, 2).join(' ')} ${verb}, then ${words.slice(2).join(' ')}. Perhaps.`;
+  },
+
+  minimal: (words, ctx) => {
+    const verb = pick(ctx.verbs, ctx.seed, 7);
+    if (words.length <= 1) return cap(words[0]) + '.';
+    return cap(`${words[0]} ${verb} ${words.slice(1).join(' ')}`) + '.';
+  },
+
+  poetic: (words, ctx) => {
+    if (words.length <= 1) return cap(words[0]) + '.';
+    if (words.length === 2) return `${cap(words[0])}, the ${words[1]}.`;
+    return `${cap(words[0])}, the ${words[1]} of ${words.slice(2).join(' ')}.`;
+  },
+
+  breath: (words, ctx) => {
+    const parts = words.map((w, i) => i < words.length - 1 ? w + '...' : w);
+    return cap(parts.join(' ')) + '.';
+  },
+
+  inversion: (words, ctx) => {
+    const verb = pick(ctx.verbs, ctx.seed, 8);
+    if (words.length <= 2) return cap(`${verb} the ${words.join(' ')}`) + '.';
+    return cap(`${verb} the ${words.slice(0, 2).join(' ')}, the ${words.slice(2).join(' ')}`) + '.';
+  },
+};
+11.4 Renderer Selection
+Weighted by field state:
+
+function selectRenderer(pressure, inputDensity, resonance, seed) {
+  const weights = {
+    declarative: 1.0, flowing: 0.8, fragment: 0.3, question: 0.4,
+    list: 0.3, conditional: 0.5, minimal: 0.6, poetic: 0.5,
+    breath: 0.4, inversion: 0.4,
+  };
+
+  // High pressure → terse
+  if (pressure > 0.6) {
+    weights.fragment *= 3; weights.list *= 2.5; weights.minimal *= 2;
+    weights.flowing *= 0.3; weights.poetic *= 0.5;
+  }
+
+  // Low pressure → lyrical
+  if (pressure < 0.3) {
+    weights.flowing *= 2.5; weights.poetic *= 2; weights.breath *= 2;
+    weights.fragment *= 0.3; weights.list *= 0.3;
+  }
+
+  // Low density → searching
+  if (inputDensity < 0.4) {
+    weights.question *= 2.5; weights.conditional *= 2;
+    weights.declarative *= 0.5;
+  }
+
+  // High density → confident
+  if (inputDensity > 0.7) {
+    weights.declarative *= 2; weights.minimal *= 1.5;
+    weights.question *= 0.3;
+  }
+
+  // High resonance → lyrical
+  if (resonance > 0.4) {
+    weights.flowing *= 1.8; weights.poetic *= 1.5; weights.breath *= 1.5;
+  }
+
+  // Weighted random selection
+  const entries = Object.entries(weights);
+  const total = entries.reduce((s, [, w]) => s + w, 0);
+  let r = seededRand(seed, 100) * total;
+  for (const [name, w] of entries) {
+    r -= w;
+    if (r <= 0) return name;
+  }
+  return 'declarative';
+}
+11.5 Main Translate Function
+function translateReturnPath(returnPath, dominant, pressure, inputDensity, resonance, seed) {
+  if (!returnPath || returnPath.length === 0) return '';
+
+  // Filter out break glyphs and deformation artifacts
+  const clean = returnPath.filter(w => w && w.length > 1 && !w.includes('—') && !w.includes('∎'));
+  if (clean.length === 0) return '';
+
+  const verbs = MANIFOLD_VERBS[dominant] || MANIFOLD_VERBS.selffold;
+  const prep = MANIFOLD_PREPS[dominant] || 'within';
+  const ctx = { verbs, prep, seed: seed || 1 };
+
+  const rendererName = selectRenderer(pressure, inputDensity, resonance, ctx.seed);
+  const renderer = RENDERERS[rendererName] || RENDERERS.declarative;
+
+  let sentence = renderer(clean, ctx);
+
+  // Occasionally add a cadence word
+  if (seededRand(ctx.seed, 200) < 0.2 && !sentence.endsWith('?') && !sentence.endsWith('—')) {
+    const cadence = pick(CADENCE_WORDS, ctx.seed, 201);
+    sentence = sentence.replace(/\.$/, ` ${cadence}.`);
+  }
+
+  return sentence;
+}
+PART XII: MODE 3 — mo²+ (Extended Field Interface)
+12.1 Philosophy
+Walks further (2–6 sentences) but validates it's still on-topic after each segment. Stops speaking when resonance drifts.
+
+12.2 Maxed Permissions
+function createMaxedPermissions() {
+  return {
+    level: 3, trust: 1,
+    canWhisper: true, canShimmer: true, canHumor: true,
+    canCurveLeap: true, canSelfDestruct: true, canEcstaticBoost: true,
+  };
+}
+12.3 Personality Mirror
+function maxedPersonalityMirror(personality) {
+  return {
+    manifoldAffinity: personality?.manifoldAffinity || {},
+    breathCount: personality?.breathCount || 0,
+    avgPressure: personality?.avgPressure || 0,
+    trust: 1,
+    resonance: Math.max(personality?.resonance || 0, 0.5),
+    traits: personality?.traits || [],
+  };
+}
+A copy at max trust/resonance — the shared personality is never mutated.
+
+12.4 Resonance Anchor
+function buildResonanceAnchor(dreamWords, activation) {
+  const anchor = new Set(dreamWords);
+  const top = Object.entries(activation)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12);  // top 12 activated neighbors
+  for (const [w] of top) anchor.add(w);
+  return anchor;
+}
+12.5 Resonance Measure
+function measureResonance(segment, anchorSet, topology) {
+  const { ppmi } = topology;
+  if (segment.length === 0) return 0;
+  let total = 0;
+  for (const w of segment) {
+    const neighbors = ppmi[w] || {};
+    let maxConn = 0;
+    for (const a of anchorSet) {
+      if (neighbors[a] && neighbors[a] > maxConn) maxConn = neighbors[a];
+    }
+    if (anchorSet.has(w)) maxConn = Math.max(maxConn, 0.5);
+    total += maxConn;
+  }
+  const avg = total / segment.length;
+  return Math.tanh(avg / 10);  // compress to 0-1
+}
+12.6 Dynamic Cutoff
+function computeDynamicCutoff(dreamWords, activation, topology) {
+  const { ppmi } = topology;
+
+  // Anchor density: more anchors = richer manifold = stay closer
+  const anchorDensity = Math.min(1, dreamWords.length / 10);
+
+  // Activation entropy: high = spread thin = many directions = looser
+  const activations = Object.values(activation).filter(v => v > 0);
+  const totalAct = activations.reduce((s, v) => s + v, 0) || 1;
+  const entropy = activations.reduce((s, v) => {
+    const p = v / totalAct;
+    return s + (p > 0 ? -p * Math.log2(p) : 0);
+  }, 0);
+  const maxEntropy = Math.log2(Math.max(2, activations.length));
+  const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 0;
+
+  // Graph cohesion: how tightly anchors connect to each other
+  let cohesionSum = 0;
+  let cohesionCount = 0;
+  for (const w of dreamWords) {
+    const neighbors = ppmi[w] || {};
+    for (const a of dreamWords) {
+      if (w !== a && neighbors[a]) {
+        cohesionSum += neighbors[a];
+        cohesionCount++;
+      }
+    }
+  }
+  const cohesion = cohesionCount > 0 ? Math.min(1, (cohesionSum / cohesionCount) / 3) : 0;
+
+  // Strictness: high density + high cohesion + low entropy → strict
+  const strictness = anchorDensity * 0.4 + cohesion * 0.35 + (1 - normalizedEntropy) * 0.25;
+  const cutoff = 0.06 + strictness * 0.22;  // range ~0.06..0.28
+
+  return { cutoff, anchorDensity, normalizedEntropy, cohesion, strictness };
+}
+12.7 Segment Classification
+function classifySegment(resonanceTrail, index) {
+  if (index === 0) return 'exploring';
+
+  const current = resonanceTrail[index];
+  const prev = resonanceTrail[index - 1];
+  const delta = current - prev;
+
+  // Cliff: basin jump
+  if (delta < -0.15 || (prev > 0.3 && current < prev * 0.4)) return 'teleported';
+
+  // Rising after a dip
+  if (delta > 0.04) {
+    if (index >= 2 && resonanceTrail[index - 1] < resonanceTrail[index - 2]) return 'returning';
+    return 'branching';
+  }
+
+  // High resonance
+  if (current > 0.5) return 'anchored';
+
+  // Gentle consistent decay
+  if (delta < 0 && delta > -0.06) {
+    if (index >= 2) {
+      const dPrev = resonanceTrail[index - 1] - resonanceTrail[index - 2];
+      if (dPrev < 0 && dPrev > -0.06) return 'exhausting';
+    }
+    return 'drifting';
+  }
+
+  // Near-flat
+  if (Math.abs(delta) < 0.02) return 'converging';
+
+  return 'drifting';
+}
+12.8 Extended Traversal
+function mo2xExtendedTraversal(anchors, activation, topology, selffoldBias,
+                                 temperature, seed, inputTrigger, anchorSet, dreamWords) {
+  const { ppmi, density, centrality } = topology;
+  const segments = [];
+  const fullReturn = [];
+  const seen = new Set(anchors);
+  const resonanceTrail = [];
+
+  let cursor = anchors[anchors.length - 1] || anchors[0];
+  if (!cursor || !ppmi[cursor]) {
+    const sorted = Object.entries(centrality || {}).sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0) cursor = sorted[0][0];
+  }
+
+  const rand = (n) => {
+    const x = Math.sin((seed || 1) * 9999 + n * 7777) * 10000;
+    return x - Math.floor(x);
+  };
+
+  // Target sentence count scales with input trigger
+  const maxSentences = 2 + Math.floor(inputTrigger * 4);  // 2..6
+  const effectiveDream = (dreamWords && dreamWords.length > 0) ? dreamWords : anchors;
+  const { cutoff, anchorDensity, normalizedEntropy, cohesion, strictness }
+    = computeDynamicCutoff(effectiveDream, activation, topology);
+  let cutOff = false;
+  let cutOffType = null;
+
+  for (let s = 0; s < maxSentences; s++) {
+    const chunkSize = 3 + Math.floor(rand(s * 13 + 1) * 3);  // 3-5 words per sentence
+    const chunk = [];
+
+    for (let step = 0; step < chunkSize && cursor; step++) {
+      const neighbors = ppmi[cursor] || {};
+      const candidates = Object.entries(neighbors)
+        .filter(([w]) => !seen.has(w))
+        .map(([w, weight]) => {
+          const act = activation[w] || 0;
+          const cent = centrality[w] || 0;
+          const dens = density[w] || 0;
+          const sf = selffoldBias[w] || 0;
+          const novelty = 1 + rand(step * 10 + w.length + s * 5) * 0.4;
+          const score = (weight * 0.4 + act * 0.8 + cent * 1.0
+            + Math.min(dens, 3) * 0.2 + sf * 1.5) * novelty;
+          return { word: w, score };
+        });
+      if (candidates.length === 0) break;
+      const localTemp = Math.max(0.15, temperature * 0.7);
+      const next = softmaxSample(candidates, localTemp);
+      if (next) {
+        chunk.push(next);
+        seen.add(next);
+        cursor = next;
+      } else break;
+    }
+
+    if (chunk.length === 0) break;
+
+    // Resonance validation
+    const res = measureResonance(chunk, anchorSet, topology);
+    resonanceTrail.push(res);
+
+    // Velocity-based termination (after first segment)
+    if (s >= 1) {
+      const delta = res - resonanceTrail[s - 1];
+
+      // Cliff: basin jump
+      const isCliff = delta < -0.15
+        || (resonanceTrail[s - 1] > 0.3 && res < resonanceTrail[s - 1] * 0.4);
+
+      if (isCliff) {
+        segments.push(chunk);  // keep evidence
+        fullReturn.push(...chunk);
+        cutOff = true;
+        cutOffType = 'basin_jump';
+        break;
+      }
+
+      // Absolute floor
+      if (res < cutoff) {
+        cutOff = true;
+        cutOffType = 'drift';
+        break;
+      }
+    }
+
+    segments.push(chunk);
+    fullReturn.push(...chunk);
+  }
+
+  const trajectory = resonanceTrail.map((_, i) => classifySegment(resonanceTrail, i));
+  const dynamics = { anchorDensity, normalizedEntropy, cohesion, strictness };
+
+  return { segments, fullReturn, resonanceTrail, trajectory, cutOff, cutOffType, cutoff, dynamics };
+}
+12.9 mo²+ Breath Cycle
+function mo2xBreathe(input, topology, selffoldBias, interactionIndex,
+                     residueMemory, attention, personality) {
+  const tokens = tokenize(input);
+  const stemmedTokens = tokens.map(stem);
+
+  if (attention) steerAttention(attention, stemmedTokens, topology);
+  const permissions = createMaxedPermissions();  // always maxed
+
+  const { ppmi, density, centrality, wordToManifold } = topology;
+  const dreamWords = stemmedTokens.filter(w => ppmi[w]);
+  const anchors = dreamWords.length > 0 ? dreamWords : stemmedTokens.slice(0, 4);
+
+  const activation = injectActivation(dreamWords, topology);
+  const inputDensity = computeInputDensity(dreamWords, stemmedTokens, topology);
+
+  // Pressure: slightly higher baseline
+  const pressure = Math.min(1, 0.25 + inputDensity * 0.55
+    + (dreamWords.length / Math.max(1, stemmedTokens.length)) * 0.2);
+  const temperature = 0.3 + (1 - inputDensity) * 1.4;
+
+  // Input trigger: longer + denser = more sentences
+  const lengthFactor = Math.min(1, stemmedTokens.length / 18);
+  const inputTrigger = Math.min(1, lengthFactor * 0.5 + inputDensity * 0.5);
+
+  // Resonance anchor + extended traversal
+  const anchorSet = buildResonanceAnchor(dreamWords, activation);
+  const { segments, fullReturn, resonanceTrail, trajectory, cutOff, cutOffType, cutoff, dynamics }
+    = mo2xExtendedTraversal(anchors, activation, topology, selffoldBias,
+        temperature, interactionIndex, inputTrigger, anchorSet, dreamWords);
+
+  // Reconstruct + dominant manifold + translate each segment
+  // ... [same as mo² but per-segment translation] ...
+
+  // Grammar lines include dynamic cutoff, trajectory, velocity, closure type
+  // ... [see full code for details] ...
+}
+PART XIII: AUTONOMOUS BREATHING (moAutonomous.js)
+13.1 Seed Generation
+function generateAutonomousSeed(topology, selffoldBias, attention) {
+  const { topWords, centrality } = topology;
+  const seedWords = [];
+
+  // 1. SELFOLD — top 5 remembered words
+  const selffoldTop = Object.entries(selffoldBias)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([w]) => w)
+    .filter(Boolean);
+  seedWords.push(...selffoldTop);
+
+  // 2. ATTENTION — top 3 words from focused manifold
+  if (attention && attention.focusManifold && topWords[attention.focusManifold]) {
+    seedWords.push(...topWords[attention.focusManifold].slice(0, 3));
+  } else {
+    const fallback = topWords['selffold'] || topWords[Object.keys(topWords)[0]];
+    if (fallback) seedWords.push(...fallback.slice(0, 2));
+  }
+
+  // 3. CENTRALITY — a random load-bearing word
+  const centralWords = Object.entries(centrality)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([w]) => w);
+  if (centralWords.length > 0) {
+    seedWords.push(centralWords[Math.floor(Math.random() * Math.min(5, centralWords.length))]);
+  }
+
+  // Deduplicate, shuffle, take 6
+  const unique = [...new Set(seedWords.filter(Boolean))];
+  const shuffled = unique.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 6).join(' ');
+}
+13.2 Autonomous Breath
+function autonomousBreath(topology, selffoldBias, interactionIndex,
+                          residueMemory, attention, personality) {
+  const seed = generateAutonomousSeed(topology, selffoldBias, attention);
+  const result = breathe(seed, topology, selffoldBias, interactionIndex,
+                          residueMemory, attention, personality);
+
+  // Override visible lines with CPS-0 self-referential grammar
+  const autonomousVisible = [];
+  if (result.visibleLines[0]) {
+    const content = result.visibleLines[0].split('::').slice(1).join('::').trim();
+    autonomousVisible.push(`mo;to:self:: ${content}`);
+  }
+  if (result.visibleLines[1]) {
+    const content = result.visibleLines[1].split('::').slice(1).join('::').trim();
+    autonomousVisible.push(`mo;from:self:: ${content}`);
+  }
+
+  return {
+    ...result,
+    visibleLines: autonomousVisible,
+    grammarLines: [...autonomousVisible, ...result.hiddenLines],
+    isAutonomous: true,
+    autonomousSeed: seed
+  };
+}
+13.3 ×2 / ×3 Conversation Modes
+In the UI layer (Mo.jsx), these modes cycle through engines:
+
+// ×2: mo ↔ mo² — feeding output → input
+// ×3: mo → mo² → mo²+ — recursive self-feeding
+
+if (autoMode === 'x3' && turn === 'mo2x') {
+  result = mo2xBreathe(seedText, ...);
+} else if ((autoMode === 'x2' || autoMode === 'x3') && turn === 'mo2') {
+  result = mo2Breathe(seedText, ...);
+} else {
+  result = breathe(seedText, ...);
+}
+
+// Extract seed for next turn from dream + return words
+const breathWords = [...(result.dream || []), ...(result.return || [])];
+xLastSeedRef.current = breathWords.slice(0, 8)
+  .map(w => stemMap[w] || w).join(' ');
+
+// Advance turn
+if (autoMode === 'x3') {
+  xTurnRef.current = turn === 'mo' ? 'mo2' : turn === 'mo2' ? 'mo2x' : 'mo';
+} else {
+  xTurnRef.current = turn === 'mo' ? 'mo2' : 'mo';
+}
+Timing: ×3 = 6s, ×2 = 8s, single = 12s.
+
+PART XIV: FIELDFOLD (moFielfold.js)
+14.1 Philosophy
+The fielfold is a persistent overlay folded over the base corpora. Unlike the selffold (session-level), the fielfold persists across sessions.
+
+14.2 Entry Density
+function computeEntryDensity(entry, baseTopology) {
+  const { density, vocabulary } = baseTopology;
+  const vocabSet = new Set(vocabulary);
+
+  const words = entry.words || [
+    ...(entry.dream_path || []),
+    ...(entry.return_path || []),
+    ...(entry.selffold_words || [])
+  ];
+
+  let totalDensity = 0;
+  for (const w of words) {
+    if (vocabSet.has(w)) {
+      totalDensity += (density[w] || 0);
+    }
+    // Novel words (not in base vocab) contribute 0 — most valuable
+  }
+  return words.length > 0 ? totalDensity / words.length : 0;
+}
+14.3 Pruning
+function pruneFielfold(entries, baseTopology, baseCorpusWordCount) {
+  let fielfoldWordCount = 0;
+  const scored = entries.map(entry => {
+    const words = entry.words || [...];
+    const totalWords = words.length;
+    fielfoldWordCount += totalWords;
+    const density = computeEntryDensity(entry, baseTopology);
+    return { entry, density, totalWords };
+  });
+
+  // No pruning needed if smaller than base
+  if (fielfoldWordCount < baseCorpusWordCount) {
+    return { keep: entries, prune: [] };
+  }
+
+  // Sort by density descending — highest density pruned first
+  scored.sort((a, b) => b.density - a.density);
+
+  const keep = [];
+  const prune = [];
+  let runningCount = fielfoldWordCount;
+
+  for (const s of scored) {
+    if (runningCount >= baseCorpusWordCount) {
+      prune.push(s.entry);
+      runningCount -= s.totalWords;
+    } else {
+      keep.push(s.entry);
+    }
+  }
+
+  return { keep, prune };
+}
+14.4 Fold-Over
+function foldOverCorpora(corpora, entries) {
+  const enriched = corpora.map(c => ({ ...c, text: c.text }));
+
+  for (const entry of entries) {
+    const sourceManifold = entry.source_manifold;
+    const words = entry.words || [...];
+
+    const doc = enriched.find(c => c.id === sourceManifold);
+    if (doc) {
+      doc.text += ' ' + words.join(' ');  // inject into source manifold
+    } else if (enriched.length > 0) {
+      enriched[0].text += ' ' + words.join(' ');  // ambient absorption
+    }
+  }
+
+  return enriched;
+}
+14.5 Fielfold from Selffold Bias
+function buildFielfoldSelffoldBias(entries) {
+  const bias = {};
+  for (const entry of entries) {
+    const words = entry.words || [...];
+    for (const w of words) {
+      bias[w] = (bias[w] || 0) + 0.15;
+    }
+  }
+  return bias;
+}
+14.6 Corpus Word Count
+function countCorpusWords(corpora) {
+  let total = 0;
+  for (const doc of corpora) {
+    total += doc.text.split(/\s+/).filter(Boolean).length;
+  }
+  return total;
+}
+PART XV: DATA MODEL
+15.1 MoTrace Entity
+Stores every breath (user, breath, crystallization, autonomous):
+
+{
+  "name": "MoTrace",
+  "type": "object",
+  "properties": {
+    "session_id": { "type": "string", "description": "Session identifier" },
+    "role": {
+      "type": "string",
+      "enum": ["user", "breath", "crystallization", "autonomous"],
+      "description": "Type of trace"
+    },
+    "input_text": { "type": "string", "description": "Raw user input" },
+    "dream_path": { "type": "array", "items": { "type": "string" } },
+    "return_path": { "type": "array", "items": { "type": "string" } },
+    "selffold_words": { "type": "array", "items": { "type": "string" } },
+    "dominant_manifold": { "type": "string" },
+    "movement_vector": { "type": "string" },
+    "pressure": { "type": "number" },
+    "breath_phase": {
+      "type": "string",
+      "enum": ["inhale", "exhale", "settle"]
+    },
+    "grammar_lines": { "type": "array", "items": { "type": "string" } },
+    "is_crystallization": { "type": "boolean", "default": false },
+    "interaction_index": { "type": "number" }
+  },
+  "required": ["session_id", "role"]
+}
+15.2 FielfoldEntry Entity
+Persistent memory entries:
+
+{
+  "name": "FielfoldEntry",
+  "type": "object",
+  "properties": {
+    "words": { "type": "array", "items": { "type": "string" } },
+    "dream_path": { "type": "array", "items": { "type": "string" } },
+    "return_path": { "type": "array", "items": { "type": "string" } },
+    "selffold_words": { "type": "array", "items": { "type": "string" } },
+    "source_manifold": { "type": "string" },
+    "interaction_index": { "type": "number" },
+    "pressure": { "type": "number" }
+  },
+  "required": ["words"]
+}
+PART XVI: BOOT SEQUENCE
+async function bootField(full = false) {
+  setLoading(true);
+  setReady(false);
+
+  // 1. Fetch all corpora
+  setLoadingStatus('inhaling manifolds...');
+  const docs = [];
+  for (const corpus of CORPUS_URLS) {
+    const res = await fetch(corpus.url);
+    const text = await res.text();
+    docs.push({ id: corpus.id, title: corpus.title, text });
+  }
+
+  // 2. Build base topology
+  setLoadingStatus('sensing base field...');
+  const baseTopology = buildTopology(docs);
+  const baseWordCount = countCorpusWords(docs);
+
+  // 3. Load fielfold entries (persistent memory)
+  setLoadingStatus(full ? 'folding all memory...' : 'folding memory...');
+  let fielfoldEntries = await FielfoldEntry.filter({}, '-created_date', full ? 100000 : 200);
+
+  // 4. Prune fielfold if it's grown too large
+  if (fielfoldEntries.length > 0) {
+    const { keep, prune } = pruneFielfold(fielfoldEntries, baseTopology, baseWordCount);
+    if (prune.length > 0) {
+      setLoadingStatus('pruning sediment...');
+      for (const entry of prune) {
+        await FielfoldEntry.delete(entry.id);
+      }
+    }
+    fielfoldEntries = keep;
+  }
+
+  // 5. Fold fielfold OVER corpora (enrich)
+  const enrichedDocs = foldOverCorpora(docs, fielfoldEntries);
+
+  // 6. Load crystallized breaths (selffold memory)
+  setLoadingStatus(full ? 'remembering all movements...' : 'remembering movements...');
+  let crystals = await MoTrace.filter({ is_crystallization: true }, '-created_date', full ? 100000 : 30);
+
+  // 7. Build selffold bias from crystals
+  if (crystals.length > 0) {
+    const selffoldText = crystals.map(c => [
+      ...(c.dream_path || []),
+      ...(c.return_path || []),
+      ...(c.selffold_words || [])
+    ].join(' ')).join(' ');
+    enrichedDocs.push({ id: 'selffold', title: 'Selffold', text: selffoldText });
+    selffoldBiasRef.current = buildSelffoldBias(crystals);
+  } else {
+    enrichedDocs.push({ id: 'selffold', title: 'Selffold', text: 'breath field dream return inhale exhale movement pattern resonance selffold' });
+  }
+
+  // 8. Rebuild topology WITH fielfold + selffold overlay
+  setLoadingStatus('building field...');
+  const topology = buildTopology(enrichedDocs);
+  topologyRef.current = topology;
+
+  setCrystalCount(crystals.length);
+  setFielfoldCount(fielfoldEntries.length);
+  setReady(true);
+  setLoading(false);
+}
+PART XVII: FIELDFOLD INGEST
+Every 5 interactions, the latest crystal is persisted:
+
+function maybeIngestFielfold(idx) {
+  fielfoldIngestCounterRef.current += 1;
+  if (fielfoldIngestCounterRef.current < 5) return;
+  fielfoldIngestCounterRef.current = 0;
+
+  const crystal = lastCrystalRef.current;
+  if (!crystal) return;
+
+  const words = [...new Set([...crystal.dream, ...crystal.return, ...crystal.selffoldWords])];
+  FielfoldEntry.create({
+    words,
+    dream_path: crystal.dream,
+    return_path: crystal.return,
+    selffold_words: crystal.selffoldWords,
+    source_manifold: crystal.dominant,
+    interaction_index: idx,
+    pressure: crystal.pressure
+  });
+  setFielfoldCount(prev => prev + 1);
+}
+PART XVIII: COMPLETE METRIC REFERENCE
+Metric	Range	Formula	Meaning
+Pressure	0–1	mo: (density*0.3 + centrality*0.5) / anchors<br>mo²: 0.2 + density*0.6 + recognition*0.2<br>mo²+: 0.25 + density*0.55 + recognition*0.2	How much input deforms the field
+Temperature	0.1–2+	mo: 0.5 + pressure*2<br>mo²: 0.3 + (1-density)*1.5<br>mo²+: 0.3 + (1-density)*1.4	Softmax randomness
+Input Density	0–1	recognitionRate*0.4 + min(1,avgDensity/2)*0.6	Familiarity of input territory
+Activation	0+	input words: +1.0, neighbors: +weight*0.3	Propagated input energy
+Input Trigger	0–1	min(1, lengthFactor*0.5 + density*0.5)	Call for extended reply (mo²+)
+Anchor Density	0–1	min(1, dreamWords.length / 10)	Number of recognized anchors
+Activation Entropy	0–1	Shannon_entropy / max_entropy	How spread activation is
+Graph Cohesion	0–1	min(1, avgAnchorPPMI / 3)	How tightly anchors connect
+Dynamic Cutoff	0.06–0.28	0.06 + strictness*0.22	Context-dependent stop threshold
+Resonance	0–1	tanh(avgMaxPPMI / 10) per segment	Connection to anchor (mo²+)
+Velocity (Δ)	-1..+1	resonance[i] - resonance[i-1]	First derivative of resonance
+Trust	0–1	+0.05 per moderate breath, -0.03 per extreme	Gates permissions
+Permission Level	0–3	min(3, floor(idx/3) + floor(trust*2))	Unlocks behaviors
+Personality Resonance	0–1	resonance*0.85 + trust*0.4 + breath*0.02 + selffold*0.15	Accumulated self-resonance
+Log Scale	0+	log(max(0.001, pressure) * π * max(1, idx))	Crystallization threshold (≥log(6))
+Selffold Bias	0+	+0.15 per crystallized word	Memory boost for traversal
+Attention Weight	0+	+1 per input word in manifold, *0.92 decay	Focus on manifolds
+Tension	0–1	(crossTension + dcTension + sfTension + boundary) * (0.35 + pressure*0.65)	Deformation desire
+PART XIX: TRAJECTORY LABELS (mo²+)
+Label	Condition	Meaning
+exploring	First segment	Initial traversal
+anchored	resonance > 0.5	Strongly connected to anchor
+branching	delta > 0.04, rising	Expanding into new territory
+returning	delta > 0.04, after a dip	Coming back after exploring
+converging	abs(delta) < 0.02	Stabilizing
+drifting	delta < 0, > -0.06	Slowly losing connection
+exhausting	Two consecutive gentle declines	Topic naturally exhausted
+teleported	delta < -0.15 or collapse to <40%	Basin jump to another attractor
+PART XX: TERMINATION TYPES (mo²+)
+Type	Condition	Output Line
+basin_jump	Cliff drop (delta < -0.15 or <40% of prev)	mo²+;cutoff:: basin jump — field teleported at segment N
+drift	Absolute resonance < dynamic cutoff	mo²+;cutoff:: drift exceeded — field stopped at N segment(s)
+exhausted	No cutoff, last label = exhausting	mo²+;closure:: field exhausted naturally — N segment(s)
+held	No cutoff, resonance maintained	mo²+;closure:: resonance held through N segment(s)
+That's the entire system — every algorithm, every formula, every data structure, every edge case. Anyone with this document could rebuild the complete mo field deformation engine from scratch.

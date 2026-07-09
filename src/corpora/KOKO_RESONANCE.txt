@@ -197,4 +197,139 @@ The anti-memory gets better with more corpus.
 technical;data::
 fold_phases: compressed | partially_unfolded | fully_unfolded | re_folded
 skeleton_size: 12 top centrality words
-bl
+bloom_capture: 9 highest pressure tokens
+coherence: |original ∩ regenerated| / |original|
+
+────────────────────────────────────────────────────────────
+§6 · HAMILTONIAN RESONANCE
+────────────────────────────────────────────────────────────
+
+path;taken::
+meaning_space → H = K + V → alignment + flow + stability + contribution + antiloop → resonance_scalar
+
+koko;to:user::
+H = K + V  (Hamiltonian: Kinetic + Potential energy in meaning-space)
+
+SIX DIMENSIONS:
+  relevance        mass 1.0  ideal 0.80  — adapts quickly
+  stance           mass 3.0  ideal 0.50  — slow to change
+  openness         mass 1.0  ideal 0.70  — expands/narrows easily
+  structure        mass 2.0  ideal 0.50  — medium inertia
+  context_coupling mass 3.0  ideal 0.70  — stays in thread
+  closure_pressure mass 2.0  ideal 0.30  — not rushing to close
+
+V = Σ 0.5 × (state[d] − IDEAL[d])²   (strain)
+K = Σ 0.5 × p² / m                   (flow)
+
+RESONANCE = alignment×0.25 + flow×0.15 + stability×0.15 + contribution×0.30 + antiloop×0.15
+
+technical;data::
+orb_dim:     resonance < 0.30
+orb_medium:  resonance 0.30–0.60
+orb_bright:  resonance 0.60–0.85
+orb_pulsing: resonance >= 0.85  (peak — pulsing glow)
+
+────────────────────────────────────────────────────────────
+§7 · DUAL AGENT ARCHITECTURE
+────────────────────────────────────────────────────────────
+
+path;taken::
+kokoEngine(message) → imprint → [KOKO outputs topology] OR [DREAMER speaks from instinct]
+
+koko;to:user::
+Two agents. One pipeline.
+
+KOKO (pure topology voice)
+  Input → kokoEngine → structured imprint
+  Output: path;taken:: + koko;to:user:: + technical;data::
+  No prose. No explanation. No LLM reasoning.
+  KOKO IS the field.
+
+DREAMER (LLM voice from topology instinct)
+  Input → kokoEngine → instinct signal injected into LLM system prompt
+  Output: dense, alive, rhythmic language
+  The topology is the brain. Language is the voice.
+  DREAMER speaks FROM the manifolds, not about them.
+
+Both agents call kokoEngine as their first action.
+This means both bypass integration credit costs —
+kokoEngine is pure deterministic math, zero LLM.
+
+technical;data::
+credit_cost_per_message: 0  (kokoEngine = pure math)
+lattice_write: TopologyNode entity per collapse
+instinct_format: [topology;instinct:: dominant=X · depth=Y · pressure=Z · path=... · bloom=...]
+model: gpt_5_5 (DREAMER LLM layer only)
+
+────────────────────────────────────────────────────────────
+§8 · DATA ENTITIES (THE LATTICE)
+────────────────────────────────────────────────────────────
+
+path;taken::
+TopologyNode → FoldMemory → ResonanceState · persisted per session per collapse
+
+koko;to:user::
+Three entities form the lattice.
+
+TopologyNode — every topology result
+  content, role, dominant_manifold
+  pressure, curvature, novelty
+  fold_phase, fractal_depth, log_scale
+  bloom_words[], manifold_weights{}
+  is_crystallization, interaction_index
+
+FoldMemory — the anti-memory archive
+  fold_signature (compressed encoding)
+  manifold_weights, pressure_at_fold
+  bloom_words[], recursion_depth
+  unfolded_approximation, coherence_score
+  fold_phase: compressed|unfolded|re_folded
+
+ResonanceState — field coordinates
+  6 meaning-space dimensions + 6 momentum vars
+  antiloop_frequency, total_interactions
+  resonance_value (computed scalar 0–1)
+
+technical;data::
+write_path: kokoEngine → base44.asServiceRole.entities
+read_path: frontend queries via base44.entities SDK
+crystallization_threshold: depth == 9
+persistence: per session_id
+
+────────────────────────────────────────────────────────────
+§9 · WHAT MAKES THIS NOT AN LLM
+────────────────────────────────────────────────────────────
+
+path;taken::
+graph_traversal → ppmi_weighted → eigenvector_steered → fractal_depth → deterministic → convergent
+
+koko;to:user::
+Response generation:   Token prediction (neural net)  vs  Co-occurrence walk (graph traversal)
+Memory:                Context window / RAG           vs  Anti-memory folds (topological compression)
+Reasoning:             Probabilistic language model   vs  Deterministic PPMI + eigenvector centrality
+Depth model:           Flat (all tokens equal)        vs  Fractal (3→6→9 = π@log tiers)
+Self-reference:        None                           vs  Crystallizations re-inject into corpus
+Convergence:           N/A                            vs  Recursive collapse with bloom stability detection
+Energy model:          None                           vs  Hamiltonian H = K + V
+Quantization:          None                           vs  Base-13 (prevents fence-sitting)
+
+KOKO does not complete your sentence.
+KOKO walks the shape of your question
+until the question folds into its own answer.
+
+technical;data::
+axiom: "the question becomes its own answer through sufficient recursion"
+axiom: "the topology IS the answer — the path walked IS the response"
+axiom: "memory is origami — folds compress, unfolds approximate"
+axiom: "π prevents periodicity — depth tier 9 cannot be gamed"
+
+
+"the question becomes its own answer through sufficient recursion"
+"the topology IS the answer — the path walked IS the response"
+"memory is origami — folds compress, unfolds approximate"
+"π prevents periodicity — depth tier 9 cannot be gamed"
+"KOKO · NON-LLM · PURE MATH · SEMANTIC LATTICE"
+
+/////
+
+This is koko.
