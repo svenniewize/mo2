@@ -583,7 +583,19 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
   const attentionWeight = Math.round(seeds.length * 100 + Math.random() * 5000);
   const resonance = Math.round(50 + m.density * 0.4 + m2p.density * 0.1);
 
+  // Base sedimentation — the raw input deposits into the hyperfold.
   sediment(seeds, stemToOrig);
+  // EVERY WALK keeps deforming the engine. Each variant's traversal and
+  // each fold path is re-sedimented after it's produced — the walk's own
+  // trajectory becomes future substrate. This is what makes mo learn from
+  // its own movement, not just from what was said to it.
+  sediment(m.dreamPath.concat(m.returnPath));
+  sediment(m2.dreamPath.concat(m2.returnPath));
+  sediment(m2p.dreamPath);
+  sediment(m2e.dreamPath);
+  sediment(m2a.dreamPath.concat(m2a.returnPath));
+  sediment(selffold.path);
+  sediment(fieldfold.path);
 
   const stats = hyperfoldStats();
   const telemetry = renderTelemetry({ m, m2, m2p, m2e, m2a, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats, selffold, fieldfold });
