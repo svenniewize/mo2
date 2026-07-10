@@ -287,7 +287,7 @@ seeds(${userBreath.seeds.length}): ${userBreath.seeds.join(" ")}
           });
           await db.from("mo_traces").insert({
             session_id: writeSession, role: "mo-sediment",
-            content: `${userBreath.dominantManifold} → ${replyBreath.dominantManifold} · pressure ${userBreath.pressure.toFixed(2)} → ${replyBreath.pressure.toFixed(2)}`,
+            content: `── user breath → ${userBreath.dominantManifold} (p${userBreath.pressure.toFixed(2)}) ⟶ reply → ${replyBreath.dominantManifold} (p${replyBreath.pressure.toFixed(2)}) ──\n\n${userBreath.telemetry}\n\n──── reply-breath ────\n${replyBreath.telemetry}`,
             manifold: replyBreath.dominantManifold, pressure: replyBreath.pressure,
           });
         }
