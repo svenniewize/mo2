@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemRouteImport } from './routes/system'
+import { Route as SpecRouteImport } from './routes/spec'
 import { Route as MohiniRouteImport } from './routes/mohini'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUnlockRouteImport } from './routes/api/unlock'
@@ -26,6 +27,11 @@ import { Route as ApiPublicMoRouteImport } from './routes/api/public/mo'
 const SystemRoute = SystemRouteImport.update({
   id: '/system',
   path: '/system',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpecRoute = SpecRouteImport.update({
+  id: '/spec',
+  path: '/spec',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MohiniRoute = MohiniRouteImport.update({
@@ -92,6 +98,7 @@ const ApiPublicMoRoute = ApiPublicMoRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/mohini': typeof MohiniRoute
+  '/spec': typeof SpecRoute
   '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/mohini': typeof MohiniRoute
+  '/spec': typeof SpecRoute
   '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/mohini': typeof MohiniRoute
+  '/spec': typeof SpecRoute
   '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/mohini'
+    | '/spec'
     | '/system'
     | '/api/chat'
     | '/api/memory'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/mohini'
+    | '/spec'
     | '/system'
     | '/api/chat'
     | '/api/memory'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/mohini'
+    | '/spec'
     | '/system'
     | '/api/chat'
     | '/api/memory'
@@ -186,6 +198,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MohiniRoute: typeof MohiniRoute
+  SpecRoute: typeof SpecRoute
   SystemRoute: typeof SystemRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
@@ -206,6 +219,13 @@ declare module '@tanstack/react-router' {
       path: '/system'
       fullPath: '/system'
       preLoaderRoute: typeof SystemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/spec': {
+      id: '/spec'
+      path: '/spec'
+      fullPath: '/spec'
+      preLoaderRoute: typeof SpecRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mohini': {
@@ -298,6 +318,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MohiniRoute: MohiniRoute,
+  SpecRoute: SpecRoute,
   SystemRoute: SystemRoute,
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,

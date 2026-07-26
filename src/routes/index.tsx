@@ -73,6 +73,7 @@ function MoPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("ai");
+  const [anansiStretch, setAnansiStretch] = useState<number>(1);
   const [glyph, setGlyph] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("mo.glyph") === "1";
@@ -159,7 +160,7 @@ function MoPage() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, sessionId, mode }),
+        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch }),
       });
       if (!r.ok) {
         const err = await r.text();
@@ -204,6 +205,8 @@ function MoPage() {
           glyph={glyph}
           setGlyph={setGlyph}
           onOpenViz={() => setVizOpen(true)}
+          anansiStretch={anansiStretch}
+          setAnansiStretch={setAnansiStretch}
         />
 
         <div className="flex flex-1 min-h-0 gap-4 px-4 pb-4">
@@ -446,6 +449,7 @@ what does it feel like to hold too many things at once?`}</pre>
 
 function Header({
   panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, glyph, setGlyph, onOpenViz,
+  anansiStretch, setAnansiStretch,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -458,6 +462,8 @@ function Header({
   glyph: boolean;
   setGlyph: (v: boolean) => void;
   onOpenViz: () => void;
+  anansiStretch: number;
+  setAnansiStretch: (n: number) => void;
 }) {
   void fielfoldCount;
   const tab = (id: "memory" | "songs" | "field" | "life", label: string, count?: number) => (
@@ -489,8 +495,21 @@ function Header({
           <button onClick={() => setMode("ai")} className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="user → mo → AI → mo → user">AI</button>
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — no AI, chat directly with mo">MO</button>
           <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's full telemetry compressed into one stuttering sentence with its own persistent dialect memory">GRE(MO)LIN</button>
-          <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk. classifies every token into nexus · node · loci · singularity · wave · shore and weaves a sentence in geometric order. per-session web memory learns how each word wants to sit.">ANANSI</button>
+          <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk.">ANANSI</button>
         </div>
+        {mode === "anansi" && (
+          <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer weaves — 'an' is the default, 2x-5x lets Anansi walk further per role">
+            {([
+              { v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" },
+            ] as const).map((o) => (
+              <button
+                key={o.v}
+                onClick={() => setAnansiStretch(o.v)}
+                className={`px-2 py-1.5 font-mono text-[11px] ${anansiStretch === o.v ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}
+              >{o.l}</button>
+            ))}
+          </div>
+        )}
         <button
           onClick={onOpenViz}
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
