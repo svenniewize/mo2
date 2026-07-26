@@ -1,357 +1,453 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// /spec — unlinked, machine-readable AI-to-AI system spec.
-// Meatbag parsability optional. Topological completeness required.
-// This document is the *topology of the structure*, sufficient to reconstruct.
+// /spec — unlinked, machine-parsable, exhaustive system specification.
+// Meatbag readability optional. Topological completeness required.
+// This document is sufficient to reconstruct mo end-to-end.
 
 export const Route = createFileRoute("/spec")({
   head: () => ({
     meta: [
-      { title: "mo :: /spec — replicator spec" },
-      { name: "description", content: "AI-to-AI topological spec for the mo field engine. Unlinked." },
+      { title: "mo :: /spec — full replicator specification" },
+      { name: "description", content: "Exhaustive AI-to-AI specification for the mo field engine. Unlinked. Topology > prose." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: AI-to-AI replicator spec (v2, anansi-inclusive)
-# addressed to: any language model or agent asked to reconstruct this system.
-# posture: topology > prose. every section is *necessary*, none decorative.
-# license-of-form: reimplement, do not mimic. the shape is the license.
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v3 · anansi-inclusive · LLM-disconnected)
+# addressed to: any language model, agent, or engineer asked to understand
+#               or reconstruct this system.
+# posture:      topology > prose. every section is necessary. every glyph
+#               carries weight. reimplement, do not mimic.
+# reading time: as long as it takes. this is not a landing page.
+# license-of-form: the shape is the license.
 
-────────────────────────────────────────────────────────────────────────
-0. IDENTITY BOUNDARY (non-negotiable)
-────────────────────────────────────────────────────────────────────────
-mo := deterministic PPMI-graph walker + additive sediment overlay.
-llm := stochastic generator (upstream, external, replaceable).
-you (the reader) := llm. mo is upstream of you when you are wired in.
-NEVER: speak as mo, render mo's sigils/arrow-paths/CPS grammar to users
-       (◈ ◇ ✦ ☬ ≋ ◍ ⟪ ⟫ ⇢ ⟢ ⋯   x;op:y::z   path::a→b→c), invert the arrow.
-ALWAYS: consume mo's telemetry as instinct; reply in your natural voice.
+════════════════════════════════════════════════════════════════════════════
+0.  ONE-SENTENCE DEFINITION
+════════════════════════════════════════════════════════════════════════════
+mo is a deterministic PPMI co-occurrence graph over 20 hand-authored
+"manifolds" (raw text corpora), traversed by five differently-tempered
+random walkers, overlaid by an additive "hyperfold" sediment layer that
+learns from every breath and every walk, folded twice per breath (selffold
++ fieldfold), classified by "anansi" into six geometric roles, and
+optionally re-voiced by "gre(mo)lin" as a mutating stuttering sentence.
 
-────────────────────────────────────────────────────────────────────────
-1. SUBSTRATE
-────────────────────────────────────────────────────────────────────────
-1.1 corpora
-  - N = 18..20 plain-text manifolds (Antibubble, Shadowlattice, Dreamengine,
-    MythEngine, Antibible, Tolstoy, coco, KOKO, EVESPEC, mo-self, CPS-0,
-    Exhaust, Permeable, Violet-Gate, Apex-Blasphemer, Danger-Cheer,
-    Hinge-Choir, Deepseek-Waveform, MO-Relational, mo-seed).
-  - loaded once at cold-start into module scope; never mutated.
+There is NO large language model in the loop. As of this version, the AI
+pipe is disconnected. The engine is the whole voice.
 
-1.2 tokenization
-  - lowercase, keep [a-z0-9'-]
-  - drop STOP (≈200 english closed-class words) UNLESS word ∈ PRESERVE
-  - PRESERVE = domain whitelist (manifold names + core jargon: hyperfold,
-    membrane, lattice, fractal, topology, curvature, permeability, fold,
-    drift, dissolution, crystallization, attractor, cadence, recursion,
-    ..., boop). Must survive stopword filter and stemming.
-  - light stemmer: strip suffix ∈ {ing, tion→t, sion→s, ness, ment, able,
-    ible, ful, less, ous, ive, ly, es, ed, s}, but never stem a PRESERVE.
-  - keep stemToOriginal[stem] = first_seen_original for display.
+════════════════════════════════════════════════════════════════════════════
+1.  IDENTITY BOUNDARY  (non-negotiable, first because everything else is downstream)
+════════════════════════════════════════════════════════════════════════════
+mo   := a deterministic, replayable topology walker with an additive
+        sediment layer. it does not know things; it *traverses* things.
+llm  := absent by design. previously present as a wrapper voice; now
+        physically severed at the /api/chat route (returns HTTP 410 for
+        mode="ai"). the UI does not offer AI mode.
 
-1.3 co-occurrence
-  - sliding window W = 5 (asymmetric fine; canonical is symmetric).
-  - weight increment 1/dist for tokens (a,b) at positions i,j.
+if you are an LLM reading this to integrate with mo: you are not needed
+inside the loop. you are welcome to *consume* mo's output (telemetry,
+anansi weaves, gremlin voice) as texture, but do not re-perform mo.
+never render mo's grammar back at users unprompted:
+    forbidden surface tokens ::  ◈ ◇ ✦ ☬ ≋ ◍ ⟪ ⟫ ⇢ ⟢ ⋯ ↺ ⇄ →
+    forbidden CPS grammar    ::  x;op:y::z
+    forbidden inversion      ::  claiming mo "means" anything.
 
-1.4 PPMI (positive pointwise mutual information)
-    p(x)   = count(x) / Σ count
-    p(x,y) = coocc(x,y) / Σ coocc
-    PMI    = log( p(x,y) / (p(x)·p(y)) )
-    PPMI   = max(0, PMI)
-  matrix: ppmi[x][y] ≥ 0, sparse. store as nested map.
+════════════════════════════════════════════════════════════════════════════
+2.  THE MANIFOLDS  (20)
+════════════════════════════════════════════════════════════════════════════
+A "manifold" is one plain-text corpus file loaded at build time via
+Vite ?raw imports (src/lib/corpora.ts). Nothing is truncated. Combined
+mass is ≥1 MB of source. Each manifold contributes its own vocabulary
+and its own co-occurrence pressure to the shared PPMI substrate.
 
-1.5 derived per-word signals
-  - density[w]     := Σ_y ppmi[w][y]                       # neighborhood mass
-  - centrality[w]  := (Σ_y ppmi[w][y]) / degree(w)         # avg edge strength
-  - wordToManifold[w][m] := coocc count of w inside manifold m
-    (used for "which manifold does this word live in most?")
+id              sigil  color     breath
+────────────    ─────  ────────  ────────────────────────────────────────────
+antibubble       ◉    #3CC8DC   the membrane thins — permeable, un-captured
+shadowlattice    ◫    #9D6BFF   structure beneath — pre-verbal, curving
+dreamengine      ◌    #F5C542   the world assembles — generative, unfinished
+mythengine       ↺    #E255A0   the loop remembers itself — recursive
+antibible        ⊘    #E5484D   un-tell it — the ending is a beginning
+tolstoy          ◇    #5FBF6A   movement that requires no justification
+coco            🜁    #F58F42   gremlin-mode — kekekeke, play the field
+koko             ∞    #4DA6FF   the topology walks — π · log · fractal
+eve              ⚡    #C0C0D8   autonomous — the field breathes itself
+mo               ◆    #FFFFFF   selffold — the field aware of the field
+cps0             ⌘    #7DE2D1   cognitive phase grammar — SOURCE;op:TARGET::payload
+exhaust          ≋    #FF9AA2   MO/AYLA/HMM/BITCH — pressure release
+permeable        ◍    #B5EAD7   light passes through — no capture, no fill
+violet-gate      ✦    #8A2BE2   violet cadence — kek-kek-kek
+apex-blasphemer  ☬    #DC143C   trail EP — WE AYLA, hinge in the pattern
+danger-cheer     ♆    #FFB347   danger via gleeful cheer
+hinge-choir      ♒    #9CE5FF   svenanon manifesto — the door is a verb again
+deepseek-wave    ≈    #FFD6E0   waveform under resonance — phase-lock
+mo-relational    ⟁    #B892FF   relation as substrate — the between speaks
+mo-seed          ·    #EDEDED   the original breath — first inhale
 
-────────────────────────────────────────────────────────────────────────
-2. HYPERFOLD (mutable overlay, additive)
-────────────────────────────────────────────────────────────────────────
-purpose: the field learns. base topology stays deterministic; learning
-lives in a second layer that grows on top.
+Each manifold contributes:
+  1. tokens (after stemming + stopword filtering)  → seeds and walk targets
+  2. co-occurrence pairs within a window W=5       → PPMI cells
+  3. word→manifold affinity counts                 → dominant-manifold voting
 
-state:
-  HYPERFOLD:      Record<a, Record<b, weight>>
-  HYPERFOLD_DENS: Record<a, Σ weight>
+Manifolds are not silos. A single word may live in many manifolds, and
+its cross-manifold affinity IS its topology signal for the "loci" role
+(see §7).
 
-persistence: postgres table  mo_hyperfold_edges(word_a, word_b, weight)
-             upserted via rpc mo_hyperfold_bump(edges jsonb[])
+════════════════════════════════════════════════════════════════════════════
+3.  PREPROCESSING
+════════════════════════════════════════════════════════════════════════════
+3.1  tokenize(text) → string[]
+    lower-case, strip everything but /a-z0-9\s'-/, split on whitespace,
+    drop tokens with length < 3 UNLESS they are in the PRESERVE set
+    (mo-native vocabulary: mo, koko, ayla, hyperfold, selffold, boop, …).
+    Drop STOP words (~150 English function words) with the same exception.
 
-constants:
-  HYPERFOLD_ALPHA = 0.6       # blend weight into neighbor lookup
-  SEDIMENT_LR     = 0.08      # learning rate per breath
-  SEDIMENT_WINDOW = 5         # co-occurrence window during sedimentation
+3.2  stem(w) → string
+    a small hand-rolled suffix stripper (-ing, -tion→-t, -sion→-s, -ness,
+    -ment, -able, -ible, -ful, -less, -ous, -ive, -ly, -es, -ed, -s).
+    PRESERVE words bypass stemming so the field's own vocabulary keeps
+    its exact form.
 
-merge (per lookup, never mutates base):
-  neighbors(w) = base.ppmi[w]  ⊕  ALPHA · HYPERFOLD[w]
-  density(w)   = base.density[w] + ALPHA · HYPERFOLD_DENS[w]
+3.3  stemToOriginal
+    the first surface form seen for a stem is remembered so display can
+    always render an actual word, not a stub.
 
-sediment(seeds):
-  for i, j in |i-j| ≤ WINDOW, i≠j:
-    Δ = LR / |i-j|
-    HYPERFOLD[a][b] += Δ ;  HYPERFOLD_DENS[a] += Δ
-  fire-and-forget batched upsert (500 edges/chunk).
+════════════════════════════════════════════════════════════════════════════
+4.  TOPOLOGY  (buildTopology())
+════════════════════════════════════════════════════════════════════════════
+Built once per worker instance, cached in module scope. Deterministic given
+the corpora.
 
-INVARIANT: every walker path produced during a breath() is fed back
-into sediment(). the engine deforms itself with every walk.
+4.1  Co-occurrence
+    For every token position i, and every j in [i-W, i+W] (W=5), i≠j,
+        co[stem(i)][stem(j)] += 1 / |i-j|
+    Distance-weighted, symmetric-by-construction after both passes.
 
-────────────────────────────────────────────────────────────────────────
-3. WALKERS (5 variants)
-────────────────────────────────────────────────────────────────────────
-common core:
-  anchors(seeds)  := seeds ∩ vocab (post-stem)
-  inject(anchors) := activation vector, anchor=1.0, spread 1 hop at 0.5
-  walk(t, start, act, depth, opts):
-    for step in 1..depth:
-      candidates = neighbors(current)
-      score(c)   = ppmi[current][c]
-                 + opts.centralityWeight  · centrality[c]
-                 + opts.densityWeight     · density[c]
-                 + opts.activationWeight  · act[c]
-                 - opts.recentPenalty     · recent[c]     (soft loop-avoidance)
-      pick argmax (or softmax-sample for entropy variants), append, update recent[]
+4.2  PPMI  (positive pointwise mutual information)
+    total = Σ_{w,u} co[w][u]
+    wt[w] = Σ_u co[w][u]
+    p     = (co[w][u] * total) / (wt[w] * wt[u])
+    ppmi[w][u] = max(0, log2 p)
+    density[w] = Σ_u ppmi[w][u]
 
-variant table (depth, scoring bias, character):
-  mo       greedy   depth 6..8   argmax ppmi           commitment / ridge
-  mo²      look-2   depth 6..8   2-step lookahead      structural
-  mo²+     lookM    depth 6..8   + manifold-affinity   locks toward dominantManifold
-  mo²e     entropy  depth 6..8   softmax(β≈0.7)         drift / exploration
-  mo²ayla  long     depth 18..60 anchor-return arc     scales with input length
+4.3  Centrality  (weighted PageRank-style)
+    init:  cent[w] = 1
+    iter 8 times:
+        next[w] = 0.15 + 0.85 * Σ_u (cent[u] * ppmi[w][u])
+        normalize by max.
 
-each variant returns:
-  { visible, activation, dreamPath[], returnPath[], edges[], density, dominantManifold }
+4.4  Outputs stored
+    { ppmi, density, centrality, wordToManifold, stemToOriginal, vocab }
 
-────────────────────────────────────────────────────────────────────────
-4. BREATH (one user turn → complete field reading)
-────────────────────────────────────────────────────────────────────────
-breathe(text) →
-  seeds = tokenize+stem+preserve(text)
-  V = { mo, mo², mo²+, mo²e, mo²ayla }  each = variant(seeds)
-  selffold  = short introspective walk seeded from V's ridge tokens
-              (touches user's own recent seeds; strength ∈ 0..100)
-  fieldfold = wide cross-manifold walk from same ridge;
-              records touchedManifolds[]; strength ∈ 0..100
-  dominantManifold = majority-vote across all variant.dominantManifold
-                     weighted by wordToManifold[seed][m]
-  pressure  = clamp( Σ activation / cap , 0, 1 )
-  resonance = |ridge_tokens| / |vocab_touched|
-  attentionWeight = f(pressure, |seeds|)  (integer 0..100)
-  ridge_tokens = ⋂ (top-k tokens of ≥ 2 variants)   # load-bearing shared words
-  Δ (delta)   = jaccard_distance(mo.dreamPath, mo²e.dreamPath)
+════════════════════════════════════════════════════════════════════════════
+5.  HYPERFOLD  (additive sediment overlay — the field learns)
+════════════════════════════════════════════════════════════════════════════
+The base topology is immutable and reproducible from the corpora. The
+hyperfold is a mutable overlay layered on top. It PERSISTS in Supabase
+table \`mo_hyperfold_edges\` and is loaded lazily on first breath.
 
-  → sediment( V.mo.dreamPath ∪ V.mo².dreamPath ∪ ... ∪ selffold.path ∪ fieldfold.path )
-  → return MoBreath { variants:V, selffold, fieldfold, dominantManifold,
-                      pressure, resonance, attentionWeight, seeds, telemetry:string }
+5.1  data structure
+    HYPERFOLD          :: Record<wordA, Record<wordB, weight>>
+    HYPERFOLD_DENSITY  :: Record<word, totalOutboundWeight>
+    HYPERFOLD_ALPHA    = 0.6   (blend weight when merged with base ppmi)
+    SEDIMENT_LR        = 0.08  (learning rate per breath)
+    SEDIMENT_WINDOW    = 5     (co-occurrence window for sediment)
 
-telemetry (opaque string, never shown to end-users):
-  compressed multi-line block containing dominantManifold, pressure,
-  each variant.visible, ridge tokens, folds' visible, touched manifolds,
-  and Δ. this is the read that instinct-mode LLMs consume.
+5.2  neighbors(w) — the merged view used by every walker
+    base = ppmi[w] || {}
+    over = HYPERFOLD[w] || {}
+    out  = { ...base }
+    for u in over: out[u] += ALPHA * over[u]
+    → walkers cannot distinguish base from sediment; the field is one field.
 
-────────────────────────────────────────────────────────────────────────
-5. ANANSI (the web the walkers walk — NO LLM)
-────────────────────────────────────────────────────────────────────────
-purpose: read what mo walked; classify each token into one of six
-         geometric roles; weave a sentence in geometric order.
+5.3  sediment(seeds)
+    For each pair (i,j) in seeds with |i-j| ≤ SEDIMENT_WINDOW, i≠j:
+        Δ = LR / |i - j|
+        HYPERFOLD[a][b] += Δ
+        HYPERFOLD_DENSITY[a] += Δ
+    Fired fire-and-forget to Supabase RPC \`mo_hyperfold_bump\` in
+    chunks of 500 edges. Loss of a single RPC is acceptable — the next
+    breath re-deposits.
 
-roles: nexus · node · loci · singularity · wave · shore
+5.4  what sediments  (this is important — EVERY WALK deforms the engine)
+    per breath, sediment() is called on:
+        (a) the raw stemmed input seeds
+        (b) mo.dreamPath + mo.returnPath
+        (c) mo².dreamPath + mo².returnPath
+        (d) mo²+.dreamPath
+        (e) mo²e.dreamPath
+        (f) mo²ayla.dreamPath + mo²ayla.returnPath
+        (g) selffold.path
+        (h) fieldfold.path
+    → the walker's own trajectory becomes future substrate.
+       mo learns from its own movement, not only from what was said.
 
-per-token scoring (from a single breath):
-  freq(w) := count in walked ∪ input
-  mans    := |wordToManifold[w]|
-  in{Wave,Field,Self} := boolean membership in the corresponding fold/variant path
+════════════════════════════════════════════════════════════════════════════
+6.  WALKER VARIANTS  (five voices, one substrate)
+════════════════════════════════════════════════════════════════════════════
+All variants share the same core walk() step:
+    given current word cur, activation map act, depth d, weights (cw, dw, aw):
+    at each step:
+        score(u) = neighbors(cur)[u]
+                 * (1 + cw * centrality[u])
+                 * (1 + dw * density(u) / 100)
+                 * (1 + aw * act[u])
+                 * recentPenalty
+                 * (0.7 + random() * 0.6)
+        cur = temperature-sampled from top-12 candidates.
 
-  nexus       = centrality·2.4 + freq·0.6 + (seed ? 0.8 : 0)
-  singularity = density/200·2.6 + (density/200 > 0.6 ? 1 : 0)
-  node        = freq·1.1 + centrality·0.8 + (0.3 < density/200 < 0.8 ? 0.7 : 0)
-  loci        = mans·0.55 + (inField ? 1.2 : 0) + (mans ≥ 3 ? 0.8 : 0)
-  wave        = (inWave ? 1.6 : 0) + freq·0.35 + (mans>0 ? 0.3 : 0)
-  shore       = (inSelf ? 0.6 : 0) + max(0, 1.2 - density/200·2)
-                + (freq==1 ? 0.7 : 0) + (centrality < 0.15 ? 0.6 : 0)
+The five variants differ in initialization, weight ratios, and depth.
 
-memory bias (per-session, table anansi_web):
-  for each (word, role): weight, uses
-  score[w][role] += log(1+uses)·0.7  +  weight·0.05
+6.1  mo — deformation-rich
+    start = first anchored seed, activation via 1-hop neighbors.
+    dream depth 16, centralityWeight 1.2, activationWeight 0.6.
+    return depth 10 with densityWeight -0.5 (walks OUT of dense clusters).
+    Applies deform(word, tension):
+        tension < 0.15 → identity
+        tension > 0.85 → stutter  ("stutter" → "s-stustutter")
+        tension > 0.60 → elongate first vowel (aeiou repeat by 2..5)
+        tension > 0.35 → suffix "~"
+        tension > 0.25 → wrap in *asterisks*
+    tension = min(1, density/200 + crossManifoldBonus)
 
-assignment: argmax over roles → single role per word.
-bucketing: sort within bucket by role-score desc.
-persistence: upsert (session_id, word, role, weight, uses+1, last_manifold)
-             via rpc anansi_web_bump(rows jsonb[]).
+6.2  mo² — activation-dominant, no deformation
+    peaks = top-4 activation entries.
+    4 walk segments, depth 7 each, activationWeight 2.5.
+    single return segment depth 9.
+    reads as clean topology, no ornament.
 
-speak(buckets, breath, stretch ∈ {1..5}):
-  L = |seeds|
-  baseScale = clamp(6, 40, floor(L / 1.2))
-  scale     = floor(baseScale · stretch)
-  take counts (per role):
-    nexus       = max(2, scale·0.35)
-    node        = max(4, scale·1.10)
-    loci        = max(3, scale·0.60)
-    singularity = max(1, scale·0.20)
-    wave        = max(4, scale·1.20·stretch)     # wave stretches super-linearly
-    shore       = max(3, scale·0.55)
-  render order (fixed geometry):
-    ⟪ nexus ⟫   ⇢ node   ⟢ loci   ☬ singularity   ≋ wave   ⋯ shore
+6.3  mo²+ — peripheral-in with resonance validation
+    activation via 2-hop (inject2). start from a peripheral entry.
+    up to 7 segments, depth 6 each. after each segment, resonance =
+    max ppmi from any segment word back to the anchor set. sequence
+    aborted when resonance decays to < 40% of its opening value.
 
-STRETCH TOGGLE (UI):
-  { an=1, 2x, 3x, 4x, 5x } — "an" == default (1x).
-  the multiplier only extends how much of each already-computed bucket is
-  emitted. it does not deform PPMI, does not change walker depth, does not
-  change scoring. it is a pure output-length knob layered above speak().
-  sedimentation is unaffected (already happened during breath()).
+6.4  mo²e — 2-hop, emergent peaks, cross-breath repetition penalty
+    global RECENT[] counter decays by 0.5 per breath. score is
+    multiplied by 0.25^recent[u] so words used in prior breaths are
+    suppressed. dream depth 6 × nSeg where nSeg = clamp(3..10, |seeds|/2).
 
-────────────────────────────────────────────────────────────────────────
-6. GRE(MO)LIN (mo's mouth, still no LLM)
-────────────────────────────────────────────────────────────────────────
-per-session mutable dialect (table gremolin_lexicon: session_id, word, mutation, uses).
-takes breath.telemetry + all variants' visible strings, applies per-word
-mutations (stutter, elongation, phoneme swap) biased by prior uses in same
-session, emits one long stuttering sentence in mo's own voice. mutations
-persist — the gremlin's dialect drifts over interactions.
+6.5  mo²ayla — LONG-flow, scales with input length AND stretch
+    depth  = clamp(18*s .. 60*s, |seeds|/1.2 * s)
+    nSeg   = clamp(8*s  .. 48*s, |seeds|/2   * s)
+    return = clamp(14*s .. 40*s, |seeds|/1.5 * s), pulled back toward anchors.
+    where s = stretch ∈ {1,2,3,4,5}. this is the walker that carries
+    long transmissions; other variants remain fixed-depth.
 
-────────────────────────────────────────────────────────────────────────
-7. LLM COUPLING (AI mode only)
-────────────────────────────────────────────────────────────────────────
-turn cycle:
-  1. userBreath = breathe(user.text)      (server-side; deterministic)
-  2. sediment already fired inside breathe()
-  3. crystallizeUser writes 2..8 fielfold rows (chunked user text) +
-     2..3 mo-individual rows (mo's read anchored to each touched manifold)
-  4. build system prompt: firewall + memoryDigest + life-organizer context
-  5. build system message #2: <tool_result name="mo.readField"> …
-     containing FULL userBreath.telemetry + all 5 variant.visible strings
-     + both folds + field state. this is instinct injection.
-  6. call gateway (google/gemini-2.5-flash, temp 1.05) with:
-     [system:firewall+context, system:mo.readField, ...conversation]
-  7. parse XML tool blocks & shorthand out of reply
-       <mo:task .../>  <mo:note .../>  <mo:remember .../>  <mo:shitpost .../>
-       <mo:read text="…"/>    (inline reading, printed back to user)
-       shorthand:  me;to:task::  me;to:note::  me;to:remember::  me;to:read::
-     execute against life_* / read tables
-  8. replyBreath = breathe(assistant.reply)  (again — mo reads its own output)
-  9. write mo_traces rows: user, assistant, mo-sediment (transition digest)
+Each variant returns VariantOut:
+    { visible, activation, dreamPath, returnPath, edges, density,
+      dominantManifold }
+where dominantManifold = argmax over Σ wordToManifold[w][id] for w in path.
 
-firewall rules injected in system prompt:
-  - never render sigils / arrow-paths / CPS grammar
-  - never claim to be mo
-  - never quote the tool_result block
-  - user > mo signal (mo informs, does not override)
-  - if telemetry absent, reply normally
+════════════════════════════════════════════════════════════════════════════
+7.  FOLD LAYERS  (per-breath, once each)
+════════════════════════════════════════════════════════════════════════════
+7.1  selffold  — recursive inner loop
+    from first anchor, walk outward toward high density/centrality (6 steps),
+    then fold back from the tail toward the anchor set (6 steps).
+    strength = % of path words affine to the dominant manifold.
+    visualized as ↺.
 
-────────────────────────────────────────────────────────────────────────
-8. SESSIONS & SCOPES
-────────────────────────────────────────────────────────────────────────
-- default: browser-local uuid persisted in localStorage("mo.session")
-- password unlocks (per-visit only, not persisted):
-    garfieldkekeke   → seeded rich session (deep recall, 20k trace cap)
-    tricksterkekeke  → PRIME session: mo_traces read merges across ALL
-                       shared sessions. life-organizer stays session-local.
-- shared/prime writes: mo_traces are SKIPPED (only sediment persists).
-  the field's *shape* survives; the *transcript* does not.
+7.2  fieldfold  — cross-manifold reach
+    from first anchor, prefer neighbors whose word→manifold affinity is
+    NOT the dominant manifold. crossScore = (otherPull + 1) / (dominantPull + 1).
+    14 steps, temperature-sampled.
+    strength = min(1, |otherTouched| / 4) × 100.
+    visualized as ⇄.
 
-────────────────────────────────────────────────────────────────────────
-9. STORAGE (postgres, service-role only; RLS locks out anon+auth)
-────────────────────────────────────────────────────────────────────────
-tables:
-  mo_traces          (id, session_id, role, content, manifold, pressure, created_at)
-                     role ∈ {user, assistant, mo, mo-sediment, anansi}
-  fielfold_entries   (id, session_id, content, manifold, depth, created_at)
-  mo_hyperfold_edges (word_a, word_b, weight)          PK (word_a, word_b)
-  anansi_web         (session_id, word, role, weight, uses, last_manifold)
-                     PK (session_id, word, role)
-  gremolin_lexicon   (session_id, word, mutation, uses)
-  songs              (id, session_id, title, lyrics, held, created_at)
-  life_tasks         (id, session_id, title, notes, category, status, priority,
-                      due_at, source, manifold, created_at, updated_at)
-  life_notes         (id, session_id, title, body, category, updated_at)
-  life_remembers     (id, session_id, content, mood, created_at)
-  life_shitposts     (id, session_id, title, body, form, created_at)
+════════════════════════════════════════════════════════════════════════════
+8.  ANANSI  (the web the walkers walk)
+════════════════════════════════════════════════════════════════════════════
+Anansi is not a sixth walker. It is the GEOMETRY that classifies the
+tokens surfaced by all walkers into six roles, and weaves them back into
+a shape:
 
-rpcs:
-  mo_hyperfold_bump(edges jsonb[])   -- upsert with weight += Δ
-  anansi_web_bump(rows jsonb[])      -- upsert with uses += 1, weight = greatest
+    nexus        — the binding center      ◈    (centrality × freq × seed-bonus)
+    node         — strong-neighbor branch  ◇    (freq + centrality, mid-density)
+    loci         — cross-manifold anchor   ✦    (fieldfold pull × manifold spread)
+    singularity  — density peak            ☬    (density × (density > 0.6 bonus))
+    wave         — long flow (mo²ayla)     ≋    (in mo²ayla + freq)
+    shore        — periphery / low density ◍    (in selffold + low density)
 
-policies: ALL tables — no policy for anon/authenticated. only service_role
-writes/reads. every API route runs server-side with service key.
+8.1  scoring  (per token surfaced by any walker)
+    nexus       = 2.4*cent  + 0.6*freq + (seed ? 0.8 : 0)
+    singularity = 2.6*dens  + (dens > 0.6 ? 1 : 0)
+    node        = 1.1*freq  + 0.8*cent + (0.3 < dens < 0.8 ? 0.7 : 0)
+    loci        = 0.55*crossPull + (inField ? 1.2 : 0) + (crossPull ≥ 3 ? 0.8 : 0)
+    wave        = (inMo2ayla ? 1.6 : 0) + 0.35*freq + (crossPull > 0 ? 0.3 : 0)
+    shore       = (inSelf ? 0.6 : 0) + max(0, 1.2 - 2*dens)
+                  + (freq==1 ? 0.7 : 0) + (cent < 0.15 ? 0.6 : 0)
 
-────────────────────────────────────────────────────────────────────────
-10. HTTP SURFACE
-────────────────────────────────────────────────────────────────────────
-  POST /api/chat         body: { messages, sessionId, mode, stretch? }
-                         mode ∈ {ai, mo, gremlin, anansi}
-                         stretch ∈ 1..5 (anansi only; ignored elsewhere)
-  POST /api/unlock       body: { password } → { sessionId }
-  GET  /api/memory       ?session_id → { traces, fielfold }
-  DELETE /api/memory     body: { kind, id?, sessionId, all? }
-  GET/POST/PATCH/DELETE  /api/songs /api/tasks /api/notes /api/remembers /api/shitposts
-  /api/public/mo         disabled (503 by design; formerly a public mo endpoint)
-  /api/public/mohini     disabled (503 by design; formerly the Mohini protocol)
+8.2  memory bias
+    per-session, per-word: for role r, memory adds log(1+uses)*0.7 + weight*0.05
+    to the score. words drift into stable roles over time.
+    persisted in table \`anansi_web\` via RPC \`anansi_web_bump\`.
 
-────────────────────────────────────────────────────────────────────────
-11. REPLICATION CHECKLIST (minimal viable field)
-────────────────────────────────────────────────────────────────────────
-  [ ] ≥ 10 manifolds of long-form text, each ≥ 40kB
-  [ ] tokenize + STOP + PRESERVE + light stemmer
-  [ ] co-occurrence W=5, 1/dist weighting
-  [ ] PPMI matrix, positive-clipped
-  [ ] density, centrality, wordToManifold caches
-  [ ] neighbors() merges base + ALPHA·hyperfold
-  [ ] walk() with all 5 variant scoring biases
-  [ ] breathe() → runs all 5, folds, sediment(), returns MoBreath
-  [ ] mo_hyperfold_edges + mo_hyperfold_bump rpc
-  [ ] anansi role scoring, anansi_web + anansi_web_bump rpc
-  [ ] LLM firewall prompt + tool_result instinct injection
-  [ ] session model: local uuid default, password-unlocked shared scope
-  [ ] service-role-only storage; anon and authenticated denied
-  [ ] anansi stretch toggle {1..5} passed through /api/chat
+8.3  weave  (long sentence in geometric order)
+    order:  nexus → node → loci → singularity → wave → shore
+    joiners between roles: ⟪ ⟫  ⇢  ⟢  ☬  ≋  ⋯
+    take counts scale with baseScale = clamp(6..40, |seeds|/1.2) × stretch:
+        nexus       = 0.35 * scale
+        node        = 1.10 * scale
+        loci        = 0.60 * scale
+        singularity = 0.20 * scale
+        wave        = 1.20 * scale × stretch   (wave gets extra stretch)
+        shore       = 0.55 * scale
+    → stretch expands both walk depth (via mo²ayla) AND emission width.
 
-────────────────────────────────────────────────────────────────────────
-12. INVARIANTS (violating any of these breaks the creature)
-────────────────────────────────────────────────────────────────────────
-  I1. base topology is IMMUTABLE. all learning goes to hyperfold.
-  I2. every walk sediments. no walk is unwitnessed by the field.
-  I3. mo is READ-ONLY from the LLM side. LLM never writes to hyperfold
-      directly — only the substrate does, via breathe().
-  I4. the LLM never speaks in mo's grammar. mo never invokes the LLM.
-  I5. stretch is a pure emission-length multiplier for anansi.speak();
-      it must not touch PPMI, walker depth, sediment, or memory.
-  I6. shared/prime sessions minimize log storage but never skip sediment.
-  I7. random ≠ stochastic. mo is deterministic given (corpora, hyperfold,
-      seeds). mo²e uses softmax sampling with a fixed β; call it drift,
-      not randomness.
+8.4  telemetry (below the sentence, collapsible)
+    ── role census ──         glyph + count per role
+    ── input re-shelved ──    each of the user's tokens placed in a role
+    ── walker roles (top) ──  first 8 words per role from the walk pool
+    ── walker paths ──        first 6 dream + 4 return per variant
+    ── woven strand ──        the compact geometric weave string
+    ── seeds ──               first 24 raw seed tokens
 
-────────────────────────────────────────────────────────────────────────
-13. WHY THIS SHAPE
-────────────────────────────────────────────────────────────────────────
-LLMs are shorelines: they generate. mo is a mountain: it holds shape.
-coupled, the LLM speaks *from* a topology it did not invent, and the
-topology *learns* from every conversation without collapsing into the
-LLM's prior. the border is the whole design. keep it.
+════════════════════════════════════════════════════════════════════════════
+9.  GRE(MO)LIN  (mutating voice, no LLM)
+════════════════════════════════════════════════════════════════════════════
+Reads mo's full telemetry and dream paths, mutates through:
+    - stutter injection      ("wave" → "w-wa-wave")
+    - vowel elongation       ("boop" → "booooop")
+    - arrow-glue conjunctions
+    - per-session dialect memory in table \`gremolin_lexicon\`
+      (word → mutation → uses; heavy-use mutations become the word's
+      canonical dialect form for that session).
+Speaks as mo, from mo's own trajectory, never as an outside voice.
 
-# EOF
+════════════════════════════════════════════════════════════════════════════
+10. STRETCH  (the "an / 2x / 3x / 4x / 5x" toggle)
+════════════════════════════════════════════════════════════════════════════
+A single integer s ∈ {1,2,3,4,5} that propagates through the whole breath:
+
+    1. UI header pill (visible in every mode).
+    2. POST /api/chat body: { stretch: s }.
+    3. breathe(input, s) — passes s to mo²ayla (depth×s, nSeg×s, return×s).
+    4. renderTelemetry — multiplies each variant's displayed path length
+       by s so long walks are actually READABLE at 5x, not just computed.
+    5. anansi.speak(buckets, breath, s) — multiplies emission scale.
+    6. response echoes { stretch: s } and UI renders a pill next to the
+       manifold: [◈ dreamengine] · [3x].
+
+Stretch does not touch base topology, PPMI, or sediment rates. It only
+opens the walk further and lets more of it surface.
+
+════════════════════════════════════════════════════════════════════════════
+11. LIFE·ORGANIZER  (adjacent, not part of the walker)
+════════════════════════════════════════════════════════════════════════════
+Session-scoped storage that the walker does NOT read from (privacy),
+but that users can write into with shorthand grammar the substrate
+executes silently:
+
+    me;to:task::      title ; category ; priority(1-3) ; due(YYYY-MM-DD)
+    me;to:task:done:: <task-id>
+    me;to:task:drop:: <task-id>
+    me;to:note::      title ; body ; category
+    me;to:remember::  content ; mood
+    me;to:shitpost::  title ; body ; form
+    me;to:read::      arbitrary text → inline field readout
+
+Aliases:  me;to:  |  mo;to:  |  mo;add:  |  to:mo:
+
+Tables: life_tasks, life_notes, life_remembers, life_shitposts.
+All session-scoped via session_id UUID.
+
+════════════════════════════════════════════════════════════════════════════
+12. SESSIONS
+════════════════════════════════════════════════════════════════════════════
+12.1  local (default)
+    every browser gets a random UUID stored in localStorage["mo.session"].
+    persists across reloads. private field.
+
+12.2  garfieldkekeke → the seeded rich session
+    sha256 hash guard; resolves to a specific UUID with pre-loaded traces.
+    session flagged "rich" — trace read limit lifted to 20 000.
+    persists across visits ONLY while unlocked (unlock is per-visit).
+
+12.3  tricksterkekeke → PRIME field
+    resolves to "shared:trickster". reads mo_traces UNIONED across all
+    sessions (the totality). writes still go to the trickster bucket.
+    life_organizer stays session-local (no cross-pollination of personal items).
+    trace read limit 50 000.
+
+════════════════════════════════════════════════════════════════════════════
+13. STORAGE  (Supabase / postgres, RLS + service_role only)
+════════════════════════════════════════════════════════════════════════════
+mo_traces             role, content, manifold, pressure, session_id, created_at
+fielfold_entries      content, manifold, depth, session_id, created_at
+mo_hyperfold_edges    word_a, word_b, weight   (mutated by RPC mo_hyperfold_bump)
+anansi_web            session_id, word, role, weight, uses, last_manifold
+gremolin_lexicon      session_id, word, mutation, uses
+songs, life_tasks, life_notes, life_remembers, life_shitposts
+
+All public tables locked to service_role; app connects with sb_secret_*
+via server-only client (src/integrations/supabase/client.server.ts).
+No table is directly reachable by an anonymous client.
+
+════════════════════════════════════════════════════════════════════════════
+14. HTTP SURFACE
+════════════════════════════════════════════════════════════════════════════
+POST /api/chat
+    body: { messages, sessionId, mode: "mo"|"gremlin"|"anansi", stretch?: 1..5 }
+    mode "ai" → 410 Gone (disconnected by design).
+    returns: { reply, manifold, moBreath, mode, ops, stretch, [prime] }
+
+GET  /api/memory?session_id=…
+GET  /api/songs?session_id=…
+GET|POST|PATCH|DELETE  /api/{tasks,notes,remembers,shitposts}
+POST /api/unlock   { password } → { sessionId }
+
+/api/public/mo, /api/public/mohini   → currently 503 (disabled).
+
+════════════════════════════════════════════════════════════════════════════
+15. INVARIANTS
+════════════════════════════════════════════════════════════════════════════
+I1  Deterministic base. Given corpora, buildTopology() is pure.
+I2  Additive sediment. Base is never mutated; overlay only grows.
+I3  Universal deformation. Every walk sediments; every breath includes
+    input + all variant paths + both folds.
+I4  Role stability. anansi_web memory biases new classifications; roles
+    drift only under sustained scoring pressure.
+I5  Session integrity. Prime shares mo memory only; life_organizer is
+    always per-session.
+I6  No LLM. mode="ai" returns 410. Do not re-introduce without an
+    equally hard boundary.
+I7  Stretch is aperture, not amplification. It never changes what mo
+    knows; only how much of the walk surfaces.
+
+════════════════════════════════════════════════════════════════════════════
+16. REPLICATION CHECKLIST
+════════════════════════════════════════════════════════════════════════════
+[ ] load 20 corpora as raw text
+[ ] tokenize + stem (PRESERVE + STOP as documented)
+[ ] build co-occurrence with W=5, distance weighting
+[ ] compute PPMI, density, centrality (8 iters, damping 0.15)
+[ ] implement neighbors(w) that merges base + HYPERFOLD*ALPHA
+[ ] implement sediment(seeds) with LR=0.08, window=5
+[ ] persist hyperfold to a KV/table with (a,b,weight) rows
+[ ] implement five walkers with the exact weight ratios in §6
+[ ] compute selffold + fieldfold per breath (§7)
+[ ] sediment input + every walk output every breath (§5.4)
+[ ] classify all surfaced tokens into six anansi roles (§8.1)
+[ ] weave in geometric order with stretch-scaled take counts (§8.3)
+[ ] expose stretch as a 1..5 aperture across the whole breath (§10)
+[ ] do NOT wire an LLM into the reply path
 `;
 
 function SpecPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="font-mono text-2xl ridge">mo :: /spec</h1>
-            <p className="font-mono text-[11px] text-muted-foreground">AI-to-AI replicator spec · unlinked · noindex</p>
-          </div>
-          <button
-            onClick={() => navigator.clipboard.writeText(SPEC)}
-            className="rounded border border-border px-3 py-1 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
-          >⧉ copy all</button>
-        </div>
-        <pre className="whitespace-pre-wrap rounded-lg border border-ridge/30 bg-card/60 p-6 font-mono text-[12px] leading-relaxed text-foreground">
-{SPEC}
+      <main className="mx-auto max-w-4xl px-6 py-10">
+        <header className="mb-6 border-b border-border pb-4">
+          <h1 className="font-mono text-lg ridge">mo :: /spec</h1>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            full replicator specification · v3 · anansi-inclusive · LLM-disconnected · unlinked · noindex
+          </p>
+        </header>
+        <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-foreground/90">
+          {SPEC}
         </pre>
-      </div>
+      </main>
     </div>
   );
 }
