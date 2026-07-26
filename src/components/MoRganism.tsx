@@ -188,25 +188,27 @@ export function MoRganism({
         for (let i = 0; i < ns.size - NODE_CAP; i++) ns.delete(arr[i].id);
       }
 
-      // ─── Force-directed relaxation ───────────────────────────────
+      // ─── Force-directed relaxation (stability-first) ─────────────
       const nodes = Array.from(ns.values());
       const N = nodes.length;
-      const REP = 300;
+      // Weaker repulsion + softening at close range prevents explosive kicks
+      // when many new nodes spawn on top of each other (Anansi bursts).
+      const REP = 140;
+      const REP_MIN_D2 = 25;   // clamp 1/r² so nothing gets an infinite kick
       for (let i = 0; i < N; i++) {
         const a = nodes[i];
         for (let j = i + 1; j < N; j++) {
           const b = nodes[j];
           const dx = b.x - a.x, dy = b.y - a.y;
-          const d2 = dx * dx + dy * dy + 0.01;
-          const f = REP / d2;
+          const d2 = Math.max(REP_MIN_D2, dx * dx + dy * dy);
           const d = Math.sqrt(d2);
+          const f = REP / d2;
           const fx = (dx / d) * f, fy = (dy / d) * f;
           a.vx -= fx; a.vy -= fy;
           b.vx += fx; b.vy += fy;
         }
-        // very gentle center pull — barely any, so cluster can breathe outward
-        a.vx += (cx - a.x) * 0.0004;
-        a.vy += (cy - a.y) * 0.0004;
+        a.vx += (cx - a.x) * 0.0006;
+        a.vy += (cy - a.y) * 0.0006;
       }
       const REST = 46;
       for (const th of threadsRef.current) {
@@ -214,17 +216,24 @@ export function MoRganism({
         if (!a || !b) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.hypot(dx, dy) + 0.001;
-        const k = 0.014 * Math.min(1, th.strength);
+        const k = 0.010 * Math.min(1, th.strength);
         const f = (d - REST) * k;
         const fx = (dx / d) * f, fy = (dy / d) * f;
         a.vx += fx; a.vy += fy;
         b.vx -= fx; b.vy -= fy;
       }
-      // integrate — NO screen bounds anymore. Camera fits the graph.
+      // integrate with hard velocity clamp — no runaway nodes.
+      const VMAX = 6;
       for (const n of nodes) {
-        n.vx *= 0.82; n.vy *= 0.82;
+        n.vx *= 0.75; n.vy *= 0.75;
+        const sp2 = n.vx * n.vx + n.vy * n.vy;
+        if (sp2 > VMAX * VMAX) {
+          const sc = VMAX / Math.sqrt(sp2);
+          n.vx *= sc; n.vy *= sc;
+        }
         n.x += n.vx; n.y += n.vy;
       }
+
 
       // ─── Threads: age + decay (long-lived — persistent web) ──────
       const threads = threadsRef.current;
@@ -234,7 +243,10 @@ export function MoRganism({
         threadsRef.current.splice(0, threadsRef.current.length - 3000);
       }
 
-      // ─── Camera: auto-fit bbox → viewport, else use manual zoom/pan ──
+      // ─── Camera: auto-fit bbox → viewport, else manual zoom/pan ──
+      // Asymmetric response: expand FAST when anything falls out of view,
+      // contract SLOW so the camera doesn't jitter. Also react to whether
+      // any node currently sits outside the viewport, not just to bbox.
       const cam = camRef.current;
       let zoom: number, offX: number, offY: number;
       if (cam.auto && nodes.length > 0) {
@@ -243,21 +255,32 @@ export function MoRganism({
           if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
           if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
         }
-        const pad = 60;
-        const bw = Math.max(50, maxX - minX) + pad * 2;
-        const bh = Math.max(50, maxY - minY) + pad * 2;
-        const fitZ = Math.min(width / bw, height / bh, 2.2);
-        // smooth toward the fit
-        cam.zoom += (fitZ - cam.zoom) * 0.08;
+        const pad = 80;
+        const bw = Math.max(80, maxX - minX) + pad * 2;
+        const bh = Math.max(80, maxY - minY) + pad * 2;
+        const fitZ = Math.max(0.1, Math.min(width / bw, height / bh, 2.0));
+        // check if anything is currently off-screen at current cam
+        let anyOff = false;
+        for (const n of nodes) {
+          const sx = n.x * cam.zoom + cam.px;
+          const sy = n.y * cam.zoom + cam.py;
+          if (sx < 20 || sx > width - 20 || sy < 20 || sy > height - 20) { anyOff = true; break; }
+        }
+        // Expand fast (0.18) when zooming OUT or something is off-screen;
+        // contract slow (0.02) when the graph shrinks toward center.
+        const isExpanding = fitZ < cam.zoom || anyOff;
+        const rate = isExpanding ? 0.18 : 0.02;
+        cam.zoom += (fitZ - cam.zoom) * rate;
         const bcx = (minX + maxX) / 2, bcy = (minY + maxY) / 2;
         const tgtPx = width / 2 - bcx * cam.zoom;
         const tgtPy = height / 2 - bcy * cam.zoom;
-        cam.px += (tgtPx - cam.px) * 0.1;
-        cam.py += (tgtPy - cam.py) * 0.1;
+        cam.px += (tgtPx - cam.px) * (isExpanding ? 0.18 : 0.05);
+        cam.py += (tgtPy - cam.py) * (isExpanding ? 0.18 : 0.05);
         zoom = cam.zoom; offX = cam.px; offY = cam.py;
       } else {
         zoom = cam.zoom; offX = cam.px; offY = cam.py;
       }
+
       ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * offX, dpr * offY);
 
       ctx.lineWidth = 0.6 / zoom;

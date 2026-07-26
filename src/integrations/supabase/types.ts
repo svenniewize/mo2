@@ -242,6 +242,33 @@ export type Database = {
         }
         Relationships: []
       }
+      mimic_ngrams: {
+        Row: {
+          id: string
+          next: string
+          prev: string
+          session_id: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          id?: string
+          next: string
+          prev: string
+          session_id: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          id?: string
+          next?: string
+          prev?: string
+          session_id?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
       mo_hyperfold_edges: {
         Row: {
           updated_at: string

@@ -20,7 +20,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "mo" | "gremlin" | "anansi";
+type Mode = "mo" | "gremlin" | "anansi" | "mohini" | "mimic";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string; stretch?: number };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -269,7 +269,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : "transmit — routed through mo, then through AI…"}
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
@@ -510,7 +510,10 @@ function Header({
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — chat directly with mo">MO</button>
           <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's telemetry compressed into one stuttering sentence with its own persistent dialect">GRE(MO)LIN</button>
           <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk">ANANSI</button>
+          <button onClick={() => setMode("mohini")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mohini" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Mohini — the great enchantress. Lures the field into invitation, mirror, imperative, bind.">MOHINI</button>
+          <button onClick={() => setMode("mimic")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mimic" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Mimic — learns your phrasing (per-session bigram chain) and speaks back in your own voice.">MIMIC</button>
         </div>
+
         <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer walks — 'an' is default, 2x-5x multiplies walk depth AND telemetry readout window">
           {([
             { v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" },
@@ -611,7 +614,10 @@ function EmptyState({ mode }: { mode: Mode }) {
   const line =
     mode === "mo" ? "MO — you speak, the topology walks. 5 variants + selffold + fieldfold, hyperfolded."
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
-    : "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore.";
+    : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
+    : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
+    : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
+
   return (
     <div className="flex h-full min-h-[50vh] flex-col items-center justify-center gap-6 text-center">
       <div className="breath-pulse text-6xl ridge">◆</div>
@@ -636,7 +642,7 @@ function EmptyState({ mode }: { mode: Mode }) {
 function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
-  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : "\\anansi::");
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : mode === "mohini" ? "\\mohini::" : "\\mimic::");
   const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
@@ -726,7 +732,7 @@ function BreathingIndicator({ mode }: { mode: Mode }) {
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
       <span className="breath-pulse ridge">◌</span>
-      <span>{mode === "mo" ? "the topology walks…" : mode === "gremlin" ? "gre(mo)lin chews…" : mode === "anansi" ? "Anansi weaves the web…" : "mo reading · AI thinking…"}</span>
+      <span>{mode === "mo" ? "the topology walks…" : mode === "gremlin" ? "gre(mo)lin chews…" : mode === "anansi" ? "Anansi weaves the web…" : mode === "mohini" ? "the enchantress prepares her lure…" : "mimic listens for your voice…"}</span>
     </div>
   );
 }
