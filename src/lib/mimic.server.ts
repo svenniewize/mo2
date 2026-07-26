@@ -144,7 +144,7 @@ export async function mimicSpeak(
     `\nmimic·telemetry`,
     `  chain size ${knownWords} bigrams · learned from this session's user messages`,
     `  seeded from ${seedCandidates.length ? "mo-walk ∩ your vocabulary" : "your vocabulary (no mo overlap)"}`,
-    `  stretch ${s}× · ${nSentences} sentence${nSentences === 1 ? "" : "s"} · max ${maxLen} tokens`,
+    `  stretch ${s}× · input ${inputTokens} tok → ${nSentences} sentence${nSentences === 1 ? "" : "s"} · max ${maxLen} tokens`,
   ].join("\n");
 
   return `${reply}\n${telem}`;
