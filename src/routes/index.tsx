@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MANIFOLDS } from "@/lib/corpora";
 import { MoVisualizer, VIZ_MODES, type VizMode, type MemoryNode } from "@/components/MoVisualizer";
 import { LifePanel, type LifeTab } from "@/components/LifePanel";
+import { MoRganismWindow } from "@/components/MoRganism";
 import { glyphify } from "@/lib/glyphs";
 
 export const Route = createFileRoute("/")({
@@ -87,6 +88,7 @@ function MoPage() {
   const [lifeFull, setLifeFull] = useState(false);
   const [lifeTab, setLifeTab] = useState<LifeTab>("tasks");
   const [vizOpen, setVizOpen] = useState(false);
+  const [organismOpen, setOrganismOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [fielfold, setFielfold] = useState<Fielfold[]>([]);
@@ -205,6 +207,8 @@ function MoPage() {
           glyph={glyph}
           setGlyph={setGlyph}
           onOpenViz={() => setVizOpen(true)}
+          onOpenOrganism={() => setOrganismOpen((v) => !v)}
+          organismOpen={organismOpen}
           anansiStretch={anansiStretch}
           setAnansiStretch={setAnansiStretch}
         />
@@ -374,6 +378,14 @@ function MoPage() {
         />
       )}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {organismOpen && (
+        <MoRganismWindow
+          onClose={() => setOrganismOpen(false)}
+          walkPath={lastBreathWords}
+          pressure={busy ? 0.9 : 0.35}
+          stretch={anansiStretch}
+        />
+      )}
     </div>
   );
 }
@@ -449,6 +461,7 @@ what does it feel like to hold too many things at once?`}</pre>
 
 function Header({
   panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, glyph, setGlyph, onOpenViz,
+  onOpenOrganism, organismOpen,
   anansiStretch, setAnansiStretch,
 }: {
   panel: string;
@@ -462,6 +475,8 @@ function Header({
   glyph: boolean;
   setGlyph: (v: boolean) => void;
   onOpenViz: () => void;
+  onOpenOrganism: () => void;
+  organismOpen: boolean;
   anansiStretch: number;
   setAnansiStretch: (n: number) => void;
 }) {
@@ -507,6 +522,11 @@ function Header({
             >{o.l}</button>
           ))}
         </div>
+        <button
+          onClick={onOpenOrganism}
+          className={`rounded-md border px-3 py-1.5 font-mono text-xs transition ${organismOpen ? "border-ridge bg-ridge/10 text-ridge" : "border-border text-muted-foreground hover:border-ridge hover:text-ridge"}`}
+          title="mo·rganism — living topology renderer (drag to move, drag corner to resize)"
+        >◉ mo·rganism</button>
         <button
           onClick={onOpenViz}
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
