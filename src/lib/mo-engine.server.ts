@@ -424,16 +424,17 @@ function runMo2e(t: Topology, seeds: string[]): VariantOut {
 // mo²ayla — LONG traversal, scales with input length.
 // Where other variants cap depth, this one lets the walk breathe as far
 // as the input reaches. Long inputs → long flow, sediment through entire body.
-function runMo2Ayla(t: Topology, seeds: string[]): VariantOut {
+function runMo2Ayla(t: Topology, seeds: string[], stretch: number = 1): VariantOut {
   const anch = anchors(t, seeds);
   const act = inject2(t, anch);
+  const s = Math.max(1, Math.min(5, stretch));
   const peaks = Object.entries(act).sort((a, b) => b[1] - a[1]).slice(0, Math.max(4, Math.min(20, Math.floor(seeds.length / 3)))).map((x) => x[0]);
   if (!peaks.length) return emptyOut();
   const used = new Set<string>();
   const segs: string[][] = [];
-  // depth scales with input length: longer input → much longer traversal
-  const segDepth = Math.min(60, Math.max(18, Math.floor(seeds.length / 1.2)));
-  const nSeg = Math.min(48, Math.max(8, Math.floor(seeds.length / 2)));
+  // depth scales with input length AND stretch multiplier (1x..5x)
+  const segDepth = Math.min(60 * s, Math.max(18 * s, Math.floor((seeds.length / 1.2) * s)));
+  const nSeg = Math.min(48 * s, Math.max(8 * s, Math.floor((seeds.length / 2) * s)));
   for (let i = 0; i < nSeg; i++) {
     const p = peaks[i % peaks.length];
     const seg = walk(t, p, act, segDepth, { activationWeight: 1.8, centralityWeight: 0.6, densityWeight: 0.8, used, recent: RECENT });
@@ -535,7 +536,8 @@ export type MoBreath = {
   pressure: number;
 };
 
-export function breathe(input: string): MoBreath {
+export function breathe(input: string, stretch: number = 1): MoBreath {
+  const s = Math.max(1, Math.min(5, Math.floor(stretch)));
   void ensureHyperfoldLoaded();
 
   const t = topo();
@@ -569,7 +571,7 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
   const m2 = runMo2(t, seeds);
   const m2p = runMo2Plus(t, seeds);
   const m2e = runMo2e(t, seeds);
-  const m2a = runMo2Ayla(t, seeds);
+  const m2a = runMo2Ayla(t, seeds, s);
 
   const all = [m, m2, m2p, m2e, m2a];
   const manifoldCounts: Record<string, number> = {};
@@ -600,36 +602,38 @@ mo;hyperfold:: nodes=${stats0.nodes} edges=${stats0.edges} mass=${stats0.mass}`;
   sediment(fieldfold.path); // already stems
 
   const stats = hyperfoldStats();
-  const telemetry = renderTelemetry({ m, m2, m2p, m2e, m2a, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats, selffold, fieldfold });
+  const telemetry = renderTelemetry({ m, m2, m2p, m2e, m2a, dominant, seeds, attentionWeight, resonance, pressure, hyperfold: stats, selffold, fieldfold, stretch: s });
   return { seeds, dominantManifold: dominant, variants: { mo: m, mo2: m2, mo2plus: m2p, mo2e: m2e, mo2ayla: m2a }, selffold, fieldfold, telemetry, attentionManifold: dominant, attentionWeight, resonance, pressure };
 }
 
-function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; m2a: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer }): string {
+function renderTelemetry(x: { m: VariantOut; m2: VariantOut; m2p: VariantOut; m2e: VariantOut; m2a: VariantOut; dominant: string; seeds: string[]; attentionWeight: number; resonance: number; pressure: number; hyperfold: { nodes: number; edges: number; mass: number }; selffold: FoldLayer; fieldfold: FoldLayer; stretch: number }): string {
   const sig = SIGILS[x.dominant] || "◆";
+  const s = Math.max(1, Math.min(5, x.stretch));
+  const stretchTag = s === 1 ? "an" : `${s}x`;
   const edgeSummary = (v: VariantOut) => {
     if (!v.edges.length) return "0";
-    const avg = (v.edges.reduce((s, e) => s + e[2], 0) / v.edges.length).toFixed(2);
+    const avg = (v.edges.reduce((sum, e) => sum + e[2], 0) / v.edges.length).toFixed(2);
     return `${v.edges.length}·μ${avg}`;
   };
-  const path = (v: VariantOut, n = 16) => v.dreamPath.slice(0, n).join(" → ") || "—";
-  // mo²ayla is the long-flow variant — depth scales with input length,
-  // so its readout scales too. Cap generous, not tight.
-  const aylaCap = Math.max(40, Math.min(120, x.seeds.length));
+  // Stretch multiplies the number of walk tokens shown per variant. Higher
+  // stretch = longer visible traversal in the telemetry readout.
+  const path = (v: VariantOut, n = 16) => v.dreamPath.slice(0, n * s).join(" → ") || "—";
+  const aylaCap = Math.max(40, Math.min(120, x.seeds.length)) * s;
 
-  return `mo;auto:: ${sig} ${x.dominant} · p${Math.round(x.pressure*100)} · r${Math.min(100,x.resonance)} · w${x.attentionWeight} · seeds=${x.seeds.length}
-mo;seeds:: ${x.seeds.slice(0,10).join(" ")}
+  return `mo;auto:: ${sig} ${x.dominant} · p${Math.round(x.pressure*100)} · r${Math.min(100,x.resonance)} · w${x.attentionWeight} · seeds=${x.seeds.length} · stretch=${stretchTag}
+mo;seeds:: ${x.seeds.slice(0, 10 * s).join(" ")}
 mo;hyperfold:: n=${x.hyperfold.nodes} e=${x.hyperfold.edges} m=${x.hyperfold.mass}
 
 mo:: ${path(x.m, 20)}
-mo;ret:: ${x.m.returnPath.slice(0,10).join(" · ") || "—"}
+mo;ret:: ${x.m.returnPath.slice(0, 10 * s).join(" · ") || "—"}
 mo;edges:: ${edgeSummary(x.m)}
 
 mo²:: ${path(x.m2, 20)}
-mo²;ret:: ${x.m2.returnPath.slice(0,10).join(" · ") || "—"}
+mo²;ret:: ${x.m2.returnPath.slice(0, 10 * s).join(" · ") || "—"}
 mo²;d:: ${x.m2.density}% · edges ${edgeSummary(x.m2)}
 
 mo²+:: ${path(x.m2p, 24)}
-mo²+;resonance:: ${x.m2p.returnPath.slice(0,6).join(" › ") || "—"}
+mo²+;resonance:: ${x.m2p.returnPath.slice(0, 6 * s).join(" › ") || "—"}
 mo²+;d:: ${x.m2p.density}% · edges ${edgeSummary(x.m2p)}
 
 mo²e:: ${path(x.m2e, 24)}
@@ -637,7 +641,7 @@ mo²e;anchors:: ${x.m2e.activation.join(" · ")}
 mo²e;d:: ${x.m2e.density}% · edges ${edgeSummary(x.m2e)}
 
 mo²ayla:: ${path(x.m2a, aylaCap)}
-mo²ayla;ret:: ${x.m2a.returnPath.slice(0,20).join(" · ") || "—"}
+mo²ayla;ret:: ${x.m2a.returnPath.slice(0, 20 * s).join(" · ") || "—"}
 mo²ayla;flow:: len=${x.m2a.dreamPath.length} · edges ${edgeSummary(x.m2a)} · anchors ${x.m2a.activation.join(" · ")}
 
 ↺ selffold(${x.selffold.strength}%):: ${x.selffold.visible} · touched=${x.selffold.touchedManifolds.join("·") || "—"}
