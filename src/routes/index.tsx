@@ -622,6 +622,18 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
     );
   }
   const m = MANIFOLDS.find((x) => x.id === msg.manifold);
+
+  // Split anansi telemetry fence out of the main body so it can collapse.
+  let mainContent = rendered;
+  let anansiTelemetry: string | null = null;
+  if (mode === "anansi") {
+    const match = rendered.match(/^([\s\S]*?)\n*```anansi·telemetry\n([\s\S]*?)```\s*$/);
+    if (match) {
+      mainContent = match[1].trimEnd();
+      anansiTelemetry = match[2].trimEnd();
+    }
+  }
+
   return (
     <div className="group space-y-2">
       <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
@@ -642,13 +654,23 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
             {showTelemetry ? "▽ hide mo·telemetry" : "△ show mo·telemetry"}
           </button>
         )}
+        {mode === "anansi" && anansiTelemetry && (
+          <button onClick={() => setShowTelemetry((v) => !v)} className="opacity-60 hover:opacity-100">
+            {showTelemetry ? "▽ hide web·telemetry" : "△ show web·telemetry"}
+          </button>
+        )}
       </div>
       <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
-        {rendered}
+        {mainContent}
       </pre>
       {mode === "ai" && showTelemetry && msg.telemetry && (
         <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
           {msg.telemetry}
+        </pre>
+      )}
+      {mode === "anansi" && showTelemetry && anansiTelemetry && (
+        <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
+          {anansiTelemetry}
         </pre>
       )}
       <div className="contour-line w-full" />
