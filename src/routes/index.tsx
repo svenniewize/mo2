@@ -449,6 +449,7 @@ what does it feel like to hold too many things at once?`}</pre>
 
 function Header({
   panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, glyph, setGlyph, onOpenViz,
+  anansiStretch, setAnansiStretch,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -461,6 +462,8 @@ function Header({
   glyph: boolean;
   setGlyph: (v: boolean) => void;
   onOpenViz: () => void;
+  anansiStretch: number;
+  setAnansiStretch: (n: number) => void;
 }) {
   void fielfoldCount;
   const tab = (id: "memory" | "songs" | "field" | "life", label: string, count?: number) => (
