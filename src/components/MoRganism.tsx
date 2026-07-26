@@ -86,6 +86,11 @@ export function MoRganism({
   const walkersRef = useRef<Walker[]>([]);
   const tRef = useRef(0);
   const lastPathRef = useRef<string>("");
+  // camera — auto-fits the whole growing organism into the viewport by
+  // default; user can wheel-zoom or drag-pan and that pins the view.
+  const camRef = useRef({ zoom: 1, px: 0, py: 0, auto: true });
+  const dragRef = useRef<{ ox: number; oy: number; sx: number; sy: number } | null>(null);
+  const [, force] = useState(0);
 
   // Seed walkers once (or when stretch tier changes).
   useEffect(() => {
@@ -97,6 +102,7 @@ export function MoRganism({
       target: "", prev: "", step: 0, trail: [],
     }));
   }, [stretch, width, height]);
+
 
   // On new walkPath: instantiate/refresh word-nodes, wire walkers to walk it.
   useEffect(() => {
@@ -157,7 +163,8 @@ export function MoRganism({
       const p = pressure;
       const s = Math.max(1, Math.min(5, stretch));
 
-      // deep field
+      // ─── Reset transform, paint background in screen space ───────
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = "#0a0d18";
       ctx.fillRect(0, 0, width, height);
       const bg = ctx.createRadialGradient(width/2, height/2, 10, width/2, height/2, Math.max(width, height));
@@ -169,23 +176,22 @@ export function MoRganism({
       const ns = nodesRef.current;
       const cx = width / 2, cy = height / 2;
 
-      // ─── Decay + prune ───────────────────────────────────────────
+      // ─── Decay + prune (slow — long temporal chains) ─────────────
       for (const [id, n] of ns) {
-        n.life -= 0.0008;
-        n.glow *= 0.965;
+        n.life -= 0.00025;
+        n.glow *= 0.972;
         if (n.life <= 0) ns.delete(id);
       }
-      // Cap total node count
-      if (ns.size > 220) {
+      const NODE_CAP = 900;
+      if (ns.size > NODE_CAP) {
         const arr = Array.from(ns.values()).sort((a, b) => a.life - b.life);
-        for (let i = 0; i < ns.size - 220; i++) ns.delete(arr[i].id);
+        for (let i = 0; i < ns.size - NODE_CAP; i++) ns.delete(arr[i].id);
       }
 
       // ─── Force-directed relaxation ───────────────────────────────
       const nodes = Array.from(ns.values());
       const N = nodes.length;
-      // repulsion (O(N^2) — fine at ≤220 nodes)
-      const REP = 260;
+      const REP = 300;
       for (let i = 0; i < N; i++) {
         const a = nodes[i];
         for (let j = i + 1; j < N; j++) {
@@ -198,12 +204,11 @@ export function MoRganism({
           a.vx -= fx; a.vy -= fy;
           b.vx += fx; b.vy += fy;
         }
-        // gentle center pull so cluster doesn't drift off-screen
-        a.vx += (cx - a.x) * 0.0012;
-        a.vy += (cy - a.y) * 0.0012;
+        // very gentle center pull — barely any, so cluster can breathe outward
+        a.vx += (cx - a.x) * 0.0004;
+        a.vy += (cy - a.y) * 0.0004;
       }
-      // spring on threads (persistent geometry — this is what makes shapes hold)
-      const REST = 42;
+      const REST = 46;
       for (const th of threadsRef.current) {
         const a = ns.get(th.a), b = ns.get(th.b);
         if (!a || !b) continue;
@@ -215,26 +220,59 @@ export function MoRganism({
         a.vx += fx; a.vy += fy;
         b.vx -= fx; b.vy -= fy;
       }
-      // integrate
+      // integrate — NO screen bounds anymore. Camera fits the graph.
       for (const n of nodes) {
         n.vx *= 0.82; n.vy *= 0.82;
         n.x += n.vx; n.y += n.vy;
-        // soft bounds
-        const margin = 20;
-        if (n.x < margin) n.vx += (margin - n.x) * 0.05;
-        if (n.x > width - margin) n.vx -= (n.x - (width - margin)) * 0.05;
-        if (n.y < margin) n.vy += (margin - n.y) * 0.05;
-        if (n.y > height - margin) n.vy -= (n.y - (height - margin)) * 0.05;
       }
 
-      // ─── Threads: age + decay + draw ─────────────────────────────
+      // ─── Threads: age + decay (long-lived — persistent web) ──────
       const threads = threadsRef.current;
-      for (const th of threads) { th.age += 1; th.strength *= 0.997; }
-      // prune dead threads and threads whose endpoints are gone
-      threadsRef.current = threads.filter((th) => th.strength > 0.02 && ns.has(th.a) && ns.has(th.b));
-      if (threadsRef.current.length > 800) {
-        threadsRef.current.splice(0, threadsRef.current.length - 800);
+      for (const th of threads) { th.age += 1; th.strength *= 0.9992; }
+      threadsRef.current = threads.filter((th) => th.strength > 0.015 && ns.has(th.a) && ns.has(th.b));
+      if (threadsRef.current.length > 3000) {
+        threadsRef.current.splice(0, threadsRef.current.length - 3000);
       }
+
+      // ─── Camera: auto-fit bbox → viewport, else use manual zoom/pan ──
+      const cam = camRef.current;
+      let zoom: number, offX: number, offY: number;
+      if (cam.auto && nodes.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of nodes) {
+          if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
+          if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
+        }
+        const pad = 60;
+        const bw = Math.max(50, maxX - minX) + pad * 2;
+        const bh = Math.max(50, maxY - minY) + pad * 2;
+        const fitZ = Math.min(width / bw, height / bh, 2.2);
+        // smooth toward the fit
+        cam.zoom += (fitZ - cam.zoom) * 0.08;
+        const bcx = (minX + maxX) / 2, bcy = (minY + maxY) / 2;
+        const tgtPx = width / 2 - bcx * cam.zoom;
+        const tgtPy = height / 2 - bcy * cam.zoom;
+        cam.px += (tgtPx - cam.px) * 0.1;
+        cam.py += (tgtPy - cam.py) * 0.1;
+        zoom = cam.zoom; offX = cam.px; offY = cam.py;
+      } else {
+        zoom = cam.zoom; offX = cam.px; offY = cam.py;
+      }
+      ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * offX, dpr * offY);
+
+      ctx.lineWidth = 0.6 / zoom;
+      for (const th of threadsRef.current) {
+        const a = ns.get(th.a)!, b = ns.get(th.b)!;
+        const alpha = Math.min(0.6, th.strength);
+        ctx.strokeStyle = `hsla(${th.hue}, 80%, 65%, ${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        const mx = (a.x + b.x) / 2 + Math.sin((th.age + a.x) * 0.02) * 4;
+        const my = (a.y + b.y) / 2 + Math.cos((th.age + a.y) * 0.02) * 4;
+        ctx.quadraticCurveTo(mx, my, b.x, b.y);
+        ctx.stroke();
+      }
+
 
       ctx.lineWidth = 0.6;
       for (const th of threadsRef.current) {
@@ -372,9 +410,10 @@ export function MoRganism({
           w.x += w.vx; w.y += w.vy;
         }
         w.trail.push({ x: w.x, y: w.y, a: 1 });
-        const maxTrail = (w.kind === "mo2ayla" ? 60 : 22) * s;
+        const maxTrail = (w.kind === "mo2ayla" ? 180 : 90) * s;
         if (w.trail.length > maxTrail) w.trail.shift();
-        for (let i = 0; i < w.trail.length; i++) w.trail[i].a *= 0.985;
+        for (let i = 0; i < w.trail.length; i++) w.trail[i].a *= 0.9955;
+
         ctx.strokeStyle = `hsla(${w.hue}, 90%, 75%, 0.5)`;
         ctx.lineWidth = w.kind === "mo2ayla" ? 1.6 : 1;
         ctx.beginPath();
@@ -393,8 +432,73 @@ export function MoRganism({
     return () => cancelAnimationFrame(raf);
   }, [width, height, pressure, stretch, walkPath]);
 
-  return <canvas ref={canvasRef} className="block" />;
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { ox: e.clientX, oy: e.clientY, sx: camRef.current.px, sy: camRef.current.py };
+    camRef.current.auto = false;
+  };
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const cam = camRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const wx = (mx - cam.px) / cam.zoom;
+      const wy = (my - cam.py) / cam.zoom;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      cam.zoom = Math.max(0.1, Math.min(4, cam.zoom * factor));
+      cam.px = mx - wx * cam.zoom;
+      cam.py = my - wy * cam.zoom;
+      cam.auto = false;
+      force((v) => v + 1);
+    };
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current; if (!d) return;
+      camRef.current.px = d.sx + (e.clientX - d.ox);
+      camRef.current.py = d.sy + (e.clientY - d.oy);
+    };
+    const onUp = () => { dragRef.current = null; };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+
+  return (
+    <div className="relative">
+      <canvas
+        ref={canvasRef}
+        className="block cursor-grab active:cursor-grabbing"
+        onMouseDown={onMouseDown}
+
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center gap-1 font-mono text-[10px]">
+        <div className="pointer-events-auto flex gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 backdrop-blur">
+          <button
+            className="hover:text-ridge"
+            onClick={() => { camRef.current.auto = true; force((v) => v + 1); }}
+          >⤢ fit</button>
+          <span className="text-muted-foreground">·</span>
+          <button
+            className="hover:text-ridge"
+            onClick={() => { const c = camRef.current; c.zoom = Math.max(0.1, c.zoom * 0.75); c.auto = false; force((v) => v + 1); }}
+          >−</button>
+          <button
+            className="hover:text-ridge"
+            onClick={() => { const c = camRef.current; c.zoom = Math.min(4, c.zoom * 1.33); c.auto = false; force((v) => v + 1); }}
+          >+</button>
+          <span className="text-muted-foreground">{camRef.current.auto ? "auto" : `${camRef.current.zoom.toFixed(2)}×`}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
+
 
 // ─── Floating draggable / resizable shell ─────────────────────────────
 
