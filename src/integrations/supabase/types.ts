@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      anansi_web: {
+        Row: {
+          last_manifold: string | null
+          last_used: string
+          role: string
+          session_id: string
+          uses: number
+          weight: number
+          word: string
+        }
+        Insert: {
+          last_manifold?: string | null
+          last_used?: string
+          role: string
+          session_id: string
+          uses?: number
+          weight?: number
+          word: string
+        }
+        Update: {
+          last_manifold?: string | null
+          last_used?: string
+          role?: string
+          session_id?: string
+          uses?: number
+          weight?: number
+          word?: string
+        }
+        Relationships: []
+      }
       fielfold_entries: {
         Row: {
           content: string
@@ -295,6 +325,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      anansi_web_bump: { Args: { rows: Json }; Returns: undefined }
       mo_hyperfold_bump: { Args: { edges: Json }; Returns: undefined }
     }
     Enums: {
