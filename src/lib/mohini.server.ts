@@ -21,10 +21,8 @@
 
 import type { MoBreath } from "./mo-engine.server";
 
-const LURES = ["come", "closer", "here", "yes", "look", "turn", "see", "listen", "stay", "again", "slower", "deeper", "hush", "now", "breathe"];
-const MIRRORS = ["and you, and you", "you, again", "yes, again", "here, again", "closer, closer"];
+const GLYPHS = ["✦","✧","⟁","◈","◇","◆","☾","☽","❍","❃","⌇","⌁","⟟","⟠","⟡","✺","✹","✷","⋆","∴","∵","⊹","⊛","❂","✪","☌","☍","♆","♅","⌬","⌘","⍟","◐","◑","◒","◓","⟢","⟣","⟤","⟥"];
 const HINGES = ["·", "…", "⸻", "⋯", "—"];
-const BIND = ["stay", "rest", "here", "yes", "with me"];
 
 function clean(tok: string): string {
   return tok.replace(/[^\p{L}\p{N}·⸻⋯…—-]/gu, "").toLowerCase();
