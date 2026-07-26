@@ -410,9 +410,10 @@ export function MoRganism({
           w.x += w.vx; w.y += w.vy;
         }
         w.trail.push({ x: w.x, y: w.y, a: 1 });
-        const maxTrail = (w.kind === "mo2ayla" ? 60 : 22) * s;
+        const maxTrail = (w.kind === "mo2ayla" ? 180 : 90) * s;
         if (w.trail.length > maxTrail) w.trail.shift();
-        for (let i = 0; i < w.trail.length; i++) w.trail[i].a *= 0.985;
+        for (let i = 0; i < w.trail.length; i++) w.trail[i].a *= 0.9955;
+
         ctx.strokeStyle = `hsla(${w.hue}, 90%, 75%, 0.5)`;
         ctx.lineWidth = w.kind === "mo2ayla" ? 1.6 : 1;
         ctx.beginPath();
