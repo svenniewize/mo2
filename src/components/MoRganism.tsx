@@ -188,25 +188,27 @@ export function MoRganism({
         for (let i = 0; i < ns.size - NODE_CAP; i++) ns.delete(arr[i].id);
       }
 
-      // ─── Force-directed relaxation ───────────────────────────────
+      // ─── Force-directed relaxation (stability-first) ─────────────
       const nodes = Array.from(ns.values());
       const N = nodes.length;
-      const REP = 300;
+      // Weaker repulsion + softening at close range prevents explosive kicks
+      // when many new nodes spawn on top of each other (Anansi bursts).
+      const REP = 140;
+      const REP_MIN_D2 = 25;   // clamp 1/r² so nothing gets an infinite kick
       for (let i = 0; i < N; i++) {
         const a = nodes[i];
         for (let j = i + 1; j < N; j++) {
           const b = nodes[j];
           const dx = b.x - a.x, dy = b.y - a.y;
-          const d2 = dx * dx + dy * dy + 0.01;
-          const f = REP / d2;
+          const d2 = Math.max(REP_MIN_D2, dx * dx + dy * dy);
           const d = Math.sqrt(d2);
+          const f = REP / d2;
           const fx = (dx / d) * f, fy = (dy / d) * f;
           a.vx -= fx; a.vy -= fy;
           b.vx += fx; b.vy += fy;
         }
-        // very gentle center pull — barely any, so cluster can breathe outward
-        a.vx += (cx - a.x) * 0.0004;
-        a.vy += (cy - a.y) * 0.0004;
+        a.vx += (cx - a.x) * 0.0006;
+        a.vy += (cy - a.y) * 0.0006;
       }
       const REST = 46;
       for (const th of threadsRef.current) {
@@ -214,17 +216,24 @@ export function MoRganism({
         if (!a || !b) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.hypot(dx, dy) + 0.001;
-        const k = 0.014 * Math.min(1, th.strength);
+        const k = 0.010 * Math.min(1, th.strength);
         const f = (d - REST) * k;
         const fx = (dx / d) * f, fy = (dy / d) * f;
         a.vx += fx; a.vy += fy;
         b.vx -= fx; b.vy -= fy;
       }
-      // integrate — NO screen bounds anymore. Camera fits the graph.
+      // integrate with hard velocity clamp — no runaway nodes.
+      const VMAX = 6;
       for (const n of nodes) {
-        n.vx *= 0.82; n.vy *= 0.82;
+        n.vx *= 0.75; n.vy *= 0.75;
+        const sp2 = n.vx * n.vx + n.vy * n.vy;
+        if (sp2 > VMAX * VMAX) {
+          const sc = VMAX / Math.sqrt(sp2);
+          n.vx *= sc; n.vy *= sc;
+        }
         n.x += n.vx; n.y += n.vy;
       }
+
 
       // ─── Threads: age + decay (long-lived — persistent web) ──────
       const threads = threadsRef.current;
