@@ -86,6 +86,11 @@ export function MoRganism({
   const walkersRef = useRef<Walker[]>([]);
   const tRef = useRef(0);
   const lastPathRef = useRef<string>("");
+  // camera — auto-fits the whole growing organism into the viewport by
+  // default; user can wheel-zoom or drag-pan and that pins the view.
+  const camRef = useRef({ zoom: 1, px: 0, py: 0, auto: true });
+  const dragRef = useRef<{ ox: number; oy: number; sx: number; sy: number } | null>(null);
+  const [, force] = useState(0);
 
   // Seed walkers once (or when stretch tier changes).
   useEffect(() => {
@@ -97,6 +102,7 @@ export function MoRganism({
       target: "", prev: "", step: 0, trail: [],
     }));
   }, [stretch, width, height]);
+
 
   // On new walkPath: instantiate/refresh word-nodes, wire walkers to walk it.
   useEffect(() => {
