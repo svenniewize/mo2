@@ -160,7 +160,7 @@ function MoPage() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, sessionId, mode }),
+        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch }),
       });
       if (!r.ok) {
         const err = await r.text();
