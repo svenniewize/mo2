@@ -291,7 +291,7 @@ export async function anansiWeave(input: string, breath: MoBreath, sessionId: st
   const memKnown = Object.keys(memory).length;
   const totalWords = Object.keys(assignments).length;
 
-  const prose = speak(buckets, breath);
+  const prose = speak(buckets, breath, stretch);
 
   // ── Telemetry (kept below, verbose) ──
   const roleLine = ROLES
