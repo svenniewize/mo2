@@ -432,36 +432,42 @@ export function MoRganism({
     return () => cancelAnimationFrame(raf);
   }, [width, height, pressure, stretch, walkPath]);
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const cam = camRef.current;
-    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    // world coord under cursor before zoom
-    const wx = (mx - cam.px) / cam.zoom;
-    const wy = (my - cam.py) / cam.zoom;
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    cam.zoom = Math.max(0.1, Math.min(4, cam.zoom * factor));
-    cam.px = mx - wx * cam.zoom;
-    cam.py = my - wy * cam.zoom;
-    cam.auto = false;
-    force((v) => v + 1);
-  };
   const onMouseDown = (e: React.MouseEvent) => {
     dragRef.current = { ox: e.clientX, oy: e.clientY, sx: camRef.current.px, sy: camRef.current.py };
     camRef.current.auto = false;
   };
   useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const cam = camRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const wx = (mx - cam.px) / cam.zoom;
+      const wy = (my - cam.py) / cam.zoom;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      cam.zoom = Math.max(0.1, Math.min(4, cam.zoom * factor));
+      cam.px = mx - wx * cam.zoom;
+      cam.py = my - wy * cam.zoom;
+      cam.auto = false;
+      force((v) => v + 1);
+    };
     const onMove = (e: MouseEvent) => {
       const d = dragRef.current; if (!d) return;
       camRef.current.px = d.sx + (e.clientX - d.ox);
       camRef.current.py = d.sy + (e.clientY - d.oy);
     };
     const onUp = () => { dragRef.current = null; };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
   }, []);
+
 
   return (
     <div className="relative">
