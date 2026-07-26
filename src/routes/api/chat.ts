@@ -12,7 +12,7 @@ export const Route = createFileRoute("/api/chat")({
         const body = (await request.json()) as {
           messages: ChatMsg[];
           sessionId: string;
-          mode: "ai" | "mo" | "gremlin";
+          mode: "ai" | "mo" | "gremlin" | "anansi";
         };
         if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
 
@@ -133,6 +133,29 @@ export const Route = createFileRoute("/api/chat")({
             reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "gremlin", ops: userOps,
           });
         }
+
+        // ── ANANSI MODE — the web the walkers walk. NO LLM.
+        // Classifies every walked + input token into nexus/node/loci/
+        // singularity/wave/shore, weaves a sentence in geometric order,
+        // learns per-session word→role assignments over time.
+        if (body.mode === "anansi") {
+          const { anansiWeave } = await import("@/lib/anansi.server");
+          const reply = await anansiWeave(lastUser.content, userBreath, writeSession);
+          if (!shared) {
+            await db.from("mo_traces").insert({
+              session_id: writeSession,
+              role: "anansi",
+              content: reply,
+              manifold: userBreath.dominantManifold,
+              pressure: userBreath.pressure,
+            });
+          }
+          return Response.json({
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "anansi", ops: userOps,
+          });
+        }
+
+
 
 
 

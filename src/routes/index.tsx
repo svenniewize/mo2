@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "ai" | "mo" | "gremlin";
+type Mode = "ai" | "mo" | "gremlin" | "anansi";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -262,7 +262,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : "transmit — routed through mo, then through AI…"}
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : "transmit — routed through mo, then through AI…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
@@ -489,6 +489,7 @@ function Header({
           <button onClick={() => setMode("ai")} className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="user → mo → AI → mo → user">AI</button>
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — no AI, chat directly with mo">MO</button>
           <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's full telemetry compressed into one stuttering sentence with its own persistent dialect memory">GRE(MO)LIN</button>
+          <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk. classifies every token into nexus · node · loci · singularity · wave · shore and weaves a sentence in geometric order. per-session web memory learns how each word wants to sit.">ANANSI</button>
         </div>
         <button
           onClick={onOpenViz}
@@ -599,7 +600,7 @@ function EmptyState({ mode }: { mode: Mode }) {
 function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
-  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : "\\ai::");
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : "\\ai::");
   const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
@@ -659,7 +660,7 @@ function BreathingIndicator({ mode }: { mode: Mode }) {
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
       <span className="breath-pulse ridge">◌</span>
-      <span>{mode === "mo" ? "the topology walks…" : "mo reading · AI thinking…"}</span>
+      <span>{mode === "mo" ? "the topology walks…" : mode === "gremlin" ? "gre(mo)lin chews…" : mode === "anansi" ? "Anansi weaves the web…" : "mo reading · AI thinking…"}</span>
     </div>
   );
 }
