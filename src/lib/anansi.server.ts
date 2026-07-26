@@ -266,7 +266,7 @@ function speak(buckets: Record<Role, string[]>, breath: MoBreath, stretch: numbe
   return parts.join("   ");
 }
 
-export async function anansiWeave(input: string, breath: MoBreath, sessionId: string): Promise<string> {
+export async function anansiWeave(input: string, breath: MoBreath, sessionId: string, stretch: number = 1): Promise<string> {
   const sig = MANIFOLD_TAG[breath.dominantManifold] || "◆";
 
   const walked = collectTokens(breath);
