@@ -23,7 +23,7 @@
 // NO LLM. This is pure topology weaving.
 
 import type { MoBreath } from "./mo-engine.server";
-import { topo, sediment } from "./mo-engine.server";
+import { topo } from "./mo-engine.server";
 
 const STOP = new Set("the a an is are was were be been being have has had do does did will would could should may might shall can to of in for on with at by from as into through during before after above below between out off over under again further then once here there when where why how all both each few more most other some such no nor not only own same so than too very just because but and or if while about up its it he she they them his her their what which who whom this that these those am i me my we our you your us also said one two even way like new now get make many much still well back down long made first last come good know take see look find give tell think say help every try put thing since around however upon already yet though without".split(" "));
 
