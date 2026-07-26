@@ -13,6 +13,7 @@ export const Route = createFileRoute("/api/chat")({
           messages: ChatMsg[];
           sessionId: string;
           mode: "ai" | "mo" | "gremlin" | "anansi";
+          stretch?: number;
         };
         if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
 
