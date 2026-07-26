@@ -108,17 +108,6 @@ export const Route = createFileRoute("/api/chat")({
           if (all.length) await db.from("fielfold_entries").insert(all);
         }
 
-        // ── Assistant reply crystallizes as ONE short bullet — a summary, not a log.
-        async function crystallizeAssistant(text: string, breath: typeof userBreath) {
-          const bullet = text.replace(/\s+/g, " ").trim().slice(0, 160);
-          if (!bullet) return;
-          await db.from("fielfold_entries").insert({
-            session_id: writeSession,
-            content: `• [ai·${breath.dominantManifold}] ${bullet}`,
-            manifold: breath.dominantManifold,
-            depth: Math.min(1, breath.pressure),
-          });
-        }
 
         await crystallizeUser(userTextForRecord, userBreath);
 
