@@ -432,8 +432,8 @@ function runMo2Ayla(t: Topology, seeds: string[]): VariantOut {
   const used = new Set<string>();
   const segs: string[][] = [];
   // depth scales with input length: longer input → much longer traversal
-  const segDepth = Math.min(28, Math.max(10, Math.floor(seeds.length / 2)));
-  const nSeg = Math.min(24, Math.max(4, Math.floor(seeds.length / 4)));
+  const segDepth = Math.min(60, Math.max(18, Math.floor(seeds.length / 1.2)));
+  const nSeg = Math.min(48, Math.max(8, Math.floor(seeds.length / 2)));
   for (let i = 0; i < nSeg; i++) {
     const p = peaks[i % peaks.length];
     const seg = walk(t, p, act, segDepth, { activationWeight: 1.8, centralityWeight: 0.6, densityWeight: 0.8, used, recent: RECENT });
@@ -443,7 +443,7 @@ function runMo2Ayla(t: Topology, seeds: string[]): VariantOut {
   // long return arc that folds the whole walk back toward anchors
   const backAct: Record<string, number> = {};
   for (const s of anch) backAct[s] = 3;
-  const ret = walk(t, dream[dream.length - 1] || peaks[0], backAct, Math.min(20, Math.max(8, Math.floor(seeds.length / 3))), { activationWeight: 2.5, densityWeight: 0.3, centralityWeight: 0.4, used });
+  const ret = walk(t, dream[dream.length - 1] || peaks[0], backAct, Math.min(40, Math.max(14, Math.floor(seeds.length / 1.5))), { activationWeight: 2.5, densityWeight: 0.3, centralityWeight: 0.4, used });
   for (const w of dream) RECENT[w] = (RECENT[w] || 0) + 1;
   return {
     visible: segs.map((s) => s.map((w) => orig(t, w)).join(" ")).join(" ⟿ ") + (ret.length ? "  ↵  " + ret.map((w) => orig(t, w)).join(" · ") : ""),
