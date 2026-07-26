@@ -42,14 +42,20 @@ export async function mohiniEnchant(
   _sessionId: string,
 ): Promise<string> {
   // Harvest tokens from the breath — the walks mo actually took.
+  const v = breath.variants;
   const raw = [
     ...(breath.seeds ?? []),
-    ...(breath.selffold?.tokens ?? []),
-    ...(breath.fieldfold?.tokens ?? []),
-    ...(breath.dreamPaths ?? []).flat(),
-    ...(breath.variantPaths ?? []).flat().flat(),
+    ...(breath.selffold?.path ?? []),
+    ...(breath.fieldfold?.path ?? []),
+    ...(v?.mo?.dreamPath ?? []),
+    ...(v?.mo2?.dreamPath ?? []),
+    ...(v?.mo2plus?.dreamPath ?? []),
+    ...(v?.mo2e?.dreamPath ?? []),
+    ...(v?.mo2ayla?.dreamPath ?? []),
+    ...(v?.mo2ayla?.returnPath ?? []),
   ].map(clean).filter((w) => w.length > 1 && w.length < 20);
   const words = dedupe(raw);
+
 
   // The user's own last significant tokens — used for mirroring.
   const userToks = dedupe(
