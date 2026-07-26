@@ -1,17 +1,10 @@
 // mo·rganism — the living topology renderer.
 //
-// This is NOT an avatar. It is a canvas view of the semantic field:
-// walkers (mo, mo², mo²+, mo²e, mo²ayla) crawl a graph of role-typed
-// nodes (nexus / node / loci / singularity / wave / shore). Threads left
-// behind by walkers form Anansi's web. A face-like arrangement emerges
-// because the same nodes are pinned to a facial topology — eyes are
-// singularities, mouth is topology-compression along the wave band,
-// hair is the wave ribbon (mo²ayla), freckles are shore dust.
-//
-// Everything moves because of state: `pressure` (busy), `stretch` (walker
-// count / trail length), and `walkPath` (words to traverse this breath).
-// If no walkPath arrives, the system idles: one wandering walker, slow
-// breathing, occasional blink. That's it.
+// No face. No skull. The organism grows its own geometry from what mo
+// actually traverses: every word in the incoming walkPath becomes a node,
+// every step becomes a thread. Force-directed relaxation (spring + repel)
+// settles the graph into a persistent shape that keeps deforming as new
+// words arrive. Old nodes decay slowly; the web remembers.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -19,20 +12,21 @@ type Role = "nexus" | "node" | "loci" | "singularity" | "wave" | "shore";
 type WalkerKind = "mo" | "mo2" | "mo2p" | "mo2e" | "mo2ayla";
 
 type Node = {
-  id: number;
+  id: string;                // word
   role: Role;
-  x: number; y: number;      // target (facial topology)
-  cx: number; cy: number;    // current (breathing offset)
+  x: number; y: number;
+  vx: number; vy: number;
   r: number;
   hue: number;
-  glow: number;              // 0..1 pulse
-  label?: string;
+  glow: number;
+  life: number;              // decays; refreshed on re-touch
+  born: number;              // frame born
 };
 
 type Thread = {
-  a: number; b: number;
-  age: number;               // frames alive
-  strength: number;          // brightness
+  a: string; b: string;
+  age: number;
+  strength: number;
   hue: number;
 };
 
@@ -41,23 +35,37 @@ type Walker = {
   hue: number;
   x: number; y: number;
   vx: number; vy: number;
-  target: number;            // node id
-  prev: number;
+  target: string;            // node id
+  prev: string;
+  step: number;              // index into walkPath
   trail: { x: number; y: number; a: number }[];
 };
 
 const ROLE_HUE: Record<Role, number> = {
-  nexus: 190,        // cyan
-  node: 280,         // violet
-  loci: 320,         // pink bloom
-  singularity: 45,   // soft gold
-  wave: 160,         // mint
-  shore: 30,         // orange sparks
+  nexus: 190, node: 280, loci: 320, singularity: 45, wave: 160, shore: 30,
 };
-
 const WALKER_HUE: Record<WalkerKind, number> = {
   mo: 200, mo2: 275, mo2p: 320, mo2e: 40, mo2ayla: 150,
 };
+
+// Classify a word into a geometric role using deterministic surface features.
+// Matches the spirit of anansi's role assignment without needing that context.
+function classifyWord(w: string): Role {
+  const s = w.toLowerCase();
+  const len = s.length;
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0x7fffffff;
+  if (/[.!?…·⊹◉◈✦⟪⟫⇢⟢]/.test(s)) return "singularity";
+  if (len <= 2) return "shore";
+  if (len >= 12) return "nexus";
+  if (/[aeiouy]{3,}/.test(s)) return "wave";
+  if (/(tion|ness|ity|ment|ing)$/.test(s)) return "loci";
+  return (["node", "node", "node", "wave", "loci", "shore"] as Role[])[h % 6];
+}
+
+function hashHue(w: string, base: number): number {
+  let h = 0; for (let i = 0; i < w.length; i++) h = (h * 131 + w.charCodeAt(i)) & 0xffff;
+  return (base + (h % 40) - 20 + 360) % 360;
+}
 
 export function MoRganism({
   walkPath,
@@ -67,96 +75,71 @@ export function MoRganism({
   height,
 }: {
   walkPath: string[];
-  pressure: number;   // 0..1 (busy)
-  stretch: number;    // 1..5
+  pressure: number;
+  stretch: number;
   width: number;
   height: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const nodesRef = useRef<Node[]>([]);
+  const nodesRef = useRef<Map<string, Node>>(new Map());
   const threadsRef = useRef<Thread[]>([]);
   const walkersRef = useRef<Walker[]>([]);
   const tRef = useRef(0);
   const lastPathRef = useRef<string>("");
 
-  // Build facial topology once — nodes are placed to imply a face without
-  // ever drawing "skin". They are semantic anchors.
+  // Seed walkers once (or when stretch tier changes).
   useEffect(() => {
-    const W = width, H = height;
-    const cx = W / 2, cy = H / 2;
-    const face = Math.min(W, H) * 0.42;
-    const ns: Node[] = [];
-    let id = 0;
-    const push = (role: Role, x: number, y: number, r: number, label?: string) => {
-      ns.push({
-        id: id++, role, x, y, cx: x, cy: y, r,
-        hue: ROLE_HUE[role], glow: 0.4, label,
-      });
-    };
-    // Two eyes — singularities.
-    push("singularity", cx - face * 0.32, cy - face * 0.18, 10, "◉");
-    push("singularity", cx + face * 0.32, cy - face * 0.18, 10, "◉");
-    // Nexus — third-eye / bindi.
-    push("nexus", cx, cy - face * 0.05, 8, "◈");
-    // Mouth wave band — 7 wave nodes.
-    for (let i = 0; i < 7; i++) {
-      const t = (i / 6) - 0.5;
-      push("wave", cx + t * face * 0.7, cy + face * 0.38 + Math.sin(t * Math.PI) * -6, 4);
-    }
-    // Loci — cheek portals.
-    push("loci", cx - face * 0.55, cy + face * 0.05, 6, "✦");
-    push("loci", cx + face * 0.55, cy + face * 0.05, 6, "✦");
-    // Node ring — hexagonal facial contour.
-    const ringN = 12;
-    for (let i = 0; i < ringN; i++) {
-      const a = (i / ringN) * Math.PI * 2 - Math.PI / 2;
-      push("node", cx + Math.cos(a) * face * 0.95, cy + Math.sin(a) * face * 1.05, 5);
-    }
-    // Shore — drifting freckles, seeded random but deterministic.
-    let seed = 1337;
-    const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-    for (let i = 0; i < 40; i++) {
-      const a = rnd() * Math.PI * 2;
-      const rr = face * (0.5 + rnd() * 0.7);
-      push("shore", cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.9, 1.5 + rnd() * 1.5);
-    }
-    nodesRef.current = ns;
-
-    // Seed walkers. mo, mo², mo²+, mo²e always present. mo²ayla appears
-    // scaled by stretch (long input = ribbon activates).
     const kinds: WalkerKind[] = ["mo", "mo2", "mo2p", "mo2e"];
     if (stretch >= 2) kinds.push("mo2ayla");
-    walkersRef.current = kinds.map((k) => {
-      const start = ns[Math.floor(Math.random() * ns.length)];
-      return {
-        kind: k, hue: WALKER_HUE[k],
-        x: start.x, y: start.y, vx: 0, vy: 0,
-        target: start.id, prev: start.id, trail: [],
-      };
-    });
-    // Reset threads when topology rebuilds.
-    threadsRef.current = [];
-  }, [width, height, stretch]);
+    walkersRef.current = kinds.map((k) => ({
+      kind: k, hue: WALKER_HUE[k],
+      x: width / 2, y: height / 2, vx: 0, vy: 0,
+      target: "", prev: "", step: 0, trail: [],
+    }));
+  }, [stretch, width, height]);
 
-  // When a new walkPath arrives, direct walkers toward nodes whose role
-  // gradient roughly matches — pure visual coupling to actual semantic
-  // input. We use a hash on the word to pick a target for variety.
+  // On new walkPath: instantiate/refresh word-nodes, wire walkers to walk it.
   useEffect(() => {
     const key = walkPath.join("|");
     if (key === lastPathRef.current) return;
     lastPathRef.current = key;
     if (!walkPath.length) return;
-    const ns = nodesRef.current;
-    const ws = walkersRef.current;
-    ws.forEach((w, i) => {
-      const word = walkPath[(i * 3) % walkPath.length] || "";
-      let h = 0; for (let c = 0; c < word.length; c++) h = (h * 31 + word.charCodeAt(c)) & 0xffff;
-      const targetIdx = h % ns.length;
-      w.target = targetIdx;
-    });
-  }, [walkPath]);
 
-  // Main render loop.
+    const ns = nodesRef.current;
+    const t = tRef.current;
+    const cx = width / 2, cy = height / 2;
+
+    walkPath.forEach((word, i) => {
+      if (!word) return;
+      const existing = ns.get(word);
+      if (existing) {
+        existing.life = Math.min(1, existing.life + 0.35);
+        existing.glow = Math.min(1, existing.glow + 0.4);
+        existing.r = Math.min(9, existing.r + 0.3);
+      } else {
+        // spawn near center with a slight ring bias so new geometry emerges outward
+        const a = (i / Math.max(1, walkPath.length)) * Math.PI * 2 + Math.random() * 0.3;
+        const rr = 40 + Math.random() * 60;
+        const role = classifyWord(word);
+        ns.set(word, {
+          id: word, role,
+          x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr,
+          vx: 0, vy: 0,
+          r: 3 + Math.min(6, word.length * 0.25),
+          hue: hashHue(word, ROLE_HUE[role]),
+          glow: 0.8, life: 1, born: t,
+        });
+      }
+    });
+
+    // Reset walkers to walk this path from the start.
+    walkersRef.current.forEach((w, i) => {
+      w.step = i % walkPath.length;
+      w.target = walkPath[w.step] || "";
+    });
+  }, [walkPath, width, height]);
+
+  // Main loop.
   useEffect(() => {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
@@ -174,59 +157,104 @@ export function MoRganism({
       const p = pressure;
       const s = Math.max(1, Math.min(5, stretch));
 
-      // Dark deep-field.
+      // deep field
       ctx.fillStyle = "#0a0d18";
       ctx.fillRect(0, 0, width, height);
-      // Radial glow bg.
-      const grad = ctx.createRadialGradient(width/2, height/2, 10, width/2, height/2, Math.max(width, height));
-      grad.addColorStop(0, `hsla(220, 60%, 22%, ${0.55 + p * 0.2})`);
-      grad.addColorStop(1, "hsla(240, 30%, 5%, 0)");
-      ctx.fillStyle = grad;
+      const bg = ctx.createRadialGradient(width/2, height/2, 10, width/2, height/2, Math.max(width, height));
+      bg.addColorStop(0, `hsla(220, 60%, 18%, ${0.5 + p * 0.25})`);
+      bg.addColorStop(1, "hsla(240, 30%, 5%, 0)");
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
 
-      // Breathing (inhale/exhale) — contracts nodes toward center then relaxes.
-      const breath = (Math.sin(t * 0.012) + 1) / 2;   // 0..1
-      const contract = 1 - breath * (0.04 + p * 0.05);
-
       const ns = nodesRef.current;
-      const cx = width/2, cy = height/2;
-      for (const n of ns) {
-        const tx = cx + (n.x - cx) * contract;
-        const ty = cy + (n.y - cy) * contract;
-        n.cx += (tx - n.cx) * 0.15;
-        n.cy += (ty - n.cy) * 0.15;
-        n.glow *= 0.96;
+      const cx = width / 2, cy = height / 2;
+
+      // ─── Decay + prune ───────────────────────────────────────────
+      for (const [id, n] of ns) {
+        n.life -= 0.0008;
+        n.glow *= 0.965;
+        if (n.life <= 0) ns.delete(id);
+      }
+      // Cap total node count
+      if (ns.size > 220) {
+        const arr = Array.from(ns.values()).sort((a, b) => a.life - b.life);
+        for (let i = 0; i < ns.size - 220; i++) ns.delete(arr[i].id);
       }
 
-      // Age & fade threads.
-      const threads = threadsRef.current;
-      for (const th of threads) { th.age += 1; th.strength *= 0.994; }
-      // Web growth cap — threads decay slowly, but keep at most ~600.
-      if (threads.length > 600) threads.splice(0, threads.length - 600);
-
-      // Draw threads (Anansi web) beneath everything.
-      ctx.lineWidth = 0.6;
-      for (const th of threads) {
-        const a = ns[th.a], b = ns[th.b];
+      // ─── Force-directed relaxation ───────────────────────────────
+      const nodes = Array.from(ns.values());
+      const N = nodes.length;
+      // repulsion (O(N^2) — fine at ≤220 nodes)
+      const REP = 260;
+      for (let i = 0; i < N; i++) {
+        const a = nodes[i];
+        for (let j = i + 1; j < N; j++) {
+          const b = nodes[j];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const d2 = dx * dx + dy * dy + 0.01;
+          const f = REP / d2;
+          const d = Math.sqrt(d2);
+          const fx = (dx / d) * f, fy = (dy / d) * f;
+          a.vx -= fx; a.vy -= fy;
+          b.vx += fx; b.vy += fy;
+        }
+        // gentle center pull so cluster doesn't drift off-screen
+        a.vx += (cx - a.x) * 0.0012;
+        a.vy += (cy - a.y) * 0.0012;
+      }
+      // spring on threads (persistent geometry — this is what makes shapes hold)
+      const REST = 42;
+      for (const th of threadsRef.current) {
+        const a = ns.get(th.a), b = ns.get(th.b);
         if (!a || !b) continue;
-        const alpha = Math.min(0.55, th.strength);
-        if (alpha < 0.02) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) + 0.001;
+        const k = 0.014 * Math.min(1, th.strength);
+        const f = (d - REST) * k;
+        const fx = (dx / d) * f, fy = (dy / d) * f;
+        a.vx += fx; a.vy += fy;
+        b.vx -= fx; b.vy -= fy;
+      }
+      // integrate
+      for (const n of nodes) {
+        n.vx *= 0.82; n.vy *= 0.82;
+        n.x += n.vx; n.y += n.vy;
+        // soft bounds
+        const margin = 20;
+        if (n.x < margin) n.vx += (margin - n.x) * 0.05;
+        if (n.x > width - margin) n.vx -= (n.x - (width - margin)) * 0.05;
+        if (n.y < margin) n.vy += (margin - n.y) * 0.05;
+        if (n.y > height - margin) n.vy -= (n.y - (height - margin)) * 0.05;
+      }
+
+      // ─── Threads: age + decay + draw ─────────────────────────────
+      const threads = threadsRef.current;
+      for (const th of threads) { th.age += 1; th.strength *= 0.997; }
+      // prune dead threads and threads whose endpoints are gone
+      threadsRef.current = threads.filter((th) => th.strength > 0.02 && ns.has(th.a) && ns.has(th.b));
+      if (threadsRef.current.length > 800) {
+        threadsRef.current.splice(0, threadsRef.current.length - 800);
+      }
+
+      ctx.lineWidth = 0.6;
+      for (const th of threadsRef.current) {
+        const a = ns.get(th.a)!, b = ns.get(th.b)!;
+        const alpha = Math.min(0.6, th.strength);
         ctx.strokeStyle = `hsla(${th.hue}, 80%, 65%, ${alpha})`;
         ctx.beginPath();
-        ctx.moveTo(a.cx, a.cy);
-        // Slight curve for silk feel.
-        const mx = (a.cx + b.cx) / 2 + Math.sin((a.id + b.id + t) * 0.05) * 6;
-        const my = (a.cy + b.cy) / 2 + Math.cos((a.id + b.id + t) * 0.05) * 6;
-        ctx.quadraticCurveTo(mx, my, b.cx, b.cy);
+        ctx.moveTo(a.x, a.y);
+        const mx = (a.x + b.x) / 2 + Math.sin((th.age + a.x) * 0.02) * 4;
+        const my = (a.y + b.y) / 2 + Math.cos((th.age + a.y) * 0.02) * 4;
+        ctx.quadraticCurveTo(mx, my, b.x, b.y);
         ctx.stroke();
       }
 
-      // Draw nodes by role — each role has its own geometry.
-      for (const n of ns) {
-        const g = 0.4 + n.glow * 0.6;
+      // ─── Nodes ───────────────────────────────────────────────────
+      for (const n of nodes) {
+        const g = 0.35 + n.glow * 0.65;
+        const baseAlpha = (0.4 + g * 0.6) * Math.max(0.25, n.life);
         ctx.save();
-        ctx.translate(n.cx, n.cy);
-        const baseAlpha = 0.75 + g * 0.25;
+        ctx.translate(n.x, n.y);
         switch (n.role) {
           case "nexus": {
             const rr = n.r * (1 + Math.sin(t * 0.05) * 0.08);
@@ -240,7 +268,6 @@ export function MoRganism({
             break;
           }
           case "node": {
-            // hexagonal crystal
             ctx.strokeStyle = `hsla(${n.hue}, 70%, 75%, ${baseAlpha})`;
             ctx.fillStyle = `hsla(${n.hue}, 70%, 55%, ${0.15 + g * 0.3})`;
             ctx.lineWidth = 1;
@@ -254,7 +281,6 @@ export function MoRganism({
             break;
           }
           case "loci": {
-            // rainbow portal — 3 concentric rings
             for (let k = 0; k < 3; k++) {
               ctx.strokeStyle = `hsla(${(n.hue + k * 40 + t) % 360}, 90%, 70%, ${baseAlpha * (1 - k * 0.25)})`;
               ctx.lineWidth = 1;
@@ -265,64 +291,51 @@ export function MoRganism({
             break;
           }
           case "singularity": {
-            // eye — dense halo + rotating pupils
             const rr = n.r;
             const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, rr * 2.6);
-            rg.addColorStop(0, `hsla(${n.hue}, 100%, 92%, ${0.9})`);
-            rg.addColorStop(0.6, `hsla(${n.hue}, 90%, 60%, ${0.35})`);
+            rg.addColorStop(0, `hsla(${n.hue}, 100%, 92%, 0.9)`);
+            rg.addColorStop(0.6, `hsla(${n.hue}, 90%, 60%, 0.35)`);
             rg.addColorStop(1, `hsla(${n.hue}, 60%, 30%, 0)`);
             ctx.fillStyle = rg;
             ctx.beginPath(); ctx.arc(0, 0, rr * 2.6, 0, Math.PI * 2); ctx.fill();
-            // pupil — sharper with pressure
-            const pupilR = Math.max(1.5, rr * (0.28 + (1 - p) * 0.15));
             ctx.fillStyle = "#05070d";
-            ctx.beginPath(); ctx.arc(0, 0, pupilR, 0, Math.PI * 2); ctx.fill();
-            // orbiting micro-walkers
-            for (let k = 0; k < 3; k++) {
-              const a = t * 0.03 + k * (Math.PI * 2 / 3);
-              ctx.fillStyle = `hsla(${(n.hue + k * 90) % 360}, 90%, 80%, 0.9)`;
-              ctx.beginPath(); ctx.arc(Math.cos(a) * rr * 1.4, Math.sin(a) * rr * 1.4, 1.2, 0, Math.PI * 2); ctx.fill();
-            }
+            ctx.beginPath(); ctx.arc(0, 0, Math.max(1.5, rr * 0.35), 0, Math.PI * 2); ctx.fill();
             break;
           }
           case "wave": {
-            // liquid ribbon segment (drawn as part of the mouth compression too)
             ctx.fillStyle = `hsla(${n.hue}, 80%, 70%, ${baseAlpha})`;
             ctx.beginPath(); ctx.arc(0, 0, n.r, 0, Math.PI * 2); ctx.fill();
             break;
           }
           case "shore": {
-            ctx.fillStyle = `hsla(${n.hue}, 70%, 75%, ${0.35 + g * 0.4})`;
+            ctx.fillStyle = `hsla(${n.hue}, 70%, 75%, ${0.3 + g * 0.4})`;
             ctx.beginPath(); ctx.arc(0, 0, n.r, 0, Math.PI * 2); ctx.fill();
             break;
           }
         }
+        // word label (small, dim, only if node is warm)
+        if (n.glow > 0.25 && n.r > 3) {
+          ctx.fillStyle = `hsla(${n.hue}, 30%, 92%, ${Math.min(0.9, n.glow) * n.life})`;
+          ctx.font = "9px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(n.id, 0, n.r + 11);
+        }
         ctx.restore();
       }
 
-      // Mouth = wave band drawn as a connected topology-compression curve.
-      const waveNodes = ns.filter((n) => n.role === "wave").sort((a, b) => a.cx - b.cx);
-      if (waveNodes.length > 1) {
-        ctx.strokeStyle = `hsla(150, 80%, 75%, ${0.7 + p * 0.3})`;
-        ctx.lineWidth = 1.4 + p * 1.2;
-        ctx.beginPath();
-        ctx.moveTo(waveNodes[0].cx, waveNodes[0].cy);
-        for (let i = 1; i < waveNodes.length; i++) {
-          const prev = waveNodes[i - 1], cur = waveNodes[i];
-          const mx = (prev.cx + cur.cx) / 2;
-          const my = (prev.cy + cur.cy) / 2 + Math.sin(t * 0.04 + i) * (2 + p * 6);
-          ctx.quadraticCurveTo(prev.cx, prev.cy, mx, my);
-        }
-        ctx.lineTo(waveNodes[waveNodes.length - 1].cx, waveNodes[waveNodes.length - 1].cy);
-        ctx.stroke();
-      }
-
-      // Walkers — traverse toward target node; when arrived, pick a new
-      // target biased by role compatibility, emit a thread on the edge crossed.
+      // ─── Walkers ─────────────────────────────────────────────────
       const walkers = walkersRef.current;
       for (const w of walkers) {
-        const tn = ns[w.target] || ns[0];
-        const dx = tn.cx - w.x, dy = tn.cy - w.y;
+        const tn = ns.get(w.target);
+        if (!tn) {
+          // advance step until we find a live node, or idle if no path
+          if (walkPath.length) {
+            w.step = (w.step + 1) % walkPath.length;
+            w.target = walkPath[w.step];
+          }
+          continue;
+        }
+        const dx = tn.x - w.x, dy = tn.y - w.y;
         const dist = Math.hypot(dx, dy);
         const speed =
           w.kind === "mo" ? 1.1 :
@@ -330,39 +343,38 @@ export function MoRganism({
           w.kind === "mo2p" ? 2.0 :
           w.kind === "mo2e" ? 2.6 : 1.4;
         const sp = speed * (0.7 + p * 0.9);
-        if (dist < 6) {
-          // arrived — thread the crossed edge, pulse the node, retarget
-          const prevNode = ns[w.prev];
+        if (dist < 5) {
+          const prevNode = ns.get(w.prev);
           if (prevNode && prevNode.id !== tn.id) {
-            threadsRef.current.push({ a: prevNode.id, b: tn.id, age: 0, strength: 0.65, hue: w.hue });
+            // reinforce or add thread
+            const existing = threadsRef.current.find(
+              (th) => (th.a === prevNode.id && th.b === tn.id) || (th.a === tn.id && th.b === prevNode.id),
+            );
+            if (existing) existing.strength = Math.min(1, existing.strength + 0.25);
+            else threadsRef.current.push({ a: prevNode.id, b: tn.id, age: 0, strength: 0.7, hue: w.hue });
           }
           tn.glow = Math.min(1, tn.glow + 0.5);
+          tn.life = Math.min(1, tn.life + 0.05);
           w.prev = tn.id;
-          // Retarget — mo²e chaotic, mo²+ prefers singularities (eyes),
-          // mo²ayla prefers wave (mouth/hair), mo² prefers nodes, mo picks anywhere.
-          let pool = ns;
-          if (w.kind === "mo2p") pool = ns.filter((n) => n.role === "singularity" || n.role === "nexus");
-          else if (w.kind === "mo2ayla") pool = ns.filter((n) => n.role === "wave" || n.role === "loci");
-          else if (w.kind === "mo2") pool = ns.filter((n) => n.role === "node" || n.role === "nexus");
-          else if (w.kind === "mo2e") pool = ns; // chaotic
-          const next = pool[Math.floor(Math.random() * pool.length)] || tn;
-          w.target = next.id;
+          // advance along the path (mo²e occasionally jumps)
+          if (walkPath.length) {
+            if (w.kind === "mo2e" && Math.random() < 0.35) {
+              w.step = Math.floor(Math.random() * walkPath.length);
+            } else {
+              w.step = (w.step + 1) % walkPath.length;
+            }
+            w.target = walkPath[w.step];
+          }
         } else {
           w.vx = (w.vx + (dx / dist) * sp) * 0.6;
           w.vy = (w.vy + (dy / dist) * sp) * 0.6;
-          // mo²e wobbles
-          if (w.kind === "mo2e") {
-            w.vx += (Math.random() - 0.5) * 1.4;
-            w.vy += (Math.random() - 0.5) * 1.4;
-          }
+          if (w.kind === "mo2e") { w.vx += (Math.random() - 0.5) * 1.4; w.vy += (Math.random() - 0.5) * 1.4; }
           w.x += w.vx; w.y += w.vy;
         }
-        // trail
         w.trail.push({ x: w.x, y: w.y, a: 1 });
-        const maxTrail = (w.kind === "mo2ayla" ? 60 : 20) * s;
+        const maxTrail = (w.kind === "mo2ayla" ? 60 : 22) * s;
         if (w.trail.length > maxTrail) w.trail.shift();
         for (let i = 0; i < w.trail.length; i++) w.trail[i].a *= 0.985;
-        // draw trail
         ctx.strokeStyle = `hsla(${w.hue}, 90%, 75%, 0.5)`;
         ctx.lineWidth = w.kind === "mo2ayla" ? 1.6 : 1;
         ctx.beginPath();
@@ -371,7 +383,6 @@ export function MoRganism({
           if (i === 0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y);
         }
         ctx.stroke();
-        // draw walker head
         ctx.fillStyle = `hsla(${w.hue}, 100%, 90%, 0.95)`;
         ctx.beginPath(); ctx.arc(w.x, w.y, w.kind === "mo2ayla" ? 2.2 : 1.8, 0, Math.PI * 2); ctx.fill();
       }
@@ -380,7 +391,7 @@ export function MoRganism({
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [width, height, pressure, stretch]);
+  }, [width, height, pressure, stretch, walkPath]);
 
   return <canvas ref={canvasRef} className="block" />;
 }
@@ -431,7 +442,7 @@ export function MoRganismWindow({
     dragRef.current = { mode: "resize", ox: e.clientX, oy: e.clientY, sx: size.w, sy: size.h };
   };
 
-  const canvasH = size.h - 36; // minus header
+  const canvasH = size.h - 36;
 
   return (
     <div
