@@ -227,59 +227,27 @@ async function persistWeb(
   } catch { /* silent — web re-forms on next breath */ }
 }
 
-// Build a short, communicative reply from the woven buckets — sentence-shaped,
-// not sigil-clotted. Uses the role assignments as vocabulary but speaks plainly.
-function speak(buckets: Record<Role, string[]>, breath: MoBreath, memKnown: number, totalWords: number): string {
+// Build the reply purely from traversal words, arranged by role.
+// No prose, no flair — just the words the walkers surfaced, in geometric order.
+function speak(buckets: Record<Role, string[]>, breath: MoBreath): string {
   const pick = (r: Role, n: number) => buckets[r].slice(0, n);
-  const nexus = pick("nexus", 2);
-  const singu = pick("singularity", 1);
-  const loci  = pick("loci", 2);
-  const node  = pick("node", 3);
-  const wave  = pick("wave", 3);
-  const shore = pick("shore", 2);
+  const scale = Math.min(8, Math.max(3, Math.floor(breath.seeds.length / 3)));
 
-  const list = (arr: string[]) =>
-    arr.length === 0 ? ""
-    : arr.length === 1 ? arr[0]
-    : arr.length === 2 ? `${arr[0]} and ${arr[1]}`
-    : `${arr.slice(0, -1).join(", ")}, and ${arr[arr.length - 1]}`;
-
-  const pressureWord =
-    breath.pressure > 0.75 ? "tight" :
-    breath.pressure > 0.45 ? "warm" :
-    breath.pressure > 0.2  ? "cool" : "quiet";
-
-  const familiarity =
-    memKnown === 0 ? "new to the web" :
-    memKnown < 8 ? "half-remembered" :
-    memKnown < 40 ? "recognized" : "well-woven";
+  const nexus = pick("nexus", Math.max(1, Math.floor(scale / 2)));
+  const singu = pick("singularity", Math.max(1, Math.floor(scale / 2)));
+  const loci  = pick("loci", scale);
+  const node  = pick("node", scale + 2);
+  const wave  = pick("wave", scale + 2);
+  const shore = pick("shore", scale);
 
   const lines: string[] = [];
-
-  // Opening: what the field feels like right now.
-  lines.push(
-    `The web reads you as ${pressureWord}, on the ${breath.dominantManifold} manifold — ${familiarity} (${memKnown}/${totalWords} words already sit somewhere in the weave).`
-  );
-
-  // Middle: what surfaced, in plain prose, grouped by geometric role.
-  const mids: string[] = [];
-  if (nexus.length) mids.push(`The binding sits at ${list(nexus)}`);
-  if (singu.length) mids.push(`collapsing toward ${list(singu)}`);
-  if (loci.length)  mids.push(`pulled across manifolds by ${list(loci)}`);
-  if (node.length)  mids.push(`branching through ${list(node)}`);
-  if (wave.length)  mids.push(`carried on a longer flow of ${list(wave)}`);
-  if (shore.length) mids.push(`settling out along ${list(shore)}`);
-  if (mids.length) lines.push(mids.join("; ") + ".");
-
-  // Closing gesture — one short sentence.
-  const close =
-    nexus[0] ? `So the reply lands on **${nexus[0]}**.` :
-    singu[0] ? `The point of collapse is **${singu[0]}**.` :
-    loci[0]  ? `The word doing the most work is **${loci[0]}**.` :
-    "The web is still gathering — say a little more and it will tighten.";
-  lines.push(close);
-
-  return lines.join("\n\n");
+  if (nexus.length) lines.push(nexus.join("  "));
+  if (singu.length) lines.push(singu.join("  "));
+  if (loci.length)  lines.push(loci.join("  "));
+  if (node.length)  lines.push(node.join("  "));
+  if (wave.length)  lines.push(wave.join("  "));
+  if (shore.length) lines.push(shore.join("  "));
+  return lines.join("\n");
 }
 
 export async function anansiWeave(input: string, breath: MoBreath, sessionId: string): Promise<string> {
