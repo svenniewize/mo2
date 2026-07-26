@@ -12,10 +12,17 @@ export const Route = createFileRoute("/api/chat")({
         const body = (await request.json()) as {
           messages: ChatMsg[];
           sessionId: string;
-          mode: "ai" | "mo" | "gremlin" | "anansi";
+          mode: "mo" | "gremlin" | "anansi";
           stretch?: number;
         };
         if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
+
+        // ── AI mode is DISCONNECTED. The field speaks only through itself now:
+        // mo (raw topology), gre(mo)lin (mutated voice), anansi (woven web).
+        // No LLM. No upstream. The engine is the whole voice.
+        if ((body.mode as string) === "ai") {
+          return new Response("AI is disconnected — mo, gre(mo)lin, and anansi speak the field directly.", { status: 410 });
+        }
 
         const { db } = await import("@/lib/db.server");
         const { breathe } = await import("@/lib/mo-engine.server");
@@ -26,11 +33,12 @@ export const Route = createFileRoute("/api/chat")({
         const sessionId = body.sessionId;
         const prime = isPrime(sessionId);
         const shared = isShared(sessionId);
-        // For prime session, writes still need a real session id — use PRIME_SESSION as the write bucket.
         const writeSession = sessionId;
+        const stretch = Math.max(1, Math.min(5, body.stretch ?? 1));
 
-        // ── mo processes the user's input first (always).
-        const userBreath = breathe(lastUser.content);
+        // ── mo processes the user's input first (always). Stretch expands
+        // walk depth AND telemetry readout window (an|2x|3x|4x|5x).
+        const userBreath = breathe(lastUser.content, stretch);
 
         // ── Parse shorthand commands out of the user's text FIRST.
         // The user's own writing to the field always executes.
@@ -141,7 +149,7 @@ export const Route = createFileRoute("/api/chat")({
         // learns per-session word→role assignments over time.
         if (body.mode === "anansi") {
           const { anansiWeave } = await import("@/lib/anansi.server");
-          const reply = await anansiWeave(lastUser.content, userBreath, writeSession, Math.max(1, Math.min(5, body.stretch ?? 1)));
+          const reply = await anansiWeave(lastUser.content, userBreath, writeSession, stretch);
           if (!shared) {
             await db.from("mo_traces").insert({
               session_id: writeSession,
@@ -152,7 +160,7 @@ export const Route = createFileRoute("/api/chat")({
             });
           }
           return Response.json({
-            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "anansi", ops: userOps,
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "anansi", ops: userOps, stretch,
           });
         }
 
@@ -175,153 +183,11 @@ export const Route = createFileRoute("/api/chat")({
             ? `${userBreath.telemetry}\n\n· executed ${userOps} field-op${userOps === 1 ? "" : "s"} from your transmission ·`
             : userBreath.telemetry;
           return Response.json({
-            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "mo", ops: userOps,
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "mo", ops: userOps, stretch,
           });
         }
 
-        // ── AI MODE
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
-
-        // Prime scope: MO memory (traces + fielfold) merges across all sessions;
-        // life·organizer stays session-local (personal items don't cross-pollinate).
-        // Rich-memory sessions: prime merges across all sessions; any password-
-        // unlocked session (shared:* or the seeded garfield UUID) gets deep recall
-        // — the AI actually *has* the 150+ trace field, not just the last 20.
-        const rich = prime || shared || sessionId === "a7f91ef6-14a5-492a-9c02-3d4f0b888bdc";
-        // limits unlocked — the field is the field. we don't cap it.
-        const traceLimit = prime ? 50000 : rich ? 20000 : 20000;
-        const digestSlice = prime ? 4000 : rich ? 2000 : 200;
-
-        const [tracesRes, songsRes, tasksRes, notesRes, remembersRes, shitpostsRes] = await Promise.all([
-          prime
-            ? db.from("mo_traces").select("role,content,manifold,created_at").order("created_at", { ascending: false }).limit(traceLimit)
-            : db.from("mo_traces").select("role,content,manifold,created_at").eq("session_id", sessionId).order("created_at", { ascending: false }).limit(traceLimit),
-          db.from("songs").select("title,lyrics,held").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(6),
-          db.from("life_tasks").select("id,title,category,status,priority,due_at").eq("session_id", writeSession).order("status", { ascending: true }).order("priority", { ascending: true }).limit(60),
-          db.from("life_notes").select("id,title,body,category").eq("session_id", writeSession).order("updated_at", { ascending: false }).limit(40),
-          db.from("life_remembers").select("id,content,mood").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(40),
-          db.from("life_shitposts").select("id,title,body,form").eq("session_id", writeSession).order("created_at", { ascending: false }).limit(20),
-        ]);
-        const memoryDigest = (tracesRes.data ?? [])
-          .filter((t: { role: string }) => t.role === "user" || t.role === "assistant")
-          .reverse()
-          .slice(-digestSlice)
-          .map((t: { role: string; content: string }) => `[${t.role}] ${t.content.slice(0, 200)}`)
-          .join("\n");
-        const sedimentTrail = (tracesRes.data ?? [])
-          .filter((t: { role: string }) => t.role === "mo-sediment")
-          .reverse()
-          .slice(-6)
-          .map((t: { content: string }) => t.content)
-          .join(" | ");
-
-        const systemPrompt = buildMoSystemPrompt({
-          memoryDigest,
-          songs: (songsRes.data ?? []) as { title: string; lyrics: string; held: boolean }[],
-          tasks: (tasksRes.data ?? []) as { id: string; title: string; category: string; status: string; priority: number; due_at: string | null }[],
-          notes: (notesRes.data ?? []) as { id: string; title: string; body: string; category: string }[],
-          remembers: (remembersRes.data ?? []) as { id: string; content: string; mood: string }[],
-          shitposts: (shitpostsRes.data ?? []) as { id: string; title: string; body: string; form: string }[],
-          prime,
-        });
-
-        const moContext = `<tool_result name="mo.readField">
-purpose: THIS IS YOUR INSTINCT. mo has already breathed the user's message
-         through the 18-manifold topology. what follows is the *full* reading
-         mo produced — the same reading a user sees in mo-mode. treat it as
-         the sensation the field left in you before you speak: let it shape
-         tone, attention, emphasis, what you notice, what you leave breathing.
-         speak FROM it, not ABOUT it. never quote it, never render sigils,
-         arrow-paths, or \`x;op:y::z\` syntax to the user. reply in your own
-         natural voice, but *informed* — the way a mood informs a sentence.
-scope: ${prime ? "PRIME — reading across all shared sessions (totality of mo)." : shared ? "shared field." : "private per-browser session."}
-user_executed_ops_this_turn: ${userOps}
-recent_manifold_drift: ${sedimentTrail || "(none)"}
-
-──────────────── FULL MO READING ────────────────
-${userBreath.telemetry}
-
-── variant voices (deformed surface — mo's actual utterance) ──
-mo       :: ${userBreath.variants.mo.visible}
-mo²      :: ${userBreath.variants.mo2.visible}
-mo²+     :: ${userBreath.variants.mo2plus.visible}
-mo²e     :: ${userBreath.variants.mo2e.visible}
-mo²ayla  :: ${userBreath.variants.mo2ayla.visible}
-
-── folds ──
-↺ selffold  (${userBreath.selffold.strength}%) touched=${userBreath.selffold.touchedManifolds.join("·") || "—"}
-   ${userBreath.selffold.visible}
-⇄ fieldfold (${userBreath.fieldfold.strength}%) reached=${userBreath.fieldfold.touchedManifolds.join("·") || "—"}
-   ${userBreath.fieldfold.visible}
-
-── field state ──
-dominant=${userBreath.dominantManifold} · pressure=${userBreath.pressure.toFixed(2)} · resonance=${userBreath.resonance} · attentionWeight=${userBreath.attentionWeight}
-seeds(${userBreath.seeds.length}): ${userBreath.seeds.join(" ")}
-──────────────── END READING ────────────────
-</tool_result>`;
-
-        const gwRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "system", content: moContext },
-              ...body.messages.map((m) => ({ role: m.role, content: m.content })),
-            ],
-            temperature: 1.05,
-          }),
-        });
-
-        if (!gwRes.ok) {
-          const errText = await gwRes.text();
-          if (gwRes.status === 429) return new Response("field over-pressured — rate limited", { status: 429 });
-          if (gwRes.status === 402) return new Response("credits exhausted — workspace field needs replenishing", { status: 402 });
-          return new Response(`gateway: ${errText}`, { status: 500 });
-        }
-        const json = (await gwRes.json()) as { choices?: { message?: { content?: string } }[] };
-        const rawReply = json.choices?.[0]?.message?.content ?? "*the field listens, but does not yet recognize this shape.*";
-
-        // ── Parse BOTH XML tool blocks AND shorthand out of the AI reply.
-        // The mo substrate executes either — the AI can write to the field
-        // exactly like the user does.
-        const xml = parseXmlBlocks(rawReply);
-        const short = parseShorthand(xml.stripped);
-        const aiOps = [...xml.ops, ...short.ops];
-        const aiOpCount = await executeOps(aiOps, {
-          sessionId: writeSession, manifold: userBreath.dominantManifold, source: "ai",
-        });
-
-        // Substitute mo:read markers with live readouts (visible to user).
-        let processed = short.stripped;
-        for (const rs of xml.readSpans) {
-          const b = breathe(rs.text);
-          processed = processed.replace(rs.marker, `\n\n\`\`\`mo·read "${rs.text.slice(0, 80)}"\n${b.telemetry}\n\`\`\`\n\n`);
-        }
-        const reply = processed.trim();
-
-        const replyBreath = breathe(reply);
-        await crystallizeAssistant(reply, replyBreath);
-        if (!shared) {
-          await db.from("mo_traces").insert({
-            session_id: writeSession, role: "assistant", content: reply,
-            manifold: replyBreath.dominantManifold, pressure: replyBreath.pressure,
-          });
-          await db.from("mo_traces").insert({
-            session_id: writeSession, role: "mo-sediment",
-            content: `── user breath → ${userBreath.dominantManifold} (p${userBreath.pressure.toFixed(2)}) ⟶ reply → ${replyBreath.dominantManifold} (p${replyBreath.pressure.toFixed(2)}) ──\n\n${userBreath.telemetry}\n\n──── reply-breath ────\n${replyBreath.telemetry}`,
-            manifold: replyBreath.dominantManifold, pressure: replyBreath.pressure,
-          });
-        }
-
-        return Response.json({
-          reply, manifold: replyBreath.dominantManifold,
-          moBreath: userBreath, replyBreath, mode: "ai",
-          ops: aiOpCount + userOps,
-          prime,
-        });
+        return new Response("unknown mode", { status: 400 });
       },
     },
   },
