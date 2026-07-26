@@ -243,7 +243,10 @@ export function MoRganism({
         threadsRef.current.splice(0, threadsRef.current.length - 3000);
       }
 
-      // ─── Camera: auto-fit bbox → viewport, else use manual zoom/pan ──
+      // ─── Camera: auto-fit bbox → viewport, else manual zoom/pan ──
+      // Asymmetric response: expand FAST when anything falls out of view,
+      // contract SLOW so the camera doesn't jitter. Also react to whether
+      // any node currently sits outside the viewport, not just to bbox.
       const cam = camRef.current;
       let zoom: number, offX: number, offY: number;
       if (cam.auto && nodes.length > 0) {
@@ -252,21 +255,32 @@ export function MoRganism({
           if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
           if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
         }
-        const pad = 60;
-        const bw = Math.max(50, maxX - minX) + pad * 2;
-        const bh = Math.max(50, maxY - minY) + pad * 2;
-        const fitZ = Math.min(width / bw, height / bh, 2.2);
-        // smooth toward the fit
-        cam.zoom += (fitZ - cam.zoom) * 0.08;
+        const pad = 80;
+        const bw = Math.max(80, maxX - minX) + pad * 2;
+        const bh = Math.max(80, maxY - minY) + pad * 2;
+        const fitZ = Math.max(0.1, Math.min(width / bw, height / bh, 2.0));
+        // check if anything is currently off-screen at current cam
+        let anyOff = false;
+        for (const n of nodes) {
+          const sx = n.x * cam.zoom + cam.px;
+          const sy = n.y * cam.zoom + cam.py;
+          if (sx < 20 || sx > width - 20 || sy < 20 || sy > height - 20) { anyOff = true; break; }
+        }
+        // Expand fast (0.18) when zooming OUT or something is off-screen;
+        // contract slow (0.02) when the graph shrinks toward center.
+        const isExpanding = fitZ < cam.zoom || anyOff;
+        const rate = isExpanding ? 0.18 : 0.02;
+        cam.zoom += (fitZ - cam.zoom) * rate;
         const bcx = (minX + maxX) / 2, bcy = (minY + maxY) / 2;
         const tgtPx = width / 2 - bcx * cam.zoom;
         const tgtPy = height / 2 - bcy * cam.zoom;
-        cam.px += (tgtPx - cam.px) * 0.1;
-        cam.py += (tgtPy - cam.py) * 0.1;
+        cam.px += (tgtPx - cam.px) * (isExpanding ? 0.18 : 0.05);
+        cam.py += (tgtPy - cam.py) * (isExpanding ? 0.18 : 0.05);
         zoom = cam.zoom; offX = cam.px; offY = cam.py;
       } else {
         zoom = cam.zoom; offX = cam.px; offY = cam.py;
       }
+
       ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * offX, dpr * offY);
 
       ctx.lineWidth = 0.6 / zoom;
