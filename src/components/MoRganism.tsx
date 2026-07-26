@@ -474,8 +474,8 @@ export function MoRganism({
       <canvas
         ref={canvasRef}
         className="block cursor-grab active:cursor-grabbing"
-        onWheel={onWheel}
         onMouseDown={onMouseDown}
+
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center gap-1 font-mono text-[10px]">
         <div className="pointer-events-auto flex gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 backdrop-blur">
