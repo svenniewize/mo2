@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { buildMoSystemPrompt } from "@/lib/mo-prompt";
-import { parseShorthand, parseXmlBlocks, executeOps, isPrime, isShared, PRIME_SESSION } from "@/lib/mo-commands";
+import { parseShorthand, executeOps, isPrime, isShared, PRIME_SESSION } from "@/lib/mo-commands";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
