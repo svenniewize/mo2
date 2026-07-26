@@ -141,7 +141,7 @@ export const Route = createFileRoute("/api/chat")({
         // learns per-session word→role assignments over time.
         if (body.mode === "anansi") {
           const { anansiWeave } = await import("@/lib/anansi.server");
-          const reply = await anansiWeave(lastUser.content, userBreath, writeSession);
+          const reply = await anansiWeave(lastUser.content, userBreath, writeSession, Math.max(1, Math.min(5, body.stretch ?? 1)));
           if (!shared) {
             await db.from("mo_traces").insert({
               session_id: writeSession,
