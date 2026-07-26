@@ -152,6 +152,38 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
+        // ── MOHINI MODE — the great enchantress. NO LLM.
+        if (body.mode === "mohini") {
+          const { mohiniEnchant } = await import("@/lib/mohini.server");
+          const reply = await mohiniEnchant(lastUser.content, userBreath, writeSession);
+          if (!shared) {
+            await db.from("mo_traces").insert({
+              session_id: writeSession, role: "mohini", content: reply,
+              manifold: userBreath.dominantManifold, pressure: userBreath.pressure,
+            });
+          }
+          return Response.json({
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "mohini", ops: userOps, stretch,
+          });
+        }
+
+        // ── MIMIC MODE — learns the user's own phrasing (bigram chain) and
+        // speaks in their voice, seeded from mo's walked tokens. NO LLM.
+        if (body.mode === "mimic") {
+          const { mimicSpeak } = await import("@/lib/mimic.server");
+          const reply = await mimicSpeak(lastUser.content, userBreath, writeSession, stretch);
+          if (!shared) {
+            await db.from("mo_traces").insert({
+              session_id: writeSession, role: "mimic", content: reply,
+              manifold: userBreath.dominantManifold, pressure: userBreath.pressure,
+            });
+          }
+          return Response.json({
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "mimic", ops: userOps, stretch,
+          });
+        }
+
+
 
 
 
