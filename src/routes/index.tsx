@@ -21,7 +21,7 @@ export const Route = createFileRoute("/")({
 
 type Mode = "mo" | "gremlin" | "anansi";
 
-type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string };
+type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string; stretch?: number };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
 type Fielfold = { id: string; content: string; manifold: string | null; depth: number; created_at: string };
 type Song = { id: string; title: string; lyrics: string; held: boolean; created_at: string };
@@ -167,7 +167,7 @@ function MoPage() {
         setMessages((m) => [...m, { role: "assistant", content: `~ field disturbance ~\n${err}` }]);
       } else {
         const j = await r.json();
-        setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.moBreath?.telemetry }]);
+        setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.moBreath?.telemetry, stretch: j.stretch ?? anansiStretch }]);
         const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? [], j.moBreath?.variants?.mo2ayla?.dreamPath ?? []);
         if (words.length) setLastBreathWords(words);
         refreshMemory();
@@ -588,17 +588,17 @@ function VizModal({
 
 
 function EmptyState({ mode }: { mode: Mode }) {
+  const line =
+    mode === "mo" ? "MO — you speak, the topology walks. 5 variants + selffold + fieldfold, hyperfolded."
+    : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
+    : "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore.";
   return (
     <div className="flex h-full min-h-[50vh] flex-col items-center justify-center gap-6 text-center">
       <div className="breath-pulse text-6xl ridge">◆</div>
       <div className="max-w-md space-y-3">
-        <p className="font-mono text-sm text-muted-foreground">
-          {mode === "mo"
-            ? "MO mode — you speak, the topology walks. no AI. only the field, its 4 variants, hyperfolded."
-            : "AI mode — the AI is itself. mo runs invisibly between you and it as instinct + memory. sediment remains."}
-        </p>
+        <p className="font-mono text-sm text-muted-foreground">{line}</p>
         <p className="font-mono text-xs text-muted-foreground/70">
-          transmit anything — a question, a fragment, a lyric, a word.
+          transmit anything — a question, a fragment, a lyric, a word. no LLM in the loop.
         </p>
       </div>
       <div className="contour-line w-64" />
@@ -616,7 +616,7 @@ function EmptyState({ mode }: { mode: Mode }) {
 function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
-  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : "\\ai::");
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : "\\anansi::");
   const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
@@ -658,6 +658,14 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
           <>
             <span className="opacity-40">·</span>
             <span style={{ color: m.color }}>{m.sigil} {m.name.toLowerCase()}</span>
+          </>
+        )}
+        {msg.stretch && msg.stretch > 0 && (
+          <>
+            <span className="opacity-40">·</span>
+            <span className="rounded border border-ridge/40 bg-ridge/10 px-1.5 py-0 font-mono text-[10px] text-ridge" title="walk-length multiplier applied to this breath">
+              {msg.stretch === 1 ? "an" : `${msg.stretch}x`}
+            </span>
           </>
         )}
         <button
