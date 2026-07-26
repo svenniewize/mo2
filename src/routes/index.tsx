@@ -73,6 +73,7 @@ function MoPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("ai");
+  const [anansiStretch, setAnansiStretch] = useState<number>(1);
   const [glyph, setGlyph] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("mo.glyph") === "1";
