@@ -114,8 +114,12 @@ export async function mimicSpeak(
   const startsPool = seedCandidates.length ? seedCandidates : Array.from(chain.keys());
 
   const s = Math.max(1, Math.min(5, stretch));
-  const nSentences = 1 + Math.floor(s / 2);
-  const maxLen = 12 + s * 8;
+  // Length-adaptive: scale sentence count + max tokens by the user's input size.
+  // Short input → short reply. Long input → mimic stretches to match.
+  const inputTokens = userToks.length;
+  const lengthFactor = Math.max(1, Math.min(6, Math.ceil(inputTokens / 20)));
+  const nSentences = Math.max(1, Math.floor(s / 2) + lengthFactor);
+  const maxLen = 12 + s * 8 + inputTokens * 2;
 
   const sentences: string[] = [];
   for (let si = 0; si < nSentences; si++) {
@@ -140,7 +144,7 @@ export async function mimicSpeak(
     `\nmimic·telemetry`,
     `  chain size ${knownWords} bigrams · learned from this session's user messages`,
     `  seeded from ${seedCandidates.length ? "mo-walk ∩ your vocabulary" : "your vocabulary (no mo overlap)"}`,
-    `  stretch ${s}× · ${nSentences} sentence${nSentences === 1 ? "" : "s"} · max ${maxLen} tokens`,
+    `  stretch ${s}× · input ${inputTokens} tok → ${nSentences} sentence${nSentences === 1 ? "" : "s"} · max ${maxLen} tokens`,
   ].join("\n");
 
   return `${reply}\n${telem}`;
