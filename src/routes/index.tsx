@@ -614,7 +614,10 @@ function EmptyState({ mode }: { mode: Mode }) {
   const line =
     mode === "mo" ? "MO — you speak, the topology walks. 5 variants + selffold + fieldfold, hyperfolded."
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
-    : "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore.";
+    : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
+    : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
+    : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
+
   return (
     <div className="flex h-full min-h-[50vh] flex-col items-center justify-center gap-6 text-center">
       <div className="breath-pulse text-6xl ridge">◆</div>
@@ -639,7 +642,7 @@ function EmptyState({ mode }: { mode: Mode }) {
 function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
-  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : "\\anansi::");
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : mode === "mohini" ? "\\mohini::" : "\\mimic::");
   const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
@@ -729,7 +732,7 @@ function BreathingIndicator({ mode }: { mode: Mode }) {
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
       <span className="breath-pulse ridge">◌</span>
-      <span>{mode === "mo" ? "the topology walks…" : mode === "gremlin" ? "gre(mo)lin chews…" : mode === "anansi" ? "Anansi weaves the web…" : "mo reading · AI thinking…"}</span>
+      <span>{mode === "mo" ? "the topology walks…" : mode === "gremlin" ? "gre(mo)lin chews…" : mode === "anansi" ? "Anansi weaves the web…" : mode === "mohini" ? "the enchantress prepares her lure…" : "mimic listens for your voice…"}</span>
     </div>
   );
 }
