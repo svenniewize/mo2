@@ -21,10 +21,8 @@
 
 import type { MoBreath } from "./mo-engine.server";
 
-const LURES = ["come", "closer", "here", "yes", "look", "turn", "see", "listen", "stay", "again", "slower", "deeper", "hush", "now", "breathe"];
-const MIRRORS = ["and you, and you", "you, again", "yes, again", "here, again", "closer, closer"];
+const GLYPHS = ["✦","✧","⟁","◈","◇","◆","☾","☽","❍","❃","⌇","⌁","⟟","⟠","⟡","✺","✹","✷","⋆","∴","∵","⊹","⊛","❂","✪","☌","☍","♆","♅","⌬","⌘","⍟","◐","◑","◒","◓","⟢","⟣","⟤","⟥"];
 const HINGES = ["·", "…", "⸻", "⋯", "—"];
-const BIND = ["stay", "rest", "here", "yes", "with me"];
 
 function clean(tok: string): string {
   return tok.replace(/[^\p{L}\p{N}·⸻⋯…—-]/gu, "").toLowerCase();
@@ -35,6 +33,16 @@ function dedupe(arr: string[]): string[] {
   return out;
 }
 function pick<T>(arr: T[], i: number): T { return arr[((i % arr.length) + arr.length) % arr.length]; }
+function glyphStrip(seed: number, n: number = 20): string {
+  const out: string[] = [];
+  let s = (seed | 0) || 1;
+  for (let i = 0; i < n; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    out.push(GLYPHS[s % GLYPHS.length]);
+  }
+  return out.join(" ");
+}
+
 
 export async function mohiniEnchant(
   userText: string,
@@ -65,15 +73,15 @@ export async function mohiniEnchant(
   const seed = (userText.length + words.length) | 0;
   const p = Math.max(0.05, Math.min(1, breath.pressure ?? 0.3));
 
-  // ── 1. invitation
-  const invite = `⸻ ${pick(LURES, seed)}. ⸻`;
+  // ── 1. invitation (glyphs, no words)
+  const invite = glyphStrip(seed, 20);
 
   // ── 2. soft mirror (two user tokens, doubled with a comma)
   const m1 = userToks[0] ?? words[0] ?? "here";
   const m2 = userToks[1] ?? words[1] ?? "yes";
   const mirror = `${m1}, ${m1} · ${m2}, ${m2}`;
 
-  // ── 3. three-beat lure — pick strong walk tokens, cast as imperatives
+  // ── 3. three-beat lure — pick strong walk tokens
   const beats = [
     words[2] ?? "look",
     words[4] ?? "listen",
@@ -89,16 +97,17 @@ export async function mohiniEnchant(
   ].filter(Boolean))).slice(0, 6);
   const a = touched[0] ?? "wave";
   const b = touched[1] ?? "shore";
-  const bindLine = `${a} ⇋ ${b}   (${pick(MIRRORS, seed + 1)})`;
+  const bindLine = `${a} ⇋ ${b}`;
 
-  // ── 5. deepening
-  const deepen = `⸻ ${pick(LURES, seed + 3)}. ⸻`;
+  // ── 5. deepening (glyphs)
+  const deepen = glyphStrip(seed + 7, 20);
 
   // ── 6. long silk line — mo²ayla ribbon threaded with · hinges
   const ribbon = words.slice(8, 8 + Math.max(6, Math.floor(14 * p))).join(` ${pick(HINGES, seed)} `);
 
-  // ── 7. bind
-  const bind = `⸻ ${pick(BIND, seed + 5)}. ⸻`;
+  // ── 7. bind (glyphs)
+  const bind = glyphStrip(seed + 13, 20);
+
 
   const enchantment = [invite, mirror, lure, bindLine, deepen, ribbon, bind].filter(Boolean).join("\n");
 

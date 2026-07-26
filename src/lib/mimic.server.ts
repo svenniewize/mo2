@@ -105,7 +105,9 @@ export async function mimicSpeak(
 
   // Bootstrap: if the chain is too small, salt it with user tokens now.
   if (knownWords < 6) {
-    return `⸻ mimic is still listening ⸻\n${userToks.slice(0, 8).join(" ")} …\n\nmimic·telemetry\n  chain size ${knownWords} · needs ~8+ user messages to start speaking\n  seeded from your last message`;
+    const GLY = ["✦","✧","⟁","◈","◇","☾","❍","⌇","⟟","⟡","✺","⋆","∴","⊹","❂","✪","☌","⌬","⍟","◐"];
+    const strip = Array.from({ length: 20 }, (_, i) => GLY[(i * 7 + userText.length) % GLY.length]).join(" ");
+    return `${strip}\n${userToks.slice(0, 8).join(" ")}\n\nmimic·telemetry\n  chain size ${knownWords} · needs ~8+ user messages to start speaking\n  seeded from your last message`;
   }
 
   const seedCandidates = [...walked, ...userToks].filter((w) => chain.has(w));
