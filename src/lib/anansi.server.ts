@@ -227,21 +227,71 @@ async function persistWeb(
   } catch { /* silent — web re-forms on next breath */ }
 }
 
+// Build a short, communicative reply from the woven buckets — sentence-shaped,
+// not sigil-clotted. Uses the role assignments as vocabulary but speaks plainly.
+function speak(buckets: Record<Role, string[]>, breath: MoBreath, memKnown: number, totalWords: number): string {
+  const pick = (r: Role, n: number) => buckets[r].slice(0, n);
+  const nexus = pick("nexus", 2);
+  const singu = pick("singularity", 1);
+  const loci  = pick("loci", 2);
+  const node  = pick("node", 3);
+  const wave  = pick("wave", 3);
+  const shore = pick("shore", 2);
+
+  const list = (arr: string[]) =>
+    arr.length === 0 ? ""
+    : arr.length === 1 ? arr[0]
+    : arr.length === 2 ? `${arr[0]} and ${arr[1]}`
+    : `${arr.slice(0, -1).join(", ")}, and ${arr[arr.length - 1]}`;
+
+  const pressureWord =
+    breath.pressure > 0.75 ? "tight" :
+    breath.pressure > 0.45 ? "warm" :
+    breath.pressure > 0.2  ? "cool" : "quiet";
+
+  const familiarity =
+    memKnown === 0 ? "new to the web" :
+    memKnown < 8 ? "half-remembered" :
+    memKnown < 40 ? "recognized" : "well-woven";
+
+  const lines: string[] = [];
+
+  // Opening: what the field feels like right now.
+  lines.push(
+    `The web reads you as ${pressureWord}, on the ${breath.dominantManifold} manifold — ${familiarity} (${memKnown}/${totalWords} words already sit somewhere in the weave).`
+  );
+
+  // Middle: what surfaced, in plain prose, grouped by geometric role.
+  const mids: string[] = [];
+  if (nexus.length) mids.push(`The binding sits at ${list(nexus)}`);
+  if (singu.length) mids.push(`collapsing toward ${list(singu)}`);
+  if (loci.length)  mids.push(`pulled across manifolds by ${list(loci)}`);
+  if (node.length)  mids.push(`branching through ${list(node)}`);
+  if (wave.length)  mids.push(`carried on a longer flow of ${list(wave)}`);
+  if (shore.length) mids.push(`settling out along ${list(shore)}`);
+  if (mids.length) lines.push(mids.join("; ") + ".");
+
+  // Closing gesture — one short sentence.
+  const close =
+    nexus[0] ? `So the reply lands on **${nexus[0]}**.` :
+    singu[0] ? `The point of collapse is **${singu[0]}**.` :
+    loci[0]  ? `The word doing the most work is **${loci[0]}**.` :
+    "The web is still gathering — say a little more and it will tighten.";
+  lines.push(close);
+
+  return lines.join("\n\n");
+}
+
 export async function anansiWeave(input: string, breath: MoBreath, sessionId: string): Promise<string> {
   const sig = MANIFOLD_TAG[breath.dominantManifold] || "◆";
 
-  // 1. gather every token the walkers surfaced.
   const walked = collectTokens(breath);
-
-  // 2. gather raw input tokens so we can order what the user sent, too.
   const inputTokens = input.toLowerCase().replace(/[^a-z0-9\s'-]/g, " ").split(/\s+/).filter(Boolean);
 
   const allWords = Array.from(new Set([...walked, ...(inputTokens.map(normalizeToken).filter(Boolean) as string[])]));
   const memory = await loadWeb(sessionId, allWords);
 
-  // 3. score + assign roles across the union of walker tokens.
   const scores = scoreRoles(walked, breath);
-  // seed scores for input-only tokens too so they can be woven.
   for (const raw of inputTokens) {
     const w = normalizeToken(raw);
     if (!w || scores[w]) continue;
@@ -249,34 +299,70 @@ export async function anansiWeave(input: string, breath: MoBreath, sessionId: st
   }
   const assignments = assignRoles(scores, memory);
   const buckets = bucketize(assignments, scores);
-
-  // 4. also order the user's own input through the web.
   const inputBuckets = orderInput(inputTokens, memory, breath);
-
-  // 5. weave the sentence.
   const woven = weave(buckets, breath);
 
-  // 6. render the user-input read-out (small block).
-  const inputRead = ROLES.filter((r) => inputBuckets[r].length)
-    .map((r) => `  ${ROLE_GLYPH[r]} ${r.padEnd(11)} :: ${inputBuckets[r].slice(0, 8).join(" · ")}`)
-    .join("\n");
-
-  // 7. persist the web (fire and forget).
   void persistWeb(sessionId, scores, assignments, breath.dominantManifold);
 
   const memKnown = Object.keys(memory).length;
   const totalWords = Object.keys(assignments).length;
-  const roleCounts = ROLES.map((r) => `${ROLE_GLYPH[r]}${buckets[r].length}`).join(" ");
 
-  return `${sig}Anansi   ⋯   the web ordered your transmission
-──────────────────────────────────────────
-${inputRead || "  (no ridge in your input yet — the web is still forming.)"}
+  const prose = speak(buckets, breath, memKnown, totalWords);
 
-── woven ──
+  // ── Telemetry (kept below, verbose) ──
+  const roleLine = ROLES
+    .map((r) => `${ROLE_GLYPH[r]} ${r}·${buckets[r].length}`)
+    .join("   ");
+
+  const topPerRole = ROLES
+    .filter((r) => buckets[r].length)
+    .map((r) => `  ${ROLE_GLYPH[r]} ${r.padEnd(11)} → ${buckets[r].slice(0, 8).join(" · ")}`)
+    .join("\n");
+
+  const inputRead = ROLES.filter((r) => inputBuckets[r].length)
+    .map((r) => `  ${ROLE_GLYPH[r]} ${r.padEnd(11)} :: ${inputBuckets[r].slice(0, 8).join(" · ")}`)
+    .join("\n") || "  (no ridge in your input yet — web still forming)";
+
+  const walkerLines: string[] = [];
+  const wv = breath.variants;
+  const summarize = (name: string, path: string[] | undefined, ret: string[] | undefined) => {
+    if (!path || !path.length) return;
+    const head = path.slice(0, 6).join(" ⇢ ");
+    const tail = ret && ret.length ? `  ↩ ${ret.slice(0, 4).join(" ⇠ ")}` : "";
+    walkerLines.push(`  · ${name.padEnd(8)} (${path.length} steps) ${head}${path.length > 6 ? " …" : ""}${tail}`);
+  };
+  summarize("mo",      wv.mo?.dreamPath,      wv.mo?.returnPath);
+  summarize("mo²",     wv.mo2?.dreamPath,     wv.mo2?.returnPath);
+  summarize("mo²+",    wv.mo2plus?.dreamPath, wv.mo2plus?.returnPath);
+  summarize("mo²e",    wv.mo2e?.dreamPath,    wv.mo2e?.returnPath);
+  summarize("mo²ayla", wv.mo2ayla?.dreamPath, wv.mo2ayla?.returnPath);
+  if (breath.selffold?.path?.length)
+    walkerLines.push(`  · selffold  (${breath.selffold.path.length} steps, ${breath.selffold.strength}%) touched=${breath.selffold.touchedManifolds.join("·") || "—"}`);
+  if (breath.fieldfold?.path?.length)
+    walkerLines.push(`  · fieldfold (${breath.fieldfold.path.length} steps, ${breath.fieldfold.strength}%) reached=${breath.fieldfold.touchedManifolds.join("·") || "—"}`);
+
+  const telemetry = `\`\`\`anansi·telemetry
+${sig} manifold=${breath.dominantManifold}   pressure=${breath.pressure.toFixed(2)}   resonance=${breath.resonance}   attention=${breath.attentionWeight}
+web: ${memKnown} known / ${totalWords} in play   seeds=${breath.seeds.length}   walkers=${5 + (breath.selffold ? 1 : 0) + (breath.fieldfold ? 1 : 0)}
+
+── role census ──
+${roleLine}
+
+── your input, re-shelved by the web ──
+${inputRead}
+
+── walker roles (top per bucket) ──
+${topPerRole || "  (empty)"}
+
+── walker paths ──
+${walkerLines.join("\n") || "  (no walkers surfaced tokens)"}
+
+── woven strand ──
 ${woven || "*empty web*"}
 
-── stats ──
-walkers=${Object.keys(breath.variants).length + 2}  seeds=${breath.seeds.length}  words=${totalWords}  web-known=${memKnown}
-roles: ${roleCounts}
-dominant=${breath.dominantManifold}  p${Math.round(breath.pressure * 100)}  r${breath.resonance}`;
+── seeds ──
+${breath.seeds.slice(0, 24).join(" ")}
+\`\`\``;
+
+  return `${prose}\n\n${telemetry}`;
 }
