@@ -665,7 +665,7 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
           className="ml-auto opacity-0 group-hover:opacity-100 hover:text-ridge transition"
           title="copy this message with label"
         >{copied ? "✓ copied" : "⧉ copy"}</button>
-        {mode === "ai" && msg.telemetry && (
+        {mode !== "anansi" && msg.telemetry && (
           <button onClick={() => setShowTelemetry((v) => !v)} className="opacity-60 hover:opacity-100">
             {showTelemetry ? "▽ hide mo·telemetry" : "△ show mo·telemetry"}
           </button>
@@ -679,7 +679,7 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
       <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
         {mainContent}
       </pre>
-      {mode === "ai" && showTelemetry && msg.telemetry && (
+      {mode !== "anansi" && showTelemetry && msg.telemetry && (
         <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
           {msg.telemetry}
         </pre>
