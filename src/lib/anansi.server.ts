@@ -228,26 +228,43 @@ async function persistWeb(
 }
 
 // Build the reply purely from traversal words, arranged by role.
-// No prose, no flair — just the words the walkers surfaced, in geometric order.
+// Order: nexus → node → loci → singularity → wave → shore.
+// Length scales aggressively with input length so long inputs get long sentences.
 function speak(buckets: Record<Role, string[]>, breath: MoBreath): string {
-  const pick = (r: Role, n: number) => buckets[r].slice(0, n);
-  const scale = Math.min(8, Math.max(3, Math.floor(breath.seeds.length / 3)));
+  const L = breath.seeds.length;
+  const scale = Math.max(6, Math.min(40, Math.floor(L / 1.2)));
 
-  const nexus = pick("nexus", Math.max(1, Math.floor(scale / 2)));
-  const singu = pick("singularity", Math.max(1, Math.floor(scale / 2)));
-  const loci  = pick("loci", scale);
-  const node  = pick("node", scale + 2);
-  const wave  = pick("wave", scale + 2);
-  const shore = pick("shore", scale);
+  // per-role take counts, ordered by the requested geometry
+  const takeCounts: Record<Role, number> = {
+    nexus:       Math.max(2, Math.floor(scale * 0.35)),
+    node:        Math.max(4, Math.floor(scale * 1.10)),
+    loci:        Math.max(3, Math.floor(scale * 0.60)),
+    singularity: Math.max(1, Math.floor(scale * 0.20)),
+    wave:        Math.max(4, Math.floor(scale * 1.20)),
+    shore:       Math.max(3, Math.floor(scale * 0.55)),
+  };
+  const pick = (r: Role) => buckets[r].slice(0, takeCounts[r]);
 
-  const lines: string[] = [];
-  if (nexus.length) lines.push(nexus.join("  "));
-  if (singu.length) lines.push(singu.join("  "));
-  if (loci.length)  lines.push(loci.join("  "));
-  if (node.length)  lines.push(node.join("  "));
-  if (wave.length)  lines.push(wave.join("  "));
-  if (shore.length) lines.push(shore.join("  "));
-  return lines.join("\n");
+  // Interleave words within each role using soft connectors so it reads as one
+  // long geometric sentence rather than a list.
+  const joinRole = (r: Role, sep: string) => pick(r).join(sep);
+
+  const nexus = joinRole("nexus",       " ◈ ");
+  const node  = joinRole("node",        " ⋄ ");
+  const loci  = joinRole("loci",        " ✦ ");
+  const singu = joinRole("singularity", " ☬ ");
+  const wave  = joinRole("wave",        " ~ ");
+  const shore = joinRole("shore",       " ⌇ ");
+
+  // Weave into a single flowing line, geometry marked by arrows between roles.
+  const parts: string[] = [];
+  if (nexus) parts.push(`⟪ ${nexus} ⟫`);
+  if (node)  parts.push(`⇢ ${node}`);
+  if (loci)  parts.push(`⟢ ${loci}`);
+  if (singu) parts.push(`☬ ${singu}`);
+  if (wave)  parts.push(`≋ ${wave}`);
+  if (shore) parts.push(`⋯ ${shore}`);
+  return parts.join("   ");
 }
 
 export async function anansiWeave(input: string, breath: MoBreath, sessionId: string): Promise<string> {
