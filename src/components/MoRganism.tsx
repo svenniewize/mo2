@@ -432,8 +432,67 @@ export function MoRganism({
     return () => cancelAnimationFrame(raf);
   }, [width, height, pressure, stretch, walkPath]);
 
-  return <canvas ref={canvasRef} className="block" />;
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const cam = camRef.current;
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    // world coord under cursor before zoom
+    const wx = (mx - cam.px) / cam.zoom;
+    const wy = (my - cam.py) / cam.zoom;
+    const factor = Math.exp(-e.deltaY * 0.0015);
+    cam.zoom = Math.max(0.1, Math.min(4, cam.zoom * factor));
+    cam.px = mx - wx * cam.zoom;
+    cam.py = my - wy * cam.zoom;
+    cam.auto = false;
+    force((v) => v + 1);
+  };
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { ox: e.clientX, oy: e.clientY, sx: camRef.current.px, sy: camRef.current.py };
+    camRef.current.auto = false;
+  };
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current; if (!d) return;
+      camRef.current.px = d.sx + (e.clientX - d.ox);
+      camRef.current.py = d.sy + (e.clientY - d.oy);
+    };
+    const onUp = () => { dragRef.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  return (
+    <div className="relative">
+      <canvas
+        ref={canvasRef}
+        className="block cursor-grab active:cursor-grabbing"
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center gap-1 font-mono text-[10px]">
+        <div className="pointer-events-auto flex gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 backdrop-blur">
+          <button
+            className="hover:text-ridge"
+            onClick={() => { camRef.current.auto = true; force((v) => v + 1); }}
+          >⤢ fit</button>
+          <span className="text-muted-foreground">·</span>
+          <button
+            className="hover:text-ridge"
+            onClick={() => { const c = camRef.current; c.zoom = Math.max(0.1, c.zoom * 0.75); c.auto = false; force((v) => v + 1); }}
+          >−</button>
+          <button
+            className="hover:text-ridge"
+            onClick={() => { const c = camRef.current; c.zoom = Math.min(4, c.zoom * 1.33); c.auto = false; force((v) => v + 1); }}
+          >+</button>
+          <span className="text-muted-foreground">{camRef.current.auto ? "auto" : `${camRef.current.zoom.toFixed(2)}×`}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
+
 
 // ─── Floating draggable / resizable shell ─────────────────────────────
 
