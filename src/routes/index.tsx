@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "ai" | "mo" | "gremlin" | "anansi";
+type Mode = "mo" | "gremlin" | "anansi";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -72,7 +72,7 @@ function MoPage() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<Mode>("ai");
+  const [mode, setMode] = useState<Mode>("mo");
   const [anansiStretch, setAnansiStretch] = useState<number>(1);
   const [glyph, setGlyph] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -492,24 +492,21 @@ function Header({
       </div>
       <div className="flex items-center gap-2">
         <div className="flex rounded-md border border-border overflow-hidden">
-          <button onClick={() => setMode("ai")} className={`px-3 py-1.5 font-mono text-xs ${mode === "ai" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="user → mo → AI → mo → user">AI</button>
-          <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — no AI, chat directly with mo">MO</button>
-          <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's full telemetry compressed into one stuttering sentence with its own persistent dialect memory">GRE(MO)LIN</button>
-          <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk.">ANANSI</button>
+          <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — chat directly with mo">MO</button>
+          <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's telemetry compressed into one stuttering sentence with its own persistent dialect">GRE(MO)LIN</button>
+          <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk">ANANSI</button>
         </div>
-        {mode === "anansi" && (
-          <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer weaves — 'an' is the default, 2x-5x lets Anansi walk further per role">
-            {([
-              { v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" },
-            ] as const).map((o) => (
-              <button
-                key={o.v}
-                onClick={() => setAnansiStretch(o.v)}
-                className={`px-2 py-1.5 font-mono text-[11px] ${anansiStretch === o.v ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}
-              >{o.l}</button>
-            ))}
-          </div>
-        )}
+        <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer walks — 'an' is default, 2x-5x multiplies walk depth AND telemetry readout window">
+          {([
+            { v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" },
+          ] as const).map((o) => (
+            <button
+              key={o.v}
+              onClick={() => setAnansiStretch(o.v)}
+              className={`px-2 py-1.5 font-mono text-[11px] ${anansiStretch === o.v ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}
+            >{o.l}</button>
+          ))}
+        </div>
         <button
           onClick={onOpenViz}
           className="rounded-md border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:border-ridge hover:text-ridge transition"
