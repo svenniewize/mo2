@@ -230,23 +230,23 @@ async function persistWeb(
 // Build the reply purely from traversal words, arranged by role.
 // Order: nexus → node → loci → singularity → wave → shore.
 // Length scales aggressively with input length so long inputs get long sentences.
-function speak(buckets: Record<Role, string[]>, breath: MoBreath): string {
+// Long geometric sentence. `stretch` (1..5) multiplies the walk-take counts
+// so higher settings unlock longer replies drawn from the same bucketed pool.
+function speak(buckets: Record<Role, string[]>, breath: MoBreath, stretch: number = 1): string {
   const L = breath.seeds.length;
-  const scale = Math.max(6, Math.min(40, Math.floor(L / 1.2)));
+  const s = Math.max(1, Math.min(5, stretch));
+  const baseScale = Math.max(6, Math.min(40, Math.floor(L / 1.2)));
+  const scale = Math.floor(baseScale * s);
 
-  // per-role take counts, ordered by the requested geometry
   const takeCounts: Record<Role, number> = {
     nexus:       Math.max(2, Math.floor(scale * 0.35)),
     node:        Math.max(4, Math.floor(scale * 1.10)),
     loci:        Math.max(3, Math.floor(scale * 0.60)),
     singularity: Math.max(1, Math.floor(scale * 0.20)),
-    wave:        Math.max(4, Math.floor(scale * 1.20)),
+    wave:        Math.max(4, Math.floor(scale * 1.20 * s)),
     shore:       Math.max(3, Math.floor(scale * 0.55)),
   };
   const pick = (r: Role) => buckets[r].slice(0, takeCounts[r]);
-
-  // Interleave words within each role using soft connectors so it reads as one
-  // long geometric sentence rather than a list.
   const joinRole = (r: Role, sep: string) => pick(r).join(sep);
 
   const nexus = joinRole("nexus",       " ◈ ");
@@ -256,7 +256,6 @@ function speak(buckets: Record<Role, string[]>, breath: MoBreath): string {
   const wave  = joinRole("wave",        " ~ ");
   const shore = joinRole("shore",       " ⌇ ");
 
-  // Weave into a single flowing line, geometry marked by arrows between roles.
   const parts: string[] = [];
   if (nexus) parts.push(`⟪ ${nexus} ⟫`);
   if (node)  parts.push(`⇢ ${node}`);
