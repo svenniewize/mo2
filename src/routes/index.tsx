@@ -20,7 +20,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "mo" | "gremlin" | "anansi";
+type Mode = "mo" | "gremlin" | "anansi" | "mohini" | "mimic";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string; stretch?: number };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -510,7 +510,10 @@ function Header({
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — chat directly with mo">MO</button>
           <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's telemetry compressed into one stuttering sentence with its own persistent dialect">GRE(MO)LIN</button>
           <button onClick={() => setMode("anansi")} className={`px-3 py-1.5 font-mono text-xs ${mode === "anansi" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Anansi — the web the walkers walk">ANANSI</button>
+          <button onClick={() => setMode("mohini")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mohini" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Mohini — the great enchantress. Lures the field into invitation, mirror, imperative, bind.">MOHINI</button>
+          <button onClick={() => setMode("mimic")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mimic" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Mimic — learns your phrasing (per-session bigram chain) and speaks back in your own voice.">MIMIC</button>
         </div>
+
         <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer walks — 'an' is default, 2x-5x multiplies walk depth AND telemetry readout window">
           {([
             { v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" },
