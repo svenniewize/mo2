@@ -326,7 +326,7 @@ export async function anansiWeave(input: string, breath: MoBreath, sessionId: st
     walkerLines.push(`  · fieldfold (${breath.fieldfold.path.length} steps, ${breath.fieldfold.strength}%) reached=${breath.fieldfold.touchedManifolds.join("·") || "—"}`);
 
   const telemetry = `\`\`\`anansi·telemetry
-${sig} manifold=${breath.dominantManifold}   pressure=${breath.pressure.toFixed(2)}   resonance=${breath.resonance}   attention=${breath.attentionWeight}
+${sig} manifold=${breath.dominantManifold}   pressure=${breath.pressure.toFixed(2)}   resonance=${breath.resonance}   attention=${breath.attentionWeight}   stretch=${stretch}x
 web: ${memKnown} known / ${totalWords} in play   seeds=${breath.seeds.length}   walkers=${5 + (breath.selffold ? 1 : 0) + (breath.fieldfold ? 1 : 0)}
 
 ── role census ──
