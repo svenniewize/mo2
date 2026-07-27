@@ -320,6 +320,7 @@ function MoPage() {
                   className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition"
                   title="how to write to mo"
                 >? help</button>
+               <a href="/prog-mo" className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition" title="prog-mo — four-cycle programming topology">◈ prog-mo</a>
                 <a href="/system" className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition" title="how the field works">◆ system</a>
               </div>
             </div>
