@@ -45,11 +45,12 @@ function glyphStrip(seed: number, n: number = 20): string {
 
 
 export async function mohiniEnchant(
-  userText: string,
+  _userText: string,   // deliberately unused — mohini is mo's voice, not the user's
   breath: MoBreath,
   _sessionId: string,
 ): Promise<string> {
   // Harvest tokens from the breath — the walks mo actually took.
+  // Mohini mirrors MO, not the user. mo runs first; she dresses its residue.
   const v = breath.variants;
   const raw = [
     ...(breath.seeds ?? []),
@@ -64,21 +65,21 @@ export async function mohiniEnchant(
   ].map(clean).filter((w) => w.length > 1 && w.length < 20);
   const words = dedupe(raw);
 
-
-  // The user's own last significant tokens — used for mirroring.
-  const userToks = dedupe(
-    userText.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2 && w.length < 20),
+  // The tokens mo *just* walked on selffold — used as the "mirror" pair.
+  // Where mimic mirrors the user's voice, mohini mirrors mo's inner loop.
+  const selfToks = dedupe(
+    (breath.selffold?.path ?? []).map(clean).filter((w) => w.length > 2 && w.length < 20),
   );
 
-  const seed = (userText.length + words.length) | 0;
+  const seed = (words.length * 13 + (breath.pressure * 100 | 0)) | 0;
   const p = Math.max(0.05, Math.min(1, breath.pressure ?? 0.3));
 
   // ── 1. invitation (glyphs, no words)
   const invite = glyphStrip(seed, 20);
 
-  // ── 2. soft mirror (two user tokens, doubled with a comma)
-  const m1 = userToks[0] ?? words[0] ?? "here";
-  const m2 = userToks[1] ?? words[1] ?? "yes";
+  // ── 2. soft mirror (two of mo's own selffold tokens, doubled)
+  const m1 = selfToks[0] ?? words[0] ?? "here";
+  const m2 = selfToks[1] ?? words[1] ?? "yes";
   const mirror = `${m1}, ${m1} · ${m2}, ${m2}`;
 
   // ── 3. three-beat lure — pick strong walk tokens
@@ -115,9 +116,10 @@ export async function mohiniEnchant(
   const telem = [
     `\nmohini·telemetry`,
     `  pressure ${p.toFixed(2)}   dominant ${breath.dominantManifold}`,
-    `  lured ${words.length} tokens · mirrored from ${userToks.length} of your own`,
+    `  lured ${words.length} mo-walked tokens · mirrored from ${selfToks.length} of mo's selffold`,
     `  bound ${touched.join(" ⇋ ")}`,
   ].join("\n");
 
   return `${enchantment}\n${telem}`;
 }
+
