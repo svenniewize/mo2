@@ -80,7 +80,7 @@ function ProgMoPage() {
     try {
       const r = await fetch("/api/prog-mo", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: text, sessionId, stretch, blendIntoMo: blend }),
+        body: JSON.stringify({ input: text, sessionId, stretch, blendIntoMo: blend, v2 }),
       });
       if (!r.ok) {
         const errText = await r.text();
