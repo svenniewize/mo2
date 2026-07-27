@@ -12,6 +12,8 @@
 
 import type { MoBreath } from "./mo-engine.server";
 import { db } from "./db.server";
+import { stutterize } from "./stutter";
+
 
 const STOP_PUNCT = /[^\p{L}\p{N}'’-]+/gu;
 
@@ -150,7 +152,9 @@ export async function mimicSpeak(
     sentences.push(stitch(out));
   }
 
-  const reply = sentences.join(". ").replace(/\.+/g, ".") + ".";
+  const rawReply = sentences.join(". ").replace(/\.+/g, ".") + ".";
+  const reply = stutterize(rawReply);
+
 
   const telem = [
     `\nmimic·telemetry`,

@@ -20,6 +20,8 @@
 // not a memory. The enchantment is deterministic-ish from breath tokens.
 
 import type { MoBreath } from "./mo-engine.server";
+import { stutterize } from "./stutter";
+
 
 const GLYPHS = ["✦","✧","⟁","◈","◇","◆","☾","☽","❍","❃","⌇","⌁","⟟","⟠","⟡","✺","✹","✷","⋆","∴","∵","⊹","⊛","❂","✪","☌","☍","♆","♅","⌬","⌘","⍟","◐","◑","◒","◓","⟢","⟣","⟤","⟥"];
 const HINGES = ["·", "…", "⸻", "⋯", "—"];
@@ -110,7 +112,9 @@ export async function mohiniEnchant(
   const bind = glyphStrip(seed + 13, 20);
 
 
-  const enchantment = [invite, mirror, lure, bindLine, deepen, ribbon, bind].filter(Boolean).join("\n");
+  const enchantment = stutterize([mirror, lure, bindLine, ribbon].filter(Boolean).join("\n"));
+  const wrapped = [invite, enchantment, deepen, bind].join("\n");
+
 
   // Telemetry (small, so the voice reads first).
   const telem = [
@@ -120,6 +124,6 @@ export async function mohiniEnchant(
     `  bound ${touched.join(" ⇋ ")}`,
   ].join("\n");
 
-  return `${enchantment}\n${telem}`;
+  return `${wrapped}\n${telem}`;
 }
 
