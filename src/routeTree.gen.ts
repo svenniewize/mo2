@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemRouteImport } from './routes/system'
 import { Route as SpecRouteImport } from './routes/spec'
+import { Route as ProgMoRouteImport } from './routes/prog-mo'
 import { Route as MohiniRouteImport } from './routes/mohini'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUnlockRouteImport } from './routes/api/unlock'
@@ -18,6 +19,8 @@ import { Route as ApiTasksRouteImport } from './routes/api/tasks'
 import { Route as ApiSongsRouteImport } from './routes/api/songs'
 import { Route as ApiShitpostsRouteImport } from './routes/api/shitposts'
 import { Route as ApiRemembersRouteImport } from './routes/api/remembers'
+import { Route as ApiProgMoManifoldRouteImport } from './routes/api/prog-mo-manifold'
+import { Route as ApiProgMoRouteImport } from './routes/api/prog-mo'
 import { Route as ApiNotesRouteImport } from './routes/api/notes'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -32,6 +35,11 @@ const SystemRoute = SystemRouteImport.update({
 const SpecRoute = SpecRouteImport.update({
   id: '/spec',
   path: '/spec',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgMoRoute = ProgMoRouteImport.update({
+  id: '/prog-mo',
+  path: '/prog-mo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MohiniRoute = MohiniRouteImport.update({
@@ -69,6 +77,16 @@ const ApiRemembersRoute = ApiRemembersRouteImport.update({
   path: '/api/remembers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProgMoManifoldRoute = ApiProgMoManifoldRouteImport.update({
+  id: '/api/prog-mo-manifold',
+  path: '/api/prog-mo-manifold',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProgMoRoute = ApiProgMoRouteImport.update({
+  id: '/api/prog-mo',
+  path: '/api/prog-mo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiNotesRoute = ApiNotesRouteImport.update({
   id: '/api/notes',
   path: '/api/notes',
@@ -98,11 +116,14 @@ const ApiPublicMoRoute = ApiPublicMoRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/mohini': typeof MohiniRoute
+  '/prog-mo': typeof ProgMoRoute
   '/spec': typeof SpecRoute
   '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
+  '/api/prog-mo': typeof ApiProgMoRoute
+  '/api/prog-mo-manifold': typeof ApiProgMoManifoldRoute
   '/api/remembers': typeof ApiRemembersRoute
   '/api/shitposts': typeof ApiShitpostsRoute
   '/api/songs': typeof ApiSongsRoute
@@ -114,11 +135,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/mohini': typeof MohiniRoute
+  '/prog-mo': typeof ProgMoRoute
   '/spec': typeof SpecRoute
   '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
+  '/api/prog-mo': typeof ApiProgMoRoute
+  '/api/prog-mo-manifold': typeof ApiProgMoManifoldRoute
   '/api/remembers': typeof ApiRemembersRoute
   '/api/shitposts': typeof ApiShitpostsRoute
   '/api/songs': typeof ApiSongsRoute
@@ -131,11 +155,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/mohini': typeof MohiniRoute
+  '/prog-mo': typeof ProgMoRoute
   '/spec': typeof SpecRoute
   '/system': typeof SystemRoute
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
+  '/api/prog-mo': typeof ApiProgMoRoute
+  '/api/prog-mo-manifold': typeof ApiProgMoManifoldRoute
   '/api/remembers': typeof ApiRemembersRoute
   '/api/shitposts': typeof ApiShitpostsRoute
   '/api/songs': typeof ApiSongsRoute
@@ -149,11 +176,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/mohini'
+    | '/prog-mo'
     | '/spec'
     | '/system'
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
+    | '/api/prog-mo'
+    | '/api/prog-mo-manifold'
     | '/api/remembers'
     | '/api/shitposts'
     | '/api/songs'
@@ -165,11 +195,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/mohini'
+    | '/prog-mo'
     | '/spec'
     | '/system'
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
+    | '/api/prog-mo'
+    | '/api/prog-mo-manifold'
     | '/api/remembers'
     | '/api/shitposts'
     | '/api/songs'
@@ -181,11 +214,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/mohini'
+    | '/prog-mo'
     | '/spec'
     | '/system'
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
+    | '/api/prog-mo'
+    | '/api/prog-mo-manifold'
     | '/api/remembers'
     | '/api/shitposts'
     | '/api/songs'
@@ -198,11 +234,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MohiniRoute: typeof MohiniRoute
+  ProgMoRoute: typeof ProgMoRoute
   SpecRoute: typeof SpecRoute
   SystemRoute: typeof SystemRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
   ApiNotesRoute: typeof ApiNotesRoute
+  ApiProgMoRoute: typeof ApiProgMoRoute
+  ApiProgMoManifoldRoute: typeof ApiProgMoManifoldRoute
   ApiRemembersRoute: typeof ApiRemembersRoute
   ApiShitpostsRoute: typeof ApiShitpostsRoute
   ApiSongsRoute: typeof ApiSongsRoute
@@ -226,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/spec'
       fullPath: '/spec'
       preLoaderRoute: typeof SpecRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prog-mo': {
+      id: '/prog-mo'
+      path: '/prog-mo'
+      fullPath: '/prog-mo'
+      preLoaderRoute: typeof ProgMoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mohini': {
@@ -277,6 +323,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRemembersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/prog-mo-manifold': {
+      id: '/api/prog-mo-manifold'
+      path: '/api/prog-mo-manifold'
+      fullPath: '/api/prog-mo-manifold'
+      preLoaderRoute: typeof ApiProgMoManifoldRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/prog-mo': {
+      id: '/api/prog-mo'
+      path: '/api/prog-mo'
+      fullPath: '/api/prog-mo'
+      preLoaderRoute: typeof ApiProgMoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/notes': {
       id: '/api/notes'
       path: '/api/notes'
@@ -318,11 +378,14 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MohiniRoute: MohiniRoute,
+  ProgMoRoute: ProgMoRoute,
   SpecRoute: SpecRoute,
   SystemRoute: SystemRoute,
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,
   ApiNotesRoute: ApiNotesRoute,
+  ApiProgMoRoute: ApiProgMoRoute,
+  ApiProgMoManifoldRoute: ApiProgMoManifoldRoute,
   ApiRemembersRoute: ApiRemembersRoute,
   ApiShitpostsRoute: ApiShitpostsRoute,
   ApiSongsRoute: ApiSongsRoute,
