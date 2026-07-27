@@ -153,34 +153,73 @@ async function topo(): Promise<Topology> {
 }
 
 // —————————— CYCLE 1: prog-mo:d — semantic architecture decomposition
-export type CompilePressure = { manifold: string; name: string; sigil: string; color: string; score: number; hits: string[] }[];
+export type CompilePressure = { manifold: string; name: string; sigil: string; color: string; score: number; hits: string[]; kind: "operator" | "terrain" }[];
 
-function compilePressure(t: Topology, seeds: string[]): CompilePressure {
-  const langIds = new Set([...PROG_MANIFOLDS.map((m) => m.id), ...Object.keys(t.wordToManifold).flatMap((w) => Object.keys(t.wordToManifold[w] || {})).filter((id) => id.startsWith("up:"))]);
+function manifoldCatalog(): Record<string, { name: string; sigil: string; color: string; kind: "operator" | "terrain" }> {
+  const cat: Record<string, { name: string; sigil: string; color: string; kind: "operator" | "terrain" }> = {};
+  for (const m of PROG_MANIFOLDS) cat[m.id] = { name: m.name, sigil: m.sigil, color: m.color, kind: "operator" };
+  for (const m of MANIFOLDS) cat[m.id] = { name: m.name || m.id, sigil: (m as any).sigil || "◈", color: (m as any).color || "#7DE2D1", kind: "terrain" };
+  return cat;
+}
+
+function compilePressure(t: Topology, seeds: string[], v2: boolean): CompilePressure {
+  const cat = manifoldCatalog();
+  // v1: prog manifolds only. v2: prog (operator) + mo (terrain) + uploaded.
+  const allow = new Set<string>();
+  for (const m of PROG_MANIFOLDS) allow.add(m.id);
+  if (v2) {
+    for (const m of MANIFOLDS) allow.add(m.id);
+  }
+  // uploaded manifolds always count
+  for (const w of Object.keys(t.wordToManifold)) for (const id of Object.keys(t.wordToManifold[w] || {})) if (id.startsWith("up:")) allow.add(id);
+
   const scores: Record<string, number> = {};
   const hits: Record<string, string[]> = {};
   for (const s of seeds) {
     const mm = t.wordToManifold[s] || {};
     for (const id of Object.keys(mm)) {
-      if (!langIds.has(id)) continue;
+      if (!allow.has(id)) continue;
       scores[id] = (scores[id] || 0) + mm[id];
       (hits[id] ||= []).push(s);
     }
   }
   const total = Object.values(scores).reduce((a, b) => a + b, 0) || 1;
-  const catalog: Record<string, { name: string; sigil: string; color: string }> = {};
-  for (const m of PROG_MANIFOLDS) catalog[m.id] = { name: m.name, sigil: m.sigil, color: m.color };
   return Object.entries(scores)
     .map(([id, s]) => ({
       manifold: id,
-      name: catalog[id]?.name || id.replace(/^up:/, ""),
-      sigil: catalog[id]?.sigil || "◈",
-      color: catalog[id]?.color || "#7DE2D1",
+      name: cat[id]?.name || id.replace(/^up:/, ""),
+      sigil: cat[id]?.sigil || "◈",
+      color: cat[id]?.color || "#7DE2D1",
+      kind: cat[id]?.kind || (id.startsWith("up:") ? "terrain" : "operator"),
       score: Math.round((s / total) * 100),
       hits: Array.from(new Set(hits[id])).slice(0, 8),
     }))
     .sort((a, b) => b.score - a.score);
 }
+
+// Auto-categorize walked words not yet mapped to any manifold: assign them
+// to the strongest manifold among their PPMI neighbors' owners. In-memory,
+// so future breaths in this worker see them classified.
+function autoCategorize(t: Topology, words: string[]): number {
+  let n = 0;
+  for (const w of words) {
+    if (!w) continue;
+    if (t.wordToManifold[w] && Object.keys(t.wordToManifold[w]).length) continue;
+    const nb = t.ppmi[w] || {};
+    const tally: Record<string, number> = {};
+    for (const u of Object.keys(nb)) {
+      const owners = t.wordToManifold[u]; if (!owners) continue;
+      for (const id of Object.keys(owners)) tally[id] = (tally[id] || 0) + nb[u] * owners[id];
+    }
+    const best = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] > 0) {
+      (t.wordToManifold[w] ||= {})[best[0]] = 1;
+      n++;
+    }
+  }
+  return n;
+}
+
 
 // —————————— CYCLE 2: competing walkers
 type Walker = { name: string; question: string; path: string[]; resonance: number[]; anchors: string[] };
