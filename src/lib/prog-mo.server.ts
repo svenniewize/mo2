@@ -336,24 +336,58 @@ function returnWalk(t: Topology, walkers: Walker[], anch: string[]): { path: str
 type Synthesis = { reply: string; crystals: { signature: string; pattern: string[]; kind: string }[] };
 
 function findCrystals(walkers: Walker[]): { signature: string; pattern: string[]; kind: string }[] {
-  // A crystal = a trigram that occurs in ≥3 walker paths.
-  const trigramCount: Record<string, { pattern: string[]; count: number }> = {};
+  // A crystal = a repeated motif across walker paths.
+  //   trigram appearing in ≥2 walkers   → "trigram"
+  //   bigram  appearing in ≥3 walkers   → "bigram"
+  // Restrained enough not to fire on every breath, permissive enough to
+  // catch actual resonance.
+  const tri: Record<string, { pattern: string[]; count: number }> = {};
+  const bi: Record<string, { pattern: string[]; count: number }> = {};
   for (const w of walkers) {
-    const seen = new Set<string>();
-    for (let i = 0; i < w.path.length - 2; i++) {
-      const tri = [w.path[i], w.path[i + 1], w.path[i + 2]];
-      const key = tri.join("·");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      (trigramCount[key] ||= { pattern: tri, count: 0 }).count++;
+    const triSeen = new Set<string>();
+    const biSeen = new Set<string>();
+    for (let i = 0; i < w.path.length - 1; i++) {
+      const b = [w.path[i], w.path[i + 1]];
+      const bk = b.join("·");
+      if (!biSeen.has(bk)) { biSeen.add(bk); (bi[bk] ||= { pattern: b, count: 0 }).count++; }
+      if (i < w.path.length - 2) {
+        const t3 = [w.path[i], w.path[i + 1], w.path[i + 2]];
+        const tk = t3.join("·");
+        if (!triSeen.has(tk)) { triSeen.add(tk); (tri[tk] ||= { pattern: t3, count: 0 }).count++; }
+      }
     }
   }
   const out: { signature: string; pattern: string[]; kind: string }[] = [];
-  for (const [k, v] of Object.entries(trigramCount)) if (v.count >= 3) out.push({ signature: k, pattern: v.pattern, kind: "trigram" });
-  return out.slice(0, 12);
+  for (const [k, v] of Object.entries(tri)) if (v.count >= 2) out.push({ signature: k, pattern: v.pattern, kind: "trigram" });
+  for (const [k, v] of Object.entries(bi))  if (v.count >= 3) out.push({ signature: `bi:${k}`, pattern: v.pattern, kind: "bigram" });
+  return out.slice(0, 16);
 }
 
-function synthesize(walkers: Walker[], ret: { path: string[]; steps: number[] }, anch: string[], pressure: CompilePressure, stretch: number): Synthesis {
+// Pull the top-N PPMI/hyperfold neighbours across a set of anchor words —
+// used to *fill in* problem/constraints/abstractions/etc. lines so that on
+// higher stretch the corpus itself extends the ponder.
+function expandFromCorpus(t: Topology, anchors: string[], n: number, avoid: Set<string>): string[] {
+  const tally: Record<string, number> = {};
+  for (const a of anchors) {
+    const nb = neighbors(t, a);
+    for (const u of Object.keys(nb)) {
+      if (avoid.has(u)) continue;
+      tally[u] = (tally[u] || 0) + nb[u] * (1 + (t.centrality[u] || 0));
+    }
+  }
+  return Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, n).map((x) => x[0]);
+}
+
+// Fill `base` up to `target` words by pulling extensions from the corpus.
+function fillLine(t: Topology, base: string[], target: number): string[] {
+  if (base.length >= target) return base.slice(0, target);
+  const need = target - base.length;
+  const avoid = new Set(base);
+  const extra = expandFromCorpus(t, base.length ? base : Object.keys(t.centrality).slice(0, 3), need, avoid);
+  return [...base, ...extra];
+}
+
+function synthesize(t: Topology, walkers: Walker[], ret: { path: string[]; steps: number[] }, anch: string[], pressure: CompilePressure, stretch: number): Synthesis {
   const crystals = findCrystals(walkers);
   const s = Math.max(1, Math.min(5, stretch));
 
@@ -366,14 +400,28 @@ function synthesize(walkers: Walker[], ret: { path: string[]; steps: number[] },
   for (const w of combined) freq[w] = (freq[w] || 0) + 1;
   const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
   const nexus = sorted.slice(0, 3).map((x) => x[0]);
-  const nodes = sorted.slice(3, 10 + 3 * s).map((x) => x[0]);
   const singularity = sorted.slice(-3).map((x) => x[0]);
 
-  // mohini-style mirror + lure
-  const mirror = anch.slice(0, 2).map((w) => `${w}, ${w}`).join(" · ");
-  const lure = walkers.flatMap((w) => w.path.slice(0, 2)).slice(0, 5).map((w) => `${w}.`).join(" ");
+  // ── stretch-scaled line widths. On 1x the lines stay tight; on 5x the
+  // corpus itself extends every non-synthesis line to ponder outward.
+  const w1 = 3 + s * 2;   // problem
+  const w2 = 3 + s * 2;   // constraints
+  const w3 = 3 + s * 2;   // abstractions
+  const wp = 4 + s * 3;   // candidate/alternative path length
+  const wl = 5 + s * 3;   // periphery / lure count
+  const wm = 2 + s;       // mirror pairs
 
-  // mimic-style: a plain bigram chain over the combined walk
+  const problem       = fillLine(t, anch.slice(0, 5), w1);
+  const constraints   = fillLine(t, anch.slice(0, 3), w2);
+  const abstractions  = fillLine(t, nexus, w3);
+  const candidate     = fillLine(t, walkers[0]?.path.slice(0, 4) || [], wp);
+  const alternative   = walkers[1] ? fillLine(t, walkers[1].path.slice(0, 4), wp) : [];
+  const periphery     = fillLine(t, singularity, wl);
+  const lureBase      = walkers.flatMap((w) => w.path.slice(0, 2)).slice(0, 5);
+  const lure          = fillLine(t, lureBase, wl);
+  const mirrorPairs   = fillLine(t, anch.slice(0, 2), wm);
+
+  // mimic-style bigram chain — already stretch-scaled
   const bigrams: Record<string, string[]> = {};
   for (let i = 0; i < combined.length - 1; i++) (bigrams[combined[i]] ||= []).push(combined[i + 1]);
   const chainLen = 12 + 6 * s;
@@ -384,31 +432,31 @@ function synthesize(walkers: Walker[], ret: { path: string[]; steps: number[] },
     chain.push(next[Math.floor(Math.random() * next.length)]);
   }
 
-  // top pressure line
-  const topLangs = pressure.slice(0, 3).map((p) => `${p.sigil} ${p.name} ${p.score}%`).join("  ");
-
-  // Architecture (not code): problem → constraints → abstractions → paths
-  const constraints = anch.slice(0, 3);
-  const abstractions = nexus;
-  const paths = walkers.slice(0, 3).map((w) => w.path.slice(0, 4).join(" → "));
+  // top pressure line — operators (prog) and terrain (mo) separated
+  const operators = pressure.filter((p) => p.kind === "operator").slice(0, 3);
+  const terrain   = pressure.filter((p) => p.kind === "terrain").slice(0, 3);
+  const opLine  = operators.map((p) => `${p.sigil} ${p.name} ${p.score}%`).join("  ");
+  const trLine  = terrain.map((p)   => `${p.sigil} ${p.name} ${p.score}%`).join("  ");
 
   const arch = [
-    topLangs ? `⟪ compile-pressure ⟫  ${topLangs}` : "",
-    `⟢ problem       ⇢ ${anch.slice(0, 5).join(" · ")}`,
+    opLine  ? `⟪ operator  ⟫ ${opLine}` : "",
+    trLine  ? `⟪ terrain   ⟫ ${trLine}` : "",
+    `⟢ problem       ⇢ ${problem.join(" · ")}`,
     `⇢ constraints   ⋄ ${constraints.join(" · ") || "—"}`,
     `☬ abstractions  ◈ ${abstractions.join(" · ") || "—"}`,
-    `∴ candidate     ↺ ${paths[0] || "—"}`,
-    paths[1] ? `∴ alternative   ↺ ${paths[1]}` : "",
+    `∴ candidate     ↺ ${candidate.join(" → ") || "—"}`,
+    alternative.length ? `∴ alternative   ↺ ${alternative.join(" → ")}` : "",
     `≋ synthesis     ~ ${chain.join(" ~ ")}`,
-    `⌇ periphery     ⌇ ${singularity.join(" ⌇ ") || "—"}`,
+    `⌇ periphery     ⌇ ${periphery.join(" ⌇ ") || "—"}`,
     crystals.length ? `❄ crystals      ${crystals.slice(0, 5).map((c) => c.pattern.join("·")).join("   ")}` : "",
-    mirror ? `☾ mirror        ${mirror}` : "",
-    lure ? `✦ lure          ${lure}` : "",
+    mirrorPairs.length ? `☾ mirror        ${mirrorPairs.map((w) => `${w}, ${w}`).join(" · ")}` : "",
+    lure.length ? `✦ lure          ${lure.map((w) => `${w}.`).join(" ")}` : "",
     `↩ return(1/φ=${(1/PHI).toFixed(3)}) ${ret.path.slice(0, 12).join(" ← ") || "—"}`,
   ].filter(Boolean).join("\n");
 
   return { reply: arch, crystals };
 }
+
 
 // —————————— Sediment
 export function sedimentProg(tokens: string[], blendIntoMo: boolean): void {
