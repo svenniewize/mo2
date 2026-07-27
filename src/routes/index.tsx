@@ -218,6 +218,7 @@ function MoPage() {
             {messages.length > 0 && (
               <div className="flex items-center justify-between border-b border-border/50 px-4 py-1.5">
                 <span className="font-mono text-[10px] text-muted-foreground">{messages.length} exchange{messages.length === 1 ? "" : "s"}</span>
+                <div className="flex items-center gap-1.5">
                 <button
                   onClick={async () => {
                     const dump = messages.map((m) => {
@@ -229,6 +230,19 @@ function MoPage() {
                   className="rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-ridge hover:text-ridge transition"
                   title="copy the entire conversation with \\user:: / \\mo:: labels"
                 >⧉ copy all</button>
+                <button
+                  onClick={async () => {
+                    const dump = messages.map((m) => {
+                      const label = m.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : "\\ai::");
+                      const tel = m.telemetry ? `\n\n···telemetry···\n${m.telemetry}` : "";
+                      return `${label}\n${m.content}${tel}`;
+                    }).join("\n\n───\n\n");
+                    await navigator.clipboard.writeText(dump);
+                  }}
+                  className="rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-ridge hover:text-ridge transition"
+                  title="copy the entire conversation plus every telemetry block"
+                >⧉ copy all + tel</button>
+                </div>
               </div>
             )}
             <div ref={scrollRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto p-6">
@@ -649,6 +663,11 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
     setCopied(true); setTimeout(() => setCopied(false), 1200);
   };
+  const copyOneWithTel = async () => {
+    const tel = msg.telemetry ? `\n\n···telemetry···\n${msg.telemetry}` : "";
+    await navigator.clipboard.writeText(`${label}\n${msg.content}${tel}`);
+    setCopied(true); setTimeout(() => setCopied(false), 1200);
+  };
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
@@ -700,6 +719,13 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
           className="ml-auto opacity-0 group-hover:opacity-100 hover:text-ridge transition"
           title="copy this message with label"
         >{copied ? "✓ copied" : "⧉ copy"}</button>
+        {msg.telemetry && (
+          <button
+            onClick={copyOneWithTel}
+            className="opacity-0 group-hover:opacity-100 hover:text-ridge transition"
+            title="copy this message with label + telemetry block"
+          >⧉+tel</button>
+        )}
         {mode !== "anansi" && msg.telemetry && (
           <button onClick={() => setShowTelemetry((v) => !v)} className="opacity-60 hover:opacity-100">
             {showTelemetry ? "▽ hide mo·telemetry" : "△ show mo·telemetry"}
