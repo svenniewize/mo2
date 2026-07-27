@@ -443,6 +443,7 @@ fielfold_entries      content, manifold, depth, session_id, created_at
 mo_hyperfold_edges    word_a, word_b, weight   (mutated by RPC mo_hyperfold_bump)
 anansi_web            session_id, word, role, weight, uses, last_manifold
 gremolin_lexicon      session_id, word, mutation, uses
+mimic_ngrams          session_id, prev, next, weight, updated_at
 songs, life_tasks, life_notes, life_remembers, life_shitposts
 
 All public tables locked to service_role; app connects with sb_secret_*
