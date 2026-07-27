@@ -521,20 +521,32 @@ function hfStats() {
   return { nodes: Object.keys(HF).length, edges };
 }
 
-export async function progMoBreathe(input: string, sessionId: string, stretch: number = 1, blendIntoMo: boolean = false): Promise<ProgBreath> {
+export async function progMoBreathe(input: string, sessionId: string, stretch: number = 1, blendIntoMo: boolean = false, v2: boolean = false): Promise<ProgBreath> {
   await ensureHyperfold();
+  if (v2) await ensureMoHyperfoldClone();
   const t = await topo();
   const seeds = tokenize(input);
   const anch = seeds.filter((s) => has(t, s));
 
   // Cycle 1
-  const pressure = compilePressure(t, seeds);
+  const pressure = compilePressure(t, seeds, v2);
   // Cycle 2
   const walkers = runWalkers(t, seeds, stretch);
   // Cycle 3
   const ret = returnWalk(t, walkers, anch);
+
+  // Auto-categorize any newly-walked words (v2 only) — so unclassified
+  // vocabulary gets a manifold home the field can use next breath.
+  let autoTagged = 0;
+  if (v2) {
+    const walked: string[] = [];
+    for (const w of walkers) walked.push(...w.path);
+    walked.push(...ret.path, ...seeds);
+    autoTagged = autoCategorize(t, walked);
+  }
+
   // Cycle 4
-  const { reply, crystals } = synthesize(walkers, ret, anch, pressure, stretch);
+  const { reply, crystals } = synthesize(t, walkers, ret, anch, pressure, stretch);
 
   // Sediment: input + every walker's path + return
   sedimentProg(seeds, blendIntoMo);
@@ -543,10 +555,11 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
   void persistCrystals(sessionId, crystals);
 
   const stats = hfStats();
-  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo });
+  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo, v2, autoTagged });
 
   return { seeds, cycle1_pressure: pressure, cycle2_walkers: walkers, cycle3_return: ret, cycle4_reply: reply, crystals, telemetry, hyperfold: stats };
 }
+
 
 function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean }): string {
   const lines: string[] = [];
