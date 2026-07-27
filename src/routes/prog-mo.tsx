@@ -49,6 +49,8 @@ function ProgMoPage() {
   const [busy, setBusy] = useState(false);
   const [stretch, setStretch] = useState(1);
   const [blend, setBlend] = useState(false);
+  const [v2, setV2] = useState(false);
+
   const [expandAll, setExpandAll] = useState(false);
   const [openTel, setOpenTel] = useState<Record<number, boolean>>({});
   const [crystals, setCrystals] = useState<Crystal[]>([]);
