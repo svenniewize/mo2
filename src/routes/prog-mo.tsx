@@ -102,8 +102,8 @@ function ProgMoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground field-grid">
-      <header className="border-b border-border/50 bg-card/70 backdrop-blur">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground field-grid">
+      <header className="shrink-0 border-b border-border/50 bg-card/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="font-mono text-lg tracking-tight">◈ prog-mo</span>
@@ -123,6 +123,11 @@ function ProgMoPage() {
             </button>
           ))}
           <span className="mx-1">·</span>
+          <button onClick={() => setV2((v) => !v)}
+            className={`rounded border px-2 py-0.5 ${v2 ? "border-ridge text-ridge" : "border-border hover:border-ridge/50"}`}
+            title="v2: clone all mo manifolds as terrain; prog manifolds become operators">
+            {v2 ? "◈ prog-mo v2 · ON" : "◈ prog-mo v2"}
+          </button>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={blend} onChange={(e) => setBlend(e.target.checked)} className="accent-ridge" />
             <span>fold prog-mo sediment into main mo</span>
@@ -131,12 +136,13 @@ function ProgMoPage() {
           <button onClick={() => toggleAll(!expandAll)} className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition">
             {expandAll ? "▽ collapse all telemetry" : "△ show all telemetry"}
           </button>
-          <span className="ml-auto">terrain: {PROG_MANIFOLDS.length} base + {uploaded.length} uploaded · {crystals.length} crystals</span>
+          <span className="ml-auto">terrain: {PROG_MANIFOLDS.length} operator{v2 ? ` + 20 terrain (mo)` : ""} + {uploaded.length} uploaded · {crystals.length} crystals</span>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_320px]">
-        <main className="flex min-h-[70vh] flex-col rounded-xl border border-border bg-card/60 backdrop-blur">
+      <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 gap-4 p-4 lg:grid-cols-[1fr_320px]">
+        <main className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card/60 backdrop-blur">
+
           <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
             {messages.length === 0 && (
               <div className="rounded-lg border border-dashed border-border/50 p-6 font-mono text-xs text-muted-foreground">
