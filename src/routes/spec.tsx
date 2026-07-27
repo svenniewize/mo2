@@ -453,7 +453,7 @@ No table is directly reachable by an anonymous client.
 14. HTTP SURFACE
 ════════════════════════════════════════════════════════════════════════════
 POST /api/chat
-    body: { messages, sessionId, mode: "mo"|"gremlin"|"anansi", stretch?: 1..5 }
+    body: { messages, sessionId, mode: "mo"|"gremlin"|"anansi"|"mohini"|"mimic", stretch?: 1..5 }
     mode "ai" → 410 Gone (disconnected by design).
     returns: { reply, manifold, moBreath, mode, ops, stretch, [prime] }
 
