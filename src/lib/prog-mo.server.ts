@@ -561,14 +561,20 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
 }
 
 
-function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean }): string {
+function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean; v2: boolean; autoTagged: number }): string {
   const lines: string[] = [];
-  lines.push(`prog-mo·telemetry   seeds=${x.seeds.length}   anchored=${x.anch.length}   stretch=${x.stretch}x   blend→mo=${x.blend ? "ON" : "off"}`);
+  lines.push(`prog-mo·telemetry   seeds=${x.seeds.length}   anchored=${x.anch.length}   stretch=${x.stretch}x   blend→mo=${x.blend ? "ON" : "off"}   mode=${x.v2 ? "v2 (operator→terrain)" : "v1 (prog only)"}   auto-cat=${x.autoTagged}`);
   lines.push(`hyperfold(prog):: nodes=${x.stats.nodes} edges=${x.stats.edges}`);
   lines.push("");
   lines.push("── cycle 1 · prog-mo:d (compile-pressure) ──");
-  if (x.pressure.length) for (const p of x.pressure.slice(0, 8)) lines.push(`  ${p.sigil} ${p.name.padEnd(12)} ${String(p.score).padStart(3)}%   hits: ${p.hits.join(" · ")}`);
-  else lines.push("  (no programming manifolds activated — semantic terrain quiet)");
+  const ops = x.pressure.filter((p) => p.kind === "operator");
+  const ter = x.pressure.filter((p) => p.kind === "terrain");
+  if (ops.length) { lines.push("  operator manifolds:"); for (const p of ops.slice(0, 6)) lines.push(`    ${p.sigil} ${p.name.padEnd(12)} ${String(p.score).padStart(3)}%   hits: ${p.hits.join(" · ")}`); }
+  else lines.push("  (no operator manifolds activated)");
+  if (x.v2) {
+    if (ter.length) { lines.push("  terrain manifolds (cloned from mo):"); for (const p of ter.slice(0, 6)) lines.push(`    ${p.sigil} ${p.name.padEnd(12)} ${String(p.score).padStart(3)}%   hits: ${p.hits.join(" · ")}`); }
+    else lines.push("  (no terrain manifolds resonated — feed more input)");
+  }
   lines.push("");
   lines.push("── cycle 2 · competing walkers ──");
   for (const w of x.walkers) {
@@ -583,8 +589,9 @@ function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: Compile
   lines.push(`  step sizes:  ${x.ret.steps.join(" ← ")}`);
   lines.push(`  path (${x.ret.path.length}):  ${x.ret.path.slice(0, 20).join(" ← ") || "—"}`);
   lines.push("");
-  lines.push("── cycle 4 · crystals (motifs ≥3 walkers) ──");
-  if (x.crystals.length) for (const c of x.crystals) lines.push(`  ❄ ${c.pattern.join(" · ")}`);
+  lines.push("── cycle 4 · crystals (tri ≥2 walkers · bi ≥3 walkers) ──");
+  if (x.crystals.length) for (const c of x.crystals) lines.push(`  ❄ [${c.kind}] ${c.pattern.join(" · ")}`);
   else lines.push("  (no recurring motifs — field still exploring)");
   return lines.join("\n");
 }
+
