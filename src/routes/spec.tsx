@@ -15,7 +15,7 @@ export const Route = createFileRoute("/spec")({
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v3 · anansi-inclusive · LLM-disconnected)
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v4 · mohini + mimic + mo-rganism + glyphs)
 # addressed to: any language model, agent, or engineer asked to understand
 #               or reconstruct this system.
 # posture:      topology > prose. every section is necessary. every glyph
