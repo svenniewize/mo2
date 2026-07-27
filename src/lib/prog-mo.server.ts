@@ -16,6 +16,8 @@
 
 import { MANIFOLDS } from "./corpora";
 import { PROG_MANIFOLDS, type ProgManifold } from "./prog-manifolds";
+import { parseCps, compileCps, renderCpsTelemetry, type CpsProgram } from "./cps0";
+
 
 const STOP = new Set("the a an is are was were be been being have has had do does did will would could should may might shall can to of in for on with at by from as into through during before after above below between out off over under again further then once here there when where why how all both each few more most other some such no nor not only own same so than too very just because but and or if while about up its it he she they them his her their what which who whom this that these those i me my we our you your us also said one two even way like new now get make many much still well back down long made first last come good know take see look find give tell think say help every try put thing since around however upon already yet though without".split(" "));
 
@@ -271,32 +273,60 @@ function inject(t: Topology, seeds: string[]): Record<string, number> {
   return act;
 }
 
-function runWalkers(t: Topology, seeds: string[], stretch: number): Walker[] {
+function runWalkers(t: Topology, seeds: string[], stretch: number, cps?: CpsProgram | null): Walker[] {
   const anch = seeds.filter((s) => has(t, s));
   if (!anch.length) return [];
-  const act = inject(t, anch);
-  const anchorSet = new Set(anch);
+  // CPS-0 extra anchors that exist in vocab join the anchor set.
+  const cpsAnch = (cps?.extraAnchors || []).filter((w) => has(t, w));
+  const anchAll = Array.from(new Set([...anch, ...cpsAnch]));
+  const act = inject(t, anchAll);
+  const anchorSet = new Set(anchAll);
   const depth = Math.max(10, Math.min(60, 12 + seeds.length)) * Math.max(1, stretch);
-  const start = anch[0];
-  const startAlt = anch[Math.min(anch.length - 1, Math.floor(anch.length / 2))];
+  const start = anchAll[0];
+  const startAlt = anchAll[Math.min(anchAll.length - 1, Math.floor(anchAll.length / 2))];
   const peak = Object.entries(act).sort((a, b) => b[1] - a[1])[0]?.[0] || start;
   const peripheral = Object.entries(act).sort((a, b) => a[1] - b[1])[0]?.[0] || start;
-  const random = anch[Math.floor(Math.random() * anch.length)];
+  const random = anchAll[Math.floor(Math.random() * anchAll.length)];
+
+  // Apply CPS-0 mutation across every walker's option set.
+  const m = cps?.mut;
+  const mut = (o: WalkOpts): WalkOpts => !m ? o : {
+    ...o,
+    cw: (o.cw ?? 1) + m.cw,
+    dw: (o.dw ?? 1) + m.dw,
+    aw: (o.aw ?? 1) + m.aw,
+    temp: Math.max(0.2, (o.temp ?? 1) + m.temp),
+    jitter: Math.max(0, Math.min(2, (o.jitter ?? 0.6) + m.jitter)),
+    anchors: anchorSet,
+  };
+  const startFor = (dflt: string): string =>
+    m?.startBias === "peripheral" ? peripheral : m?.startBias === "anchor" ? (anchAll[0] || dflt) : dflt;
 
   const wcs: { name: string; question: string; start: string; opts: WalkOpts }[] = [
-    { name: "greedy",    question: "what is the obvious implementation?",  start, opts: { cw: 0.8, dw: 0.4, aw: 1.8, temp: 0.6, jitter: 0.2, anchors: anchorSet } },
-    { name: "drift",     question: "what similar solutions exist?",        start: random, opts: { cw: 0.4, dw: 0.6, aw: 0.9, temp: 1.4, jitter: 0.9, anchors: anchorSet } },
-    { name: "dense",     question: "what architecture fits?",              start: peak, opts: { cw: 0.5, dw: 2.2, aw: 0.6, temp: 0.9, jitter: 0.4, anchors: anchorSet } },
-    { name: "peak",      question: "the most stable abstraction?",         start: peak, opts: { cw: 2.0, dw: 0.6, aw: 0.5, temp: 0.7, jitter: 0.3, anchors: anchorSet } },
-    { name: "anansi",    question: "how does this connect elsewhere?",     start: peripheral, opts: { cw: 0.6, dw: 0.4, aw: 0.4, temp: 1.2, jitter: 0.8, anchors: anchorSet } },
-    { name: "smash",     question: "what if the assumption is wrong?",     start: startAlt, opts: { cw: 0.2, dw: -0.5, aw: 0.3, temp: 1.6, jitter: 1.1, anchors: anchorSet } },
-    { name: "dimhopper", question: "can this become another paradigm?",    start: peripheral, opts: { cw: 0.8, dw: 0.8, aw: 0.3, temp: 1.5, jitter: 0.9, anchors: anchorSet } },
+    { name: "greedy",    question: "what is the obvious implementation?",  start: startFor(start), opts: mut({ cw: 0.8, dw: 0.4, aw: 1.8, temp: 0.6, jitter: 0.2, anchors: anchorSet }) },
+    { name: "drift",     question: "what similar solutions exist?",        start: random, opts: mut({ cw: 0.4, dw: 0.6, aw: 0.9, temp: 1.4, jitter: 0.9, anchors: anchorSet }) },
+    { name: "dense",     question: "what architecture fits?",              start: peak, opts: mut({ cw: 0.5, dw: 2.2, aw: 0.6, temp: 0.9, jitter: 0.4, anchors: anchorSet }) },
+    { name: "peak",      question: "the most stable abstraction?",         start: peak, opts: mut({ cw: 2.0, dw: 0.6, aw: 0.5, temp: 0.7, jitter: 0.3, anchors: anchorSet }) },
+    { name: "anansi",    question: "how does this connect elsewhere?",     start: peripheral, opts: mut({ cw: 0.6, dw: 0.4, aw: 0.4, temp: 1.2, jitter: 0.8, anchors: anchorSet }) },
+    { name: "smash",     question: "what if the assumption is wrong?",     start: startAlt, opts: mut({ cw: 0.2, dw: -0.5, aw: 0.3, temp: 1.6, jitter: 1.1, anchors: anchorSet }) },
+    { name: "dimhopper", question: "can this become another paradigm?",    start: peripheral, opts: mut({ cw: 0.8, dw: 0.8, aw: 0.3, temp: 1.5, jitter: 0.9, anchors: anchorSet }) },
   ];
+  // Dedicated CPS-0 walker: only spawns when there is a program to run.
+  if (cps && cps.stmts.length) {
+    const cpsStart = (cps.extraAnchors.find((w) => has(t, w))) || start;
+    wcs.push({
+      name: "cps-0",
+      question: "SOURCE;op:TARGET:: — how does the grammar route this?",
+      start: cpsStart,
+      opts: mut({ cw: 1.2, dw: 0.9, aw: 1.4, temp: 0.8, jitter: 0.5, anchors: anchorSet }),
+    });
+  }
   return wcs.map((w) => {
     const r = walk(t, w.start, act, depth, w.opts);
-    return { name: w.name, question: w.question, path: r.path, resonance: r.resonance, anchors: anch.slice(0, 6) };
+    return { name: w.name, question: w.question, path: r.path, resonance: r.resonance, anchors: anchAll.slice(0, 6) };
   });
 }
+
 
 // —————————— CYCLE 3: return — reversed golden ratio
 const PHI = 1.61803398875;
@@ -525,18 +555,45 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
   await ensureHyperfold();
   if (v2) await ensureMoHyperfoldClone();
   const t = await topo();
-  const seeds = tokenize(input);
+
+  // ── CPS-0: parse the input for SOURCE;op:TARGET::PAYLOAD statements and
+  // compile them into a program that mutates every walker + writes directed
+  // sediment. This is the hyperfold operator programming the field.
+  const cpsStmts = parseCps(input);
+  const cpsProgram = cpsStmts.length ? compileCps(cpsStmts) : null;
+  if (cpsProgram && cpsProgram.directed.length) {
+    // apply directed edges to in-memory HF and persist to prog_mo_hyperfold_edges
+    for (const e of cpsProgram.directed) {
+      (HF[e.a] ||= {})[e.b] = (HF[e.a][e.b] || 0) + e.w;
+      HFD[e.a] = (HFD[e.a] || 0) + e.w;
+    }
+    (async () => {
+      try {
+        const { db } = await import("./db.server");
+        for (let i = 0; i < cpsProgram.directed.length; i += 500) {
+          await db.rpc("prog_mo_hyperfold_bump", { edges: cpsProgram.directed.slice(i, i + 500) });
+        }
+        if (blendIntoMo) {
+          for (let i = 0; i < cpsProgram.directed.length; i += 500) {
+            await db.rpc("mo_hyperfold_bump", { edges: cpsProgram.directed.slice(i, i + 500) });
+          }
+        }
+      } catch {}
+    })();
+  }
+
+  const rawSeeds = tokenize(input);
+  const seeds = Array.from(new Set([...rawSeeds, ...(cpsProgram?.extraSeeds || [])]));
   const anch = seeds.filter((s) => has(t, s));
 
   // Cycle 1
   const pressure = compilePressure(t, seeds, v2);
-  // Cycle 2
-  const walkers = runWalkers(t, seeds, stretch);
+  // Cycle 2 (CPS-0 program mutates every walker)
+  const walkers = runWalkers(t, seeds, stretch, cpsProgram);
   // Cycle 3
   const ret = returnWalk(t, walkers, anch);
 
-  // Auto-categorize any newly-walked words (v2 only) — so unclassified
-  // vocabulary gets a manifold home the field can use next breath.
+  // Auto-categorize any newly-walked words (v2 only)
   let autoTagged = 0;
   if (v2) {
     const walked: string[] = [];
@@ -555,17 +612,21 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
   void persistCrystals(sessionId, crystals);
 
   const stats = hfStats();
-  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo, v2, autoTagged });
+  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo, v2, autoTagged, cps: cpsProgram });
 
   return { seeds, cycle1_pressure: pressure, cycle2_walkers: walkers, cycle3_return: ret, cycle4_reply: reply, crystals, telemetry, hyperfold: stats };
 }
 
 
-function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean; v2: boolean; autoTagged: number }): string {
+function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean; v2: boolean; autoTagged: number; cps: CpsProgram | null }): string {
   const lines: string[] = [];
-  lines.push(`prog-mo·telemetry   seeds=${x.seeds.length}   anchored=${x.anch.length}   stretch=${x.stretch}x   blend→mo=${x.blend ? "ON" : "off"}   mode=${x.v2 ? "v2 (operator→terrain)" : "v1 (prog only)"}   auto-cat=${x.autoTagged}`);
+  lines.push(`prog-mo·telemetry   seeds=${x.seeds.length}   anchored=${x.anch.length}   stretch=${x.stretch}x   blend→mo=${x.blend ? "ON" : "off"}   mode=${x.v2 ? "v2 (operator→terrain)" : "v1 (prog only)"}   auto-cat=${x.autoTagged}   cps-0=${x.cps ? `${x.cps.stmts.length} stmts` : "—"}`);
   lines.push(`hyperfold(prog):: nodes=${x.stats.nodes} edges=${x.stats.edges}`);
   lines.push("");
+  if (x.cps && x.cps.stmts.length) {
+    lines.push(renderCpsTelemetry(x.cps));
+    lines.push("");
+  }
   lines.push("── cycle 1 · prog-mo:d (compile-pressure) ──");
   const ops = x.pressure.filter((p) => p.kind === "operator");
   const ter = x.pressure.filter((p) => p.kind === "terrain");
@@ -594,4 +655,5 @@ function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: Compile
   else lines.push("  (no recurring motifs — field still exploring)");
   return lines.join("\n");
 }
+
 
