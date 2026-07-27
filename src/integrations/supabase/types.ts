@@ -320,6 +320,99 @@ export type Database = {
         }
         Relationships: []
       }
+      prog_mo_crystals: {
+        Row: {
+          first_seen: string
+          id: string
+          kind: string
+          last_seen: string
+          pattern: string[]
+          session_id: string
+          signature: string
+          uses: number
+        }
+        Insert: {
+          first_seen?: string
+          id?: string
+          kind?: string
+          last_seen?: string
+          pattern: string[]
+          session_id: string
+          signature: string
+          uses?: number
+        }
+        Update: {
+          first_seen?: string
+          id?: string
+          kind?: string
+          last_seen?: string
+          pattern?: string[]
+          session_id?: string
+          signature?: string
+          uses?: number
+        }
+        Relationships: []
+      }
+      prog_mo_hyperfold_edges: {
+        Row: {
+          updated_at: string
+          weight: number
+          word_a: string
+          word_b: string
+        }
+        Insert: {
+          updated_at?: string
+          weight?: number
+          word_a: string
+          word_b: string
+        }
+        Update: {
+          updated_at?: string
+          weight?: number
+          word_a?: string
+          word_b?: string
+        }
+        Relationships: []
+      }
+      prog_mo_manifolds: {
+        Row: {
+          breath: string
+          color: string
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          session_id: string
+          sigil: string
+          slug: string
+          text: string
+        }
+        Insert: {
+          breath?: string
+          color?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          name: string
+          session_id?: string
+          sigil?: string
+          slug: string
+          text: string
+        }
+        Update: {
+          breath?: string
+          color?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          session_id?: string
+          sigil?: string
+          slug?: string
+          text?: string
+        }
+        Relationships: []
+      }
       songs: {
         Row: {
           created_at: string
@@ -354,6 +447,11 @@ export type Database = {
     Functions: {
       anansi_web_bump: { Args: { rows: Json }; Returns: undefined }
       mo_hyperfold_bump: { Args: { edges: Json }; Returns: undefined }
+      prog_mo_crystal_bump: {
+        Args: { k: string; pat: string[]; sid: string; sig: string }
+        Returns: undefined
+      }
+      prog_mo_hyperfold_bump: { Args: { edges: Json }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
