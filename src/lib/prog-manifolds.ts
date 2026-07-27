@@ -2,6 +2,9 @@
 // The engines (mo/gremolin/anansi/mohini/mimic) walk this terrain.
 // Each corpus is a compact seed of the language's core vocabulary and idioms.
 
+import cps0Text from "@/corpora/CPS-0-2.txt?raw";
+
+
 export type ProgManifold = {
   id: string; name: string; sigil: string; color: string; breath: string; text: string;
 };
@@ -51,6 +54,11 @@ http request response status code method get post put patch delete head options 
 `;
 
 export const PROG_MANIFOLDS: ProgManifold[] = [
+  // CPS-0 is the *hyperfold operator*: a meta-manifold whose grammar
+  // (SOURCE;OP:TARGET::PAYLOAD) is parsed and used to mutate every other
+  // operator's walk options and to write directed sediment. It programs
+  // the field. Its text seeds the terrain; its parser rewires the walkers.
+  { id: "cps0", name: "CPS-0", sigil: "⌘", color: "#F0F0FF", breath: "hyperfold operator — SOURCE;op:TARGET::payload programs the field", text: cps0Text },
   { id: "typescript", name: "TypeScript", sigil: "ᴛs", color: "#3178C6", breath: "types as topology — narrow the world", text: typescript },
   { id: "rust", name: "Rust", sigil: "🦀", color: "#DEA584", breath: "ownership as gravity — nothing escapes", text: rust },
   { id: "python", name: "Python", sigil: "🐍", color: "#3776AB", breath: "readability as duck — walks and quacks", text: python },
@@ -63,3 +71,4 @@ export const PROG_MANIFOLDS: ProgManifold[] = [
   { id: "docker", name: "Docker", sigil: "◫", color: "#0DB7ED", breath: "container as capsule — build once, run there", text: docker },
   { id: "http", name: "HTTP", sigil: "⇋", color: "#7DE2D1", breath: "request as inquiry — response as verdict", text: http },
 ];
+
