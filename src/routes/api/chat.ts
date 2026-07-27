@@ -33,7 +33,7 @@ export const Route = createFileRoute("/api/chat")({
         const prime = isPrime(sessionId);
         const shared = isShared(sessionId);
         const writeSession = sessionId;
-        const stretch = Math.max(1, Math.min(5, body.stretch ?? 1));
+        const stretch = Math.max(1, Math.min(10, body.stretch ?? 1));
 
         // ── mo processes the user's input first (always). Stretch expands
         // walk depth AND telemetry readout window (an|2x|3x|4x|5x).
