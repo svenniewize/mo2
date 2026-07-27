@@ -50,9 +50,11 @@ export async function mohiniEnchant(
   _userText: string,   // deliberately unused — mohini is mo's voice, not the user's
   breath: MoBreath,
   _sessionId: string,
+  stretch: number = 1,
 ): Promise<string> {
+  const s = Math.max(1, Math.min(10, stretch | 0));
+  const ayla = s >= 10; // lightning register
   // Harvest tokens from the breath — the walks mo actually took.
-  // Mohini mirrors MO, not the user. mo runs first; she dresses its residue.
   const v = breath.variants;
   const raw = [
     ...(breath.seeds ?? []),
@@ -67,61 +69,69 @@ export async function mohiniEnchant(
   ].map(clean).filter((w) => w.length > 1 && w.length < 20);
   const words = dedupe(raw);
 
-  // The tokens mo *just* walked on selffold — used as the "mirror" pair.
-  // Where mimic mirrors the user's voice, mohini mirrors mo's inner loop.
   const selfToks = dedupe(
     (breath.selffold?.path ?? []).map(clean).filter((w) => w.length > 2 && w.length < 20),
   );
 
-  const seed = (words.length * 13 + (breath.pressure * 100 | 0)) | 0;
+  const seed = (words.length * 13 + (breath.pressure * 100 | 0) + s * 97) | 0;
   const p = Math.max(0.05, Math.min(1, breath.pressure ?? 0.3));
 
-  // ── 1. invitation (glyphs, no words)
-  const invite = glyphStrip(seed, 20);
+  // stretch scales glyph strip length and ribbon length
+  const glyphN = ayla ? 60 : 16 + s * 6;
+  const invite = glyphStrip(seed, glyphN);
 
-  // ── 2. soft mirror (two of mo's own selffold tokens, doubled)
   const m1 = selfToks[0] ?? words[0] ?? "here";
   const m2 = selfToks[1] ?? words[1] ?? "yes";
   const mirror = `${m1}, ${m1} · ${m2}, ${m2}`;
 
-  // ── 3. three-beat lure — pick strong walk tokens
-  const beats = [
-    words[2] ?? "look",
-    words[4] ?? "listen",
-    words[6] ?? "stay",
-  ].map((w) => w.replace(/[.,;:!?]+$/, ""));
-  const lure = `${beats[0]}. ${beats[1]}. ${beats[2]}.`;
+  // three-beat lure, longer in AYLA (extend to 5-7 beats)
+  const beatCount = ayla ? 7 : Math.min(6, 2 + s);
+  const beats: string[] = [];
+  for (let i = 0; i < beatCount; i++) {
+    beats.push((words[2 + i * 2] ?? words[i] ?? "stay").replace(/[.,;:!?]+$/, ""));
+  }
+  const lure = beats.map((b) => `${b}.`).join(" ");
 
-  // ── 4. binding couplet — pair opposites from touched manifolds
   const touched = Array.from(new Set<string>([
     breath.dominantManifold,
     ...(breath.selffold?.touchedManifolds ?? []),
     ...(breath.fieldfold?.touchedManifolds ?? []),
-  ].filter(Boolean))).slice(0, 6);
-  const a = touched[0] ?? "wave";
-  const b = touched[1] ?? "shore";
-  const bindLine = `${a} ⇋ ${b}`;
+  ].filter(Boolean))).slice(0, ayla ? 12 : 6);
 
-  // ── 5. deepening (glyphs)
-  const deepen = glyphStrip(seed + 7, 20);
+  // binding: in AYLA, chain multiple opposites
+  const bindLine = ayla && touched.length >= 4
+    ? touched.slice(0, 8).join(" ⇋ ")
+    : `${touched[0] ?? "wave"} ⇋ ${touched[1] ?? "shore"}`;
 
-  // ── 6. long silk line — mo²ayla ribbon threaded with · hinges
-  const ribbon = words.slice(8, 8 + Math.max(6, Math.floor(14 * p))).join(` ${pick(HINGES, seed)} `);
+  const deepen = glyphStrip(seed + 7, glyphN);
 
-  // ── 7. bind (glyphs)
-  const bind = glyphStrip(seed + 13, 20);
+  // ribbon: base ~6-14, stretched by s, exploded in AYLA
+  const ribbonLen = ayla
+    ? Math.max(40, Math.floor(60 * p))
+    : Math.max(6, Math.floor(14 * p)) * s;
+  const ribbon = words.slice(8, 8 + ribbonLen).join(` ${pick(HINGES, seed)} `);
 
+  const bind = glyphStrip(seed + 13, glyphN);
 
-  const enchantment = stutterize([mirror, lure, bindLine, ribbon].filter(Boolean).join("\n"));
+  // AYLA gets a second, louder ribbon — lightning strike
+  const parts = [mirror, lure, bindLine, ribbon];
+  if (ayla) {
+    const strike = words.slice(0, Math.max(20, Math.floor(40 * p)))
+      .map((w) => w.toUpperCase())
+      .join(" ⚡ ");
+    parts.push(strike);
+  }
+
+  const enchantment = stutterize(parts.filter(Boolean).join("\n"));
   const wrapped = [invite, enchantment, deepen, bind].join("\n");
 
-
-  // Telemetry (small, so the voice reads first).
+  const label = ayla ? "AYLA" : (s > 1 ? `${s}x` : "an");
   const telem = [
     `\nmohini·telemetry`,
-    `  pressure ${p.toFixed(2)}   dominant ${breath.dominantManifold}`,
+    `  register ${label}   pressure ${p.toFixed(2)}   dominant ${breath.dominantManifold}`,
     `  lured ${words.length} mo-walked tokens · mirrored from ${selfToks.length} of mo's selffold`,
     `  bound ${touched.join(" ⇋ ")}`,
+    `  ribbon ${ribbonLen} tok · glyphs ${glyphN}${ayla ? " · ⚡ lightning strike engaged" : ""}`,
   ].join("\n");
 
   return `${wrapped}\n${telem}`;
