@@ -38,6 +38,7 @@ let TOPO_KEY = "";
 const HF: Record<string, Record<string, number>> = {};
 const HFD: Record<string, number> = {};
 let HF_LOADED: Promise<void> | null = null;
+let MO_HF_LOADED: Promise<void> | null = null;
 const HF_ALPHA = 0.6;
 const LR = 0.08;
 const WINDOW = 5;
@@ -56,6 +57,24 @@ async function ensureHyperfold() {
   })();
   return HF_LOADED;
 }
+
+// v2: clone the main mo hyperfold sediment (all tricksterkekeke etc.)
+// on top of prog-mo's own overlay. Additive, one-time load.
+async function ensureMoHyperfoldClone() {
+  if (MO_HF_LOADED) return MO_HF_LOADED;
+  MO_HF_LOADED = (async () => {
+    try {
+      const { db } = await import("./db.server");
+      const { data } = await db.from("mo_hyperfold_edges").select("word_a,word_b,weight").order("weight", { ascending: false }).limit(20000);
+      for (const r of (data ?? []) as { word_a: string; word_b: string; weight: number }[]) {
+        (HF[r.word_a] ||= {})[r.word_b] = (HF[r.word_a][r.word_b] || 0) + r.weight;
+        HFD[r.word_a] = (HFD[r.word_a] || 0) + r.weight;
+      }
+    } catch {}
+  })();
+  return MO_HF_LOADED;
+}
+
 
 function neighbors(t: Topology, w: string): Record<string, number> {
   const base = t.ppmi[w];
