@@ -155,7 +155,7 @@ export const Route = createFileRoute("/api/chat")({
         // ── MOHINI MODE — the great enchantress. NO LLM.
         if (body.mode === "mohini") {
           const { mohiniEnchant } = await import("@/lib/mohini.server");
-          const reply = await mohiniEnchant(lastUser.content, userBreath, writeSession);
+          const reply = await mohiniEnchant(lastUser.content, userBreath, writeSession, stretch);
           if (!shared) {
             await db.from("mo_traces").insert({
               session_id: writeSession, role: "mohini", content: reply,
