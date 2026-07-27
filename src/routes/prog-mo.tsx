@@ -49,6 +49,8 @@ function ProgMoPage() {
   const [busy, setBusy] = useState(false);
   const [stretch, setStretch] = useState(1);
   const [blend, setBlend] = useState(false);
+  const [v2, setV2] = useState(false);
+
   const [expandAll, setExpandAll] = useState(false);
   const [openTel, setOpenTel] = useState<Record<number, boolean>>({});
   const [crystals, setCrystals] = useState<Crystal[]>([]);
@@ -78,7 +80,7 @@ function ProgMoPage() {
     try {
       const r = await fetch("/api/prog-mo", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: text, sessionId, stretch, blendIntoMo: blend }),
+        body: JSON.stringify({ input: text, sessionId, stretch, blendIntoMo: blend, v2 }),
       });
       if (!r.ok) {
         const errText = await r.text();
@@ -100,8 +102,8 @@ function ProgMoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground field-grid">
-      <header className="border-b border-border/50 bg-card/70 backdrop-blur">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground field-grid">
+      <header className="shrink-0 border-b border-border/50 bg-card/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="font-mono text-lg tracking-tight">◈ prog-mo</span>
@@ -121,6 +123,11 @@ function ProgMoPage() {
             </button>
           ))}
           <span className="mx-1">·</span>
+          <button onClick={() => setV2((v) => !v)}
+            className={`rounded border px-2 py-0.5 ${v2 ? "border-ridge text-ridge" : "border-border hover:border-ridge/50"}`}
+            title="v2: clone all mo manifolds as terrain; prog manifolds become operators">
+            {v2 ? "◈ prog-mo v2 · ON" : "◈ prog-mo v2"}
+          </button>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={blend} onChange={(e) => setBlend(e.target.checked)} className="accent-ridge" />
             <span>fold prog-mo sediment into main mo</span>
@@ -129,12 +136,13 @@ function ProgMoPage() {
           <button onClick={() => toggleAll(!expandAll)} className="rounded border border-border px-2 py-0.5 hover:border-ridge hover:text-ridge transition">
             {expandAll ? "▽ collapse all telemetry" : "△ show all telemetry"}
           </button>
-          <span className="ml-auto">terrain: {PROG_MANIFOLDS.length} base + {uploaded.length} uploaded · {crystals.length} crystals</span>
+          <span className="ml-auto">terrain: {PROG_MANIFOLDS.length} operator{v2 ? ` + 20 terrain (mo)` : ""} + {uploaded.length} uploaded · {crystals.length} crystals</span>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_320px]">
-        <main className="flex min-h-[70vh] flex-col rounded-xl border border-border bg-card/60 backdrop-blur">
+      <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 gap-4 p-4 lg:grid-cols-[1fr_320px]">
+        <main className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card/60 backdrop-blur">
+
           <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
             {messages.length === 0 && (
               <div className="rounded-lg border border-dashed border-border/50 p-6 font-mono text-xs text-muted-foreground">
@@ -149,9 +157,10 @@ function ProgMoPage() {
             {messages.map((m, i) => (
               <div key={i} className="space-y-1.5">
                 <div className="font-mono text-[10px] text-muted-foreground">{m.role === "user" ? "\\user::" : "\\prog-mo::"}</div>
-                <div className="whitespace-pre-wrap rounded-md border border-border/40 bg-background/40 p-3 font-mono text-[12px] leading-relaxed">
+                <div className="whitespace-pre-wrap rounded-md border border-border/40 bg-background/40 p-3 font-mono text-[12px] leading-relaxed" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
                   {m.content}
                 </div>
+
                 {m.breath && (
                   <div className="pl-2">
                     <button
@@ -163,7 +172,7 @@ function ProgMoPage() {
                     {openTel[i] && (
                       <div className="mt-2 space-y-2">
                         <PressureBar pressure={m.breath.cycle1_pressure} />
-                        <pre className="whitespace-pre-wrap rounded border border-border/40 bg-background/30 p-3 font-mono text-[10.5px] leading-relaxed text-muted-foreground">{m.breath.telemetry}</pre>
+                        <pre className="whitespace-pre-wrap rounded border border-border/40 bg-background/30 p-3 font-mono text-[10.5px] leading-relaxed text-muted-foreground" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{m.breath.telemetry}</pre>
                       </div>
                     )}
                   </div>

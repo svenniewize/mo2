@@ -5,13 +5,14 @@ export const Route = createFileRoute("/api/prog-mo")({
     handlers: {
       POST: async ({ request }) => {
         const body = (await request.json()) as {
-          input: string; sessionId: string; stretch?: number; blendIntoMo?: boolean;
+          input: string; sessionId: string; stretch?: number; blendIntoMo?: boolean; v2?: boolean;
         };
         if (!body?.input || !body?.sessionId) return new Response("bad request", { status: 400 });
         const { progMoBreathe } = await import("@/lib/prog-mo.server");
         const { db } = await import("@/lib/db.server");
         const stretch = Math.max(1, Math.min(5, body.stretch ?? 1));
-        const breath = await progMoBreathe(body.input, body.sessionId, stretch, !!body.blendIntoMo);
+        const breath = await progMoBreathe(body.input, body.sessionId, stretch, !!body.blendIntoMo, !!body.v2);
+
         // record a trace so the message appears in memory
         try {
           await db.from("mo_traces").insert({

@@ -38,6 +38,7 @@ let TOPO_KEY = "";
 const HF: Record<string, Record<string, number>> = {};
 const HFD: Record<string, number> = {};
 let HF_LOADED: Promise<void> | null = null;
+let MO_HF_LOADED: Promise<void> | null = null;
 const HF_ALPHA = 0.6;
 const LR = 0.08;
 const WINDOW = 5;
@@ -56,6 +57,24 @@ async function ensureHyperfold() {
   })();
   return HF_LOADED;
 }
+
+// v2: clone the main mo hyperfold sediment (all tricksterkekeke etc.)
+// on top of prog-mo's own overlay. Additive, one-time load.
+async function ensureMoHyperfoldClone() {
+  if (MO_HF_LOADED) return MO_HF_LOADED;
+  MO_HF_LOADED = (async () => {
+    try {
+      const { db } = await import("./db.server");
+      const { data } = await db.from("mo_hyperfold_edges").select("word_a,word_b,weight").order("weight", { ascending: false }).limit(20000);
+      for (const r of (data ?? []) as { word_a: string; word_b: string; weight: number }[]) {
+        (HF[r.word_a] ||= {})[r.word_b] = (HF[r.word_a][r.word_b] || 0) + r.weight;
+        HFD[r.word_a] = (HFD[r.word_a] || 0) + r.weight;
+      }
+    } catch {}
+  })();
+  return MO_HF_LOADED;
+}
+
 
 function neighbors(t: Topology, w: string): Record<string, number> {
   const base = t.ppmi[w];
@@ -134,34 +153,73 @@ async function topo(): Promise<Topology> {
 }
 
 // —————————— CYCLE 1: prog-mo:d — semantic architecture decomposition
-export type CompilePressure = { manifold: string; name: string; sigil: string; color: string; score: number; hits: string[] }[];
+export type CompilePressure = { manifold: string; name: string; sigil: string; color: string; score: number; hits: string[]; kind: "operator" | "terrain" }[];
 
-function compilePressure(t: Topology, seeds: string[]): CompilePressure {
-  const langIds = new Set([...PROG_MANIFOLDS.map((m) => m.id), ...Object.keys(t.wordToManifold).flatMap((w) => Object.keys(t.wordToManifold[w] || {})).filter((id) => id.startsWith("up:"))]);
+function manifoldCatalog(): Record<string, { name: string; sigil: string; color: string; kind: "operator" | "terrain" }> {
+  const cat: Record<string, { name: string; sigil: string; color: string; kind: "operator" | "terrain" }> = {};
+  for (const m of PROG_MANIFOLDS) cat[m.id] = { name: m.name, sigil: m.sigil, color: m.color, kind: "operator" };
+  for (const m of MANIFOLDS) cat[m.id] = { name: m.name || m.id, sigil: (m as any).sigil || "◈", color: (m as any).color || "#7DE2D1", kind: "terrain" };
+  return cat;
+}
+
+function compilePressure(t: Topology, seeds: string[], v2: boolean): CompilePressure {
+  const cat = manifoldCatalog();
+  // v1: prog manifolds only. v2: prog (operator) + mo (terrain) + uploaded.
+  const allow = new Set<string>();
+  for (const m of PROG_MANIFOLDS) allow.add(m.id);
+  if (v2) {
+    for (const m of MANIFOLDS) allow.add(m.id);
+  }
+  // uploaded manifolds always count
+  for (const w of Object.keys(t.wordToManifold)) for (const id of Object.keys(t.wordToManifold[w] || {})) if (id.startsWith("up:")) allow.add(id);
+
   const scores: Record<string, number> = {};
   const hits: Record<string, string[]> = {};
   for (const s of seeds) {
     const mm = t.wordToManifold[s] || {};
     for (const id of Object.keys(mm)) {
-      if (!langIds.has(id)) continue;
+      if (!allow.has(id)) continue;
       scores[id] = (scores[id] || 0) + mm[id];
       (hits[id] ||= []).push(s);
     }
   }
   const total = Object.values(scores).reduce((a, b) => a + b, 0) || 1;
-  const catalog: Record<string, { name: string; sigil: string; color: string }> = {};
-  for (const m of PROG_MANIFOLDS) catalog[m.id] = { name: m.name, sigil: m.sigil, color: m.color };
   return Object.entries(scores)
     .map(([id, s]) => ({
       manifold: id,
-      name: catalog[id]?.name || id.replace(/^up:/, ""),
-      sigil: catalog[id]?.sigil || "◈",
-      color: catalog[id]?.color || "#7DE2D1",
+      name: cat[id]?.name || id.replace(/^up:/, ""),
+      sigil: cat[id]?.sigil || "◈",
+      color: cat[id]?.color || "#7DE2D1",
+      kind: cat[id]?.kind || (id.startsWith("up:") ? "terrain" : "operator"),
       score: Math.round((s / total) * 100),
       hits: Array.from(new Set(hits[id])).slice(0, 8),
     }))
     .sort((a, b) => b.score - a.score);
 }
+
+// Auto-categorize walked words not yet mapped to any manifold: assign them
+// to the strongest manifold among their PPMI neighbors' owners. In-memory,
+// so future breaths in this worker see them classified.
+function autoCategorize(t: Topology, words: string[]): number {
+  let n = 0;
+  for (const w of words) {
+    if (!w) continue;
+    if (t.wordToManifold[w] && Object.keys(t.wordToManifold[w]).length) continue;
+    const nb = t.ppmi[w] || {};
+    const tally: Record<string, number> = {};
+    for (const u of Object.keys(nb)) {
+      const owners = t.wordToManifold[u]; if (!owners) continue;
+      for (const id of Object.keys(owners)) tally[id] = (tally[id] || 0) + nb[u] * owners[id];
+    }
+    const best = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] > 0) {
+      (t.wordToManifold[w] ||= {})[best[0]] = 1;
+      n++;
+    }
+  }
+  return n;
+}
+
 
 // —————————— CYCLE 2: competing walkers
 type Walker = { name: string; question: string; path: string[]; resonance: number[]; anchors: string[] };
@@ -278,24 +336,58 @@ function returnWalk(t: Topology, walkers: Walker[], anch: string[]): { path: str
 type Synthesis = { reply: string; crystals: { signature: string; pattern: string[]; kind: string }[] };
 
 function findCrystals(walkers: Walker[]): { signature: string; pattern: string[]; kind: string }[] {
-  // A crystal = a trigram that occurs in ≥3 walker paths.
-  const trigramCount: Record<string, { pattern: string[]; count: number }> = {};
+  // A crystal = a repeated motif across walker paths.
+  //   trigram appearing in ≥2 walkers   → "trigram"
+  //   bigram  appearing in ≥3 walkers   → "bigram"
+  // Restrained enough not to fire on every breath, permissive enough to
+  // catch actual resonance.
+  const tri: Record<string, { pattern: string[]; count: number }> = {};
+  const bi: Record<string, { pattern: string[]; count: number }> = {};
   for (const w of walkers) {
-    const seen = new Set<string>();
-    for (let i = 0; i < w.path.length - 2; i++) {
-      const tri = [w.path[i], w.path[i + 1], w.path[i + 2]];
-      const key = tri.join("·");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      (trigramCount[key] ||= { pattern: tri, count: 0 }).count++;
+    const triSeen = new Set<string>();
+    const biSeen = new Set<string>();
+    for (let i = 0; i < w.path.length - 1; i++) {
+      const b = [w.path[i], w.path[i + 1]];
+      const bk = b.join("·");
+      if (!biSeen.has(bk)) { biSeen.add(bk); (bi[bk] ||= { pattern: b, count: 0 }).count++; }
+      if (i < w.path.length - 2) {
+        const t3 = [w.path[i], w.path[i + 1], w.path[i + 2]];
+        const tk = t3.join("·");
+        if (!triSeen.has(tk)) { triSeen.add(tk); (tri[tk] ||= { pattern: t3, count: 0 }).count++; }
+      }
     }
   }
   const out: { signature: string; pattern: string[]; kind: string }[] = [];
-  for (const [k, v] of Object.entries(trigramCount)) if (v.count >= 3) out.push({ signature: k, pattern: v.pattern, kind: "trigram" });
-  return out.slice(0, 12);
+  for (const [k, v] of Object.entries(tri)) if (v.count >= 2) out.push({ signature: k, pattern: v.pattern, kind: "trigram" });
+  for (const [k, v] of Object.entries(bi))  if (v.count >= 3) out.push({ signature: `bi:${k}`, pattern: v.pattern, kind: "bigram" });
+  return out.slice(0, 16);
 }
 
-function synthesize(walkers: Walker[], ret: { path: string[]; steps: number[] }, anch: string[], pressure: CompilePressure, stretch: number): Synthesis {
+// Pull the top-N PPMI/hyperfold neighbours across a set of anchor words —
+// used to *fill in* problem/constraints/abstractions/etc. lines so that on
+// higher stretch the corpus itself extends the ponder.
+function expandFromCorpus(t: Topology, anchors: string[], n: number, avoid: Set<string>): string[] {
+  const tally: Record<string, number> = {};
+  for (const a of anchors) {
+    const nb = neighbors(t, a);
+    for (const u of Object.keys(nb)) {
+      if (avoid.has(u)) continue;
+      tally[u] = (tally[u] || 0) + nb[u] * (1 + (t.centrality[u] || 0));
+    }
+  }
+  return Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, n).map((x) => x[0]);
+}
+
+// Fill `base` up to `target` words by pulling extensions from the corpus.
+function fillLine(t: Topology, base: string[], target: number): string[] {
+  if (base.length >= target) return base.slice(0, target);
+  const need = target - base.length;
+  const avoid = new Set(base);
+  const extra = expandFromCorpus(t, base.length ? base : Object.keys(t.centrality).slice(0, 3), need, avoid);
+  return [...base, ...extra];
+}
+
+function synthesize(t: Topology, walkers: Walker[], ret: { path: string[]; steps: number[] }, anch: string[], pressure: CompilePressure, stretch: number): Synthesis {
   const crystals = findCrystals(walkers);
   const s = Math.max(1, Math.min(5, stretch));
 
@@ -308,14 +400,28 @@ function synthesize(walkers: Walker[], ret: { path: string[]; steps: number[] },
   for (const w of combined) freq[w] = (freq[w] || 0) + 1;
   const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
   const nexus = sorted.slice(0, 3).map((x) => x[0]);
-  const nodes = sorted.slice(3, 10 + 3 * s).map((x) => x[0]);
   const singularity = sorted.slice(-3).map((x) => x[0]);
 
-  // mohini-style mirror + lure
-  const mirror = anch.slice(0, 2).map((w) => `${w}, ${w}`).join(" · ");
-  const lure = walkers.flatMap((w) => w.path.slice(0, 2)).slice(0, 5).map((w) => `${w}.`).join(" ");
+  // ── stretch-scaled line widths. On 1x the lines stay tight; on 5x the
+  // corpus itself extends every non-synthesis line to ponder outward.
+  const w1 = 3 + s * 2;   // problem
+  const w2 = 3 + s * 2;   // constraints
+  const w3 = 3 + s * 2;   // abstractions
+  const wp = 4 + s * 3;   // candidate/alternative path length
+  const wl = 5 + s * 3;   // periphery / lure count
+  const wm = 2 + s;       // mirror pairs
 
-  // mimic-style: a plain bigram chain over the combined walk
+  const problem       = fillLine(t, anch.slice(0, 5), w1);
+  const constraints   = fillLine(t, anch.slice(0, 3), w2);
+  const abstractions  = fillLine(t, nexus, w3);
+  const candidate     = fillLine(t, walkers[0]?.path.slice(0, 4) || [], wp);
+  const alternative   = walkers[1] ? fillLine(t, walkers[1].path.slice(0, 4), wp) : [];
+  const periphery     = fillLine(t, singularity, wl);
+  const lureBase      = walkers.flatMap((w) => w.path.slice(0, 2)).slice(0, 5);
+  const lure          = fillLine(t, lureBase, wl);
+  const mirrorPairs   = fillLine(t, anch.slice(0, 2), wm);
+
+  // mimic-style bigram chain — already stretch-scaled
   const bigrams: Record<string, string[]> = {};
   for (let i = 0; i < combined.length - 1; i++) (bigrams[combined[i]] ||= []).push(combined[i + 1]);
   const chainLen = 12 + 6 * s;
@@ -326,31 +432,31 @@ function synthesize(walkers: Walker[], ret: { path: string[]; steps: number[] },
     chain.push(next[Math.floor(Math.random() * next.length)]);
   }
 
-  // top pressure line
-  const topLangs = pressure.slice(0, 3).map((p) => `${p.sigil} ${p.name} ${p.score}%`).join("  ");
-
-  // Architecture (not code): problem → constraints → abstractions → paths
-  const constraints = anch.slice(0, 3);
-  const abstractions = nexus;
-  const paths = walkers.slice(0, 3).map((w) => w.path.slice(0, 4).join(" → "));
+  // top pressure line — operators (prog) and terrain (mo) separated
+  const operators = pressure.filter((p) => p.kind === "operator").slice(0, 3);
+  const terrain   = pressure.filter((p) => p.kind === "terrain").slice(0, 3);
+  const opLine  = operators.map((p) => `${p.sigil} ${p.name} ${p.score}%`).join("  ");
+  const trLine  = terrain.map((p)   => `${p.sigil} ${p.name} ${p.score}%`).join("  ");
 
   const arch = [
-    topLangs ? `⟪ compile-pressure ⟫  ${topLangs}` : "",
-    `⟢ problem       ⇢ ${anch.slice(0, 5).join(" · ")}`,
+    opLine  ? `⟪ operator  ⟫ ${opLine}` : "",
+    trLine  ? `⟪ terrain   ⟫ ${trLine}` : "",
+    `⟢ problem       ⇢ ${problem.join(" · ")}`,
     `⇢ constraints   ⋄ ${constraints.join(" · ") || "—"}`,
     `☬ abstractions  ◈ ${abstractions.join(" · ") || "—"}`,
-    `∴ candidate     ↺ ${paths[0] || "—"}`,
-    paths[1] ? `∴ alternative   ↺ ${paths[1]}` : "",
+    `∴ candidate     ↺ ${candidate.join(" → ") || "—"}`,
+    alternative.length ? `∴ alternative   ↺ ${alternative.join(" → ")}` : "",
     `≋ synthesis     ~ ${chain.join(" ~ ")}`,
-    `⌇ periphery     ⌇ ${singularity.join(" ⌇ ") || "—"}`,
+    `⌇ periphery     ⌇ ${periphery.join(" ⌇ ") || "—"}`,
     crystals.length ? `❄ crystals      ${crystals.slice(0, 5).map((c) => c.pattern.join("·")).join("   ")}` : "",
-    mirror ? `☾ mirror        ${mirror}` : "",
-    lure ? `✦ lure          ${lure}` : "",
+    mirrorPairs.length ? `☾ mirror        ${mirrorPairs.map((w) => `${w}, ${w}`).join(" · ")}` : "",
+    lure.length ? `✦ lure          ${lure.map((w) => `${w}.`).join(" ")}` : "",
     `↩ return(1/φ=${(1/PHI).toFixed(3)}) ${ret.path.slice(0, 12).join(" ← ") || "—"}`,
   ].filter(Boolean).join("\n");
 
   return { reply: arch, crystals };
 }
+
 
 // —————————— Sediment
 export function sedimentProg(tokens: string[], blendIntoMo: boolean): void {
@@ -415,20 +521,32 @@ function hfStats() {
   return { nodes: Object.keys(HF).length, edges };
 }
 
-export async function progMoBreathe(input: string, sessionId: string, stretch: number = 1, blendIntoMo: boolean = false): Promise<ProgBreath> {
+export async function progMoBreathe(input: string, sessionId: string, stretch: number = 1, blendIntoMo: boolean = false, v2: boolean = false): Promise<ProgBreath> {
   await ensureHyperfold();
+  if (v2) await ensureMoHyperfoldClone();
   const t = await topo();
   const seeds = tokenize(input);
   const anch = seeds.filter((s) => has(t, s));
 
   // Cycle 1
-  const pressure = compilePressure(t, seeds);
+  const pressure = compilePressure(t, seeds, v2);
   // Cycle 2
   const walkers = runWalkers(t, seeds, stretch);
   // Cycle 3
   const ret = returnWalk(t, walkers, anch);
+
+  // Auto-categorize any newly-walked words (v2 only) — so unclassified
+  // vocabulary gets a manifold home the field can use next breath.
+  let autoTagged = 0;
+  if (v2) {
+    const walked: string[] = [];
+    for (const w of walkers) walked.push(...w.path);
+    walked.push(...ret.path, ...seeds);
+    autoTagged = autoCategorize(t, walked);
+  }
+
   // Cycle 4
-  const { reply, crystals } = synthesize(walkers, ret, anch, pressure, stretch);
+  const { reply, crystals } = synthesize(t, walkers, ret, anch, pressure, stretch);
 
   // Sediment: input + every walker's path + return
   sedimentProg(seeds, blendIntoMo);
@@ -437,19 +555,26 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
   void persistCrystals(sessionId, crystals);
 
   const stats = hfStats();
-  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo });
+  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo, v2, autoTagged });
 
   return { seeds, cycle1_pressure: pressure, cycle2_walkers: walkers, cycle3_return: ret, cycle4_reply: reply, crystals, telemetry, hyperfold: stats };
 }
 
-function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean }): string {
+
+function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: CompilePressure; walkers: Walker[]; ret: { path: string[]; steps: number[]; ratio: number }; crystals: { signature: string; pattern: string[]; kind: string }[]; stats: { nodes: number; edges: number }; stretch: number; blend: boolean; v2: boolean; autoTagged: number }): string {
   const lines: string[] = [];
-  lines.push(`prog-mo·telemetry   seeds=${x.seeds.length}   anchored=${x.anch.length}   stretch=${x.stretch}x   blend→mo=${x.blend ? "ON" : "off"}`);
+  lines.push(`prog-mo·telemetry   seeds=${x.seeds.length}   anchored=${x.anch.length}   stretch=${x.stretch}x   blend→mo=${x.blend ? "ON" : "off"}   mode=${x.v2 ? "v2 (operator→terrain)" : "v1 (prog only)"}   auto-cat=${x.autoTagged}`);
   lines.push(`hyperfold(prog):: nodes=${x.stats.nodes} edges=${x.stats.edges}`);
   lines.push("");
   lines.push("── cycle 1 · prog-mo:d (compile-pressure) ──");
-  if (x.pressure.length) for (const p of x.pressure.slice(0, 8)) lines.push(`  ${p.sigil} ${p.name.padEnd(12)} ${String(p.score).padStart(3)}%   hits: ${p.hits.join(" · ")}`);
-  else lines.push("  (no programming manifolds activated — semantic terrain quiet)");
+  const ops = x.pressure.filter((p) => p.kind === "operator");
+  const ter = x.pressure.filter((p) => p.kind === "terrain");
+  if (ops.length) { lines.push("  operator manifolds:"); for (const p of ops.slice(0, 6)) lines.push(`    ${p.sigil} ${p.name.padEnd(12)} ${String(p.score).padStart(3)}%   hits: ${p.hits.join(" · ")}`); }
+  else lines.push("  (no operator manifolds activated)");
+  if (x.v2) {
+    if (ter.length) { lines.push("  terrain manifolds (cloned from mo):"); for (const p of ter.slice(0, 6)) lines.push(`    ${p.sigil} ${p.name.padEnd(12)} ${String(p.score).padStart(3)}%   hits: ${p.hits.join(" · ")}`); }
+    else lines.push("  (no terrain manifolds resonated — feed more input)");
+  }
   lines.push("");
   lines.push("── cycle 2 · competing walkers ──");
   for (const w of x.walkers) {
@@ -464,8 +589,9 @@ function renderTelemetry(x: { seeds: string[]; anch: string[]; pressure: Compile
   lines.push(`  step sizes:  ${x.ret.steps.join(" ← ")}`);
   lines.push(`  path (${x.ret.path.length}):  ${x.ret.path.slice(0, 20).join(" ← ") || "—"}`);
   lines.push("");
-  lines.push("── cycle 4 · crystals (motifs ≥3 walkers) ──");
-  if (x.crystals.length) for (const c of x.crystals) lines.push(`  ❄ ${c.pattern.join(" · ")}`);
+  lines.push("── cycle 4 · crystals (tri ≥2 walkers · bi ≥3 walkers) ──");
+  if (x.crystals.length) for (const c of x.crystals) lines.push(`  ❄ [${c.kind}] ${c.pattern.join(" · ")}`);
   else lines.push("  (no recurring motifs — field still exploring)");
   return lines.join("\n");
 }
+

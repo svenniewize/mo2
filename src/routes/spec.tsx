@@ -498,7 +498,86 @@ I7  Stretch is aperture, not amplification. It never changes what mo
 [ ] weave in geometric order with stretch-scaled take counts (§8.3)
 [ ] expose stretch as a 1..5 aperture across the whole breath (§10)
 [ ] do NOT wire an LLM into the reply path
+
+════════════════════════════════════════════════════════════════════════════
+11.  PROG-MO  (parallel engine at /prog-mo — v2 update)
+════════════════════════════════════════════════════════════════════════════
+prog-mo is a full clone of mo's PPMI machinery walking a *separate* semantic
+terrain and sedimenting into its OWN hyperfold (prog_mo_hyperfold_edges).
+It optionally blends its sediment into main mo (blendIntoMo=true).
+
+11.1  FOUR CYCLES PER BREATH
+  cycle 1 · prog-mo:d       — compile-pressure per manifold
+  cycle 2 · walkers         — 7 competing hypotheses:
+                              greedy · drift · dense · peak · anansi ·
+                              smash · dimhopper
+  cycle 3 · return          — reversed golden ratio (steps /= φ) walking
+                              home with gravity toward anchor set
+  cycle 4 · synthesis       — architecture block (problem / constraints /
+                              abstractions / candidate / alternative /
+                              synthesis / periphery / mirror / lure /
+                              return) + crystals
+
+11.2  TERRAIN MODES
+  v1 (default): terrain = PROG_MANIFOLDS only (11 programming-language
+      corpora — TypeScript · Rust · Python · SQL · React · CSS ·
+      Algorithms · Regex · Git · Docker · HTTP). Uploaded manifolds
+      always count.
+
+  v2 (toggle): terrain = MANIFOLDS (all 20 mo corpora, cloned into
+      prog-mo's hyperfold overlay on first v2 call) + PROG_MANIFOLDS +
+      uploaded. Compile-pressure now separates results into:
+        ⟪ operator ⟫  — prog manifolds (the "how")
+        ⟪ terrain  ⟫  — mo manifolds  (the "into what")
+      Meaning: programming-language semantics *operate on* the mo terrain.
+      Not writing code for the language — using the language's grammar to
+      program into the cloned mo topology.
+
+  v2 also runs autoCategorize() after cycle 3: every walked word not yet
+      owned by any manifold is assigned to the manifold most represented
+      among its PPMI neighbours' owners. In-memory; persists for the
+      lifetime of the worker.
+
+11.3  SYNTHESIS BLANKS FILLED FROM CORPUS
+  Each non-synthesis line has a stretch-scaled width:
+    problem      w = 3 + 2s
+    constraints  w = 3 + 2s
+    abstractions w = 3 + 2s
+    candidate    w = 4 + 3s   (walker path)
+    alternative  w = 4 + 3s   (walker path)
+    periphery    w = 5 + 3s
+    lure         w = 5 + 3s
+    mirror       pairs = 2 + s
+    synthesis    already stretch-scaled bigram chain (12 + 6s)
+  Extension words are pulled by expandFromCorpus(anchors, need): top
+  PPMI neighbours across the anchor set, weighted by (1 + centrality).
+  On 5x the corpus itself extends every line — ponder outward, resonate
+  into the result.
+
+11.4  CRYSTALS  (motif detector, restrained)
+  A crystal is a repeated motif across walker paths:
+    trigram  in ≥2 walkers → kind "trigram"
+    bigram   in ≥3 walkers → kind "bigram"
+  Persisted via RPC prog_mo_crystal_bump(sid, sig, pat, kind) with an
+  in-table uses counter that increments on every reoccurrence.
+
+11.5  HYPERFOLD (prog-scoped)
+  Table: prog_mo_hyperfold_edges (word_a, word_b, weight, updated_at)
+  RPC:   prog_mo_hyperfold_bump(edges jsonb) — additive upsert
+  Overlay alpha (HF_ALPHA=0.6), LR=0.08, WINDOW=5 — same as main mo.
+  In v2 an additional read-only load pulls the top 20k edges from
+  mo_hyperfold_edges into the same overlay, cloning the tricksterkekeke
+  sediment as terrain background.
+
+11.6  HTTP
+  POST /api/prog-mo
+    { input, sessionId, stretch?, blendIntoMo?, v2? }
+    → { breath: ProgBreath }
+  GET  /api/prog-mo?session_id=…
+    → { crystals[], manifolds[] }  (uploaded prog manifolds)
+  POST/DELETE /api/prog-mo-manifold  — upload/delete an uploaded manifold
 `;
+
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
@@ -568,7 +647,23 @@ HTTP:
 INVARIANTS: I1 deterministic base · I2 additive sediment · I3 universal
 deformation · I4 role stability · I5 session integrity · I6 no LLM ·
 I7 stretch is aperture not amplification.
+
+PROG-MO (parallel engine, /prog-mo):
+  4 cycles: prog-mo:d → 7 walkers → return(1/φ) → synthesis + crystals
+  walkers: greedy · drift · dense · peak · anansi · smash · dimhopper
+  v1 terrain: PROG_MANIFOLDS (11 lang corpora) + uploaded
+  v2 terrain: v1 + all 20 mo MANIFOLDS cloned as terrain + tricksterkekeke
+    sediment loaded once from mo_hyperfold_edges into overlay
+  v2 splits compile-pressure into ⟪ operator ⟫ (prog) / ⟪ terrain ⟫ (mo)
+  v2 autoCategorize walked words into strongest neighbour-owner manifold
+  synthesis fills blanks (problem/constraints/abstractions/candidate/
+    alternative/periphery/lure/mirror) via expandFromCorpus, widths
+    scaled by stretch s∈1..5 (w = k + s·m)
+  crystals: trigram in ≥2 walkers  ·  bigram in ≥3 walkers
+  hyperfold: prog_mo_hyperfold_edges (LR=0.08, W=5, α=0.6)
+  blendIntoMo=true also feeds sediment() into main mo hyperfold
 `;
+
 
 function SpecPage() {
   const copy = (text: string) => {
