@@ -157,9 +157,10 @@ function ProgMoPage() {
             {messages.map((m, i) => (
               <div key={i} className="space-y-1.5">
                 <div className="font-mono text-[10px] text-muted-foreground">{m.role === "user" ? "\\user::" : "\\prog-mo::"}</div>
-                <div className="whitespace-pre-wrap rounded-md border border-border/40 bg-background/40 p-3 font-mono text-[12px] leading-relaxed">
+                <div className="whitespace-pre-wrap rounded-md border border-border/40 bg-background/40 p-3 font-mono text-[12px] leading-relaxed" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
                   {m.content}
                 </div>
+
                 {m.breath && (
                   <div className="pl-2">
                     <button
