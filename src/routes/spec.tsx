@@ -647,7 +647,23 @@ HTTP:
 INVARIANTS: I1 deterministic base · I2 additive sediment · I3 universal
 deformation · I4 role stability · I5 session integrity · I6 no LLM ·
 I7 stretch is aperture not amplification.
+
+PROG-MO (parallel engine, /prog-mo):
+  4 cycles: prog-mo:d → 7 walkers → return(1/φ) → synthesis + crystals
+  walkers: greedy · drift · dense · peak · anansi · smash · dimhopper
+  v1 terrain: PROG_MANIFOLDS (11 lang corpora) + uploaded
+  v2 terrain: v1 + all 20 mo MANIFOLDS cloned as terrain + tricksterkekeke
+    sediment loaded once from mo_hyperfold_edges into overlay
+  v2 splits compile-pressure into ⟪ operator ⟫ (prog) / ⟪ terrain ⟫ (mo)
+  v2 autoCategorize walked words into strongest neighbour-owner manifold
+  synthesis fills blanks (problem/constraints/abstractions/candidate/
+    alternative/periphery/lure/mirror) via expandFromCorpus, widths
+    scaled by stretch s∈1..5 (w = k + s·m)
+  crystals: trigram in ≥2 walkers  ·  bigram in ≥3 walkers
+  hyperfold: prog_mo_hyperfold_edges (LR=0.08, W=5, α=0.6)
+  blendIntoMo=true also feeds sediment() into main mo hyperfold
 `;
+
 
 function SpecPage() {
   const copy = (text: string) => {
