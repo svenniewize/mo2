@@ -172,7 +172,7 @@ function ProgMoPage() {
                     {openTel[i] && (
                       <div className="mt-2 space-y-2">
                         <PressureBar pressure={m.breath.cycle1_pressure} />
-                        <pre className="whitespace-pre-wrap rounded border border-border/40 bg-background/30 p-3 font-mono text-[10.5px] leading-relaxed text-muted-foreground">{m.breath.telemetry}</pre>
+                        <pre className="whitespace-pre-wrap rounded border border-border/40 bg-background/30 p-3 font-mono text-[10.5px] leading-relaxed text-muted-foreground" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{m.breath.telemetry}</pre>
                       </div>
                     )}
                   </div>
