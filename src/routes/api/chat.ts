@@ -33,7 +33,7 @@ export const Route = createFileRoute("/api/chat")({
         const prime = isPrime(sessionId);
         const shared = isShared(sessionId);
         const writeSession = sessionId;
-        const stretch = Math.max(1, Math.min(5, body.stretch ?? 1));
+        const stretch = Math.max(1, Math.min(10, body.stretch ?? 1));
 
         // ── mo processes the user's input first (always). Stretch expands
         // walk depth AND telemetry readout window (an|2x|3x|4x|5x).
@@ -155,7 +155,7 @@ export const Route = createFileRoute("/api/chat")({
         // ── MOHINI MODE — the great enchantress. NO LLM.
         if (body.mode === "mohini") {
           const { mohiniEnchant } = await import("@/lib/mohini.server");
-          const reply = await mohiniEnchant(lastUser.content, userBreath, writeSession);
+          const reply = await mohiniEnchant(lastUser.content, userBreath, writeSession, stretch);
           if (!shared) {
             await db.from("mo_traces").insert({
               session_id: writeSession, role: "mohini", content: reply,

@@ -514,10 +514,11 @@ function Header({
           <button onClick={() => setMode("mimic")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mimic" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="Mimic — learns your phrasing (per-session bigram chain) and speaks back in your own voice.">MIMIC</button>
         </div>
 
-        <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer walks — 'an' is default, 2x-5x multiplies walk depth AND telemetry readout window">
-          {([
-            { v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" },
-          ] as const).map((o) => (
+        <div className="flex rounded-md border border-ridge/40 overflow-hidden" title="unlock longer walks — 'an' is default, 2x-5x multiplies walk depth AND telemetry readout window. AYLA (10x) is mohini's lightning register.">
+          {(mode === "mohini"
+            ? [{ v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" }, { v: 10, l: "AYLA" }]
+            : [{ v: 1, l: "an" }, { v: 2, l: "2x" }, { v: 3, l: "3x" }, { v: 4, l: "4x" }, { v: 5, l: "5x" }]
+          ).map((o) => (
             <button
               key={o.v}
               onClick={() => setAnansiStretch(o.v)}
