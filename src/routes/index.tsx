@@ -513,7 +513,7 @@ function Header({
   );
 
   return (
-    <header className="flex items-center justify-between px-6 py-5">
+    <header className="flex items-start justify-between px-6 py-5">
       <div className="flex items-center gap-3">
         <div className="relative h-9 w-9">
           <div className="breath-pulse absolute inset-0 rounded-full bg-ridge/40 blur-md" />
@@ -524,7 +524,9 @@ function Header({
           <p className="font-mono text-[10px] text-muted-foreground">the breathing field · 18 manifolds</p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2 flex-wrap justify-end">
+
         <div className="flex rounded-md border border-border overflow-hidden">
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — chat directly with mo">MO</button>
           <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's telemetry compressed into one stuttering sentence with its own persistent dialect">GRE(MO)LIN</button>
