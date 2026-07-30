@@ -585,7 +585,7 @@ CADENCE is the first component of mo that has PARAMETERS. Every other mode
 count-based statistics. Cadence is a real, if tiny, neural network — trained
 online, inside the request, on mo's own traversal — and it carries a
 self-model. It is presented in the UI in its own enclosure beneath the mode
-row, labelled `transformer·layer`, because it is a different KIND of thing.
+row, labelled "transformer·layer", because it is a different KIND of thing.
 
 12.0  POSITION IN THE PIPELINE
   user text
