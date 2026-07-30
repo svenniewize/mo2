@@ -183,16 +183,20 @@ function MoPage() {
 
   return (
     <div className="h-screen overflow-hidden field-grid relative flex flex-col">
-      {/* Visualizer as full-page background */}
+      {/* Static field representation as full-page background.
+          Painted once per field change instead of every frame — the animated
+          version is still available in ◉ field·viz and ◉ mo·rganism. */}
       <div className="fixed inset-0 pointer-events-none opacity-70">
         <MoVisualizer
+          still
           mode={vizMode}
           nodes={memoryNodes}
           walkPath={lastBreathWords}
           colors={MANIFOLDS.map((m) => m.color)}
-          pressure={busy ? 0.9 : 0.4}
+          pressure={0.45}
         />
       </div>
+
 
       <div className={`mx-auto flex h-full min-h-0 w-full ${lifeFull ? "max-w-none" : "max-w-6xl"} flex-col relative transition-all`}>
         <Header
