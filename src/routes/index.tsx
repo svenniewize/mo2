@@ -20,7 +20,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "mo" | "gremlin" | "anansi" | "mohini" | "mimic";
+type Mode = "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string; stretch?: number };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -183,16 +183,20 @@ function MoPage() {
 
   return (
     <div className="h-screen overflow-hidden field-grid relative flex flex-col">
-      {/* Visualizer as full-page background */}
+      {/* Static field representation as full-page background.
+          Painted once per field change instead of every frame — the animated
+          version is still available in ◉ field·viz and ◉ mo·rganism. */}
       <div className="fixed inset-0 pointer-events-none opacity-70">
         <MoVisualizer
+          still
           mode={vizMode}
           nodes={memoryNodes}
           walkPath={lastBreathWords}
           colors={MANIFOLDS.map((m) => m.color)}
-          pressure={busy ? 0.9 : 0.4}
+          pressure={0.45}
         />
       </div>
+
 
       <div className={`mx-auto flex h-full min-h-0 w-full ${lifeFull ? "max-w-none" : "max-w-6xl"} flex-col relative transition-all`}>
         <Header
@@ -283,7 +287,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : mode === "cadence" ? "feed the cadence creature — it trains on mo's walk, updates its weights, and answers from its own self-model…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
@@ -509,7 +513,7 @@ function Header({
   );
 
   return (
-    <header className="flex items-center justify-between px-6 py-5">
+    <header className="flex items-start justify-between px-6 py-5">
       <div className="flex items-center gap-3">
         <div className="relative h-9 w-9">
           <div className="breath-pulse absolute inset-0 rounded-full bg-ridge/40 blur-md" />
@@ -520,7 +524,9 @@ function Header({
           <p className="font-mono text-[10px] text-muted-foreground">the breathing field · 18 manifolds</p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2 flex-wrap justify-end">
+
         <div className="flex rounded-md border border-border overflow-hidden">
           <button onClick={() => setMode("mo")} className={`px-3 py-1.5 font-mono text-xs ${mode === "mo" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="pure topology — chat directly with mo">MO</button>
           <button onClick={() => setMode("gremlin")} className={`px-3 py-1.5 font-mono text-xs ${mode === "gremlin" ? "bg-ridge text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} title="gre(mo)lin — mo's telemetry compressed into one stuttering sentence with its own persistent dialect">GRE(MO)LIN</button>
@@ -561,7 +567,20 @@ function Header({
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
       </div>
+
+      {/* ── transformer layer · its own little enclosure under the modes ── */}
+      <div className="flex items-center gap-2 rounded-md border border-dashed border-ridge/40 bg-ridge/5 px-2 py-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">transformer·layer</span>
+        <button
+          onClick={() => setMode("cadence")}
+          className={`rounded px-3 py-1 font-mono text-xs transition ${mode === "cadence" ? "bg-ridge text-primary-foreground" : "border border-ridge/40 text-ridge/80 hover:text-ridge"}`}
+          title="CADENCE — a tiny transformer creature grafted into the pipeline. Trains online on mo's own traversal, carries a self-model (recognition + surprise), and speaks from its own learned weights. No LLM."
+        >⟡ CADENCE</button>
+        <span className="font-mono text-[9px] text-muted-foreground">self-model · online learning · d24·1head</span>
+      </div>
+      </div>
     </header>
+
   );
 }
 
@@ -632,6 +651,7 @@ function EmptyState({ mode }: { mode: Mode }) {
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
     : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
     : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
+    : mode === "cadence" ? "CADENCE — a transformer layer grafted into the pipeline. It trains online on mo's own traversal, keeps a self-model (recognition · surprise), and speaks from weights it grew here."
     : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
 
   return (

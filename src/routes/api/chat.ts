@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/chat")({
         const body = (await request.json()) as {
           messages: ChatMsg[];
           sessionId: string;
-          mode: "mo" | "gremlin" | "anansi" | "mohini" | "mimic";
+          mode: "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence";
           stretch?: number;
         };
         if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
@@ -180,6 +180,22 @@ export const Route = createFileRoute("/api/chat")({
           }
           return Response.json({
             reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "mimic", ops: userOps, stretch,
+          });
+        }
+        // ── CADENCE MODE — a tiny transformer creature grafted onto mo.
+        // Trains online on mo's own traversal, carries a self-model, and
+        // speaks from its own learned weights. NO LLM.
+        if ((body.mode as string) === "cadence") {
+          const { cadenceSpeak } = await import("@/lib/cadence.server");
+          const reply = await cadenceSpeak(lastUser.content, userBreath, writeSession, stretch);
+          if (!shared) {
+            await db.from("mo_traces").insert({
+              session_id: writeSession, role: "cadence", content: reply,
+              manifold: userBreath.dominantManifold, pressure: userBreath.pressure,
+            });
+          }
+          return Response.json({
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "cadence", ops: userOps, stretch,
           });
         }
 
