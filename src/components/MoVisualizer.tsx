@@ -61,13 +61,14 @@ type PlacedNode = MemoryNode & { x: number; y: number; r: number; color: string 
 const PHI = (1 + Math.sqrt(5)) / 2;
 
 export function MoVisualizer({
-  mode, nodes, colors, pressure, walkPath,
+  mode, nodes, colors, pressure, walkPath, still = false,
 }: {
   mode: VizMode;
   nodes: MemoryNode[];
   colors: string[];              // manifold palette
   pressure: number;              // 0..1
   walkPath?: string[];           // ordered token walk from last breath
+  still?: boolean;               // render ONE frame, no rAF — used as page background
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -93,17 +94,15 @@ export function MoVisualizer({
       cv.style.height = parent.clientHeight + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
-    resize(); window.addEventListener("resize", resize);
 
-    const tick = () => {
-      tRef.current += 0.008;
+    const paint = (clear: boolean) => {
       const t = tRef.current;
       const W = parent.clientWidth, H = parent.clientHeight;
       const cx = W / 2, cy = H / 2;
       const R = Math.min(W, H) * 0.36;
 
-      // fade prev frame — subtle cyberpunk trail
-      ctx.fillStyle = "rgba(6,8,16,0.32)";
+      // fade prev frame — subtle cyberpunk trail (opaque wipe when still)
+      ctx.fillStyle = clear ? "rgb(6,8,16)" : "rgba(6,8,16,0.32)";
       ctx.fillRect(0, 0, W, H);
 
       const placed = layoutFor(mode, sourceNodes, cx, cy, R, t, colors, walkPath ?? []);
@@ -112,12 +111,28 @@ export function MoVisualizer({
       drawScaffold(ctx, mode, cx, cy, R, t, strokeAlpha);
       drawEdges(ctx, mode, placed, walkPath ?? [], strokeAlpha);
       drawNodes(ctx, placed, pressure);
+    };
 
+    if (still) {
+      // Static representation: one deterministic frame, redrawn only when the
+      // field itself changes or the window resizes. Zero per-frame cost.
+      tRef.current = 1.7;
+      const draw = () => { resize(); paint(true); };
+      draw();
+      window.addEventListener("resize", draw);
+      return () => window.removeEventListener("resize", draw);
+    }
+
+    resize(); window.addEventListener("resize", resize);
+    const tick = () => {
+      tRef.current += 0.008;
+      paint(false);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener("resize", resize); };
-  }, [mode, sourceNodes, colors, pressure, walkPath]);
+  }, [mode, sourceNodes, colors, pressure, walkPath, still]);
+
 
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" />;
 }
