@@ -335,9 +335,7 @@ export async function cadenceSpeak(
   // high recognition → it settles into its own cadence.
   const temp = Math.max(0.25, Math.min(1.6, 0.55 + surprise * 0.9 - recognition * 0.35));
   const seeds = ids.slice(-8);
-  const lines: number[] = Math.max(1, Math.round(2 + s * 1.6));
-  const nLines = Math.max(1, Math.round(2 + s * 1.6)) as unknown as number;
-  void lines;
+  const nLines = Math.max(1, Math.round(2 + s * 1.6));
   const perLine = Math.max(5, Math.round(6 + s * 4 + walk.length / 8));
 
   const utterance: string[] = [];
