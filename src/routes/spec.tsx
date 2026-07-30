@@ -576,7 +576,163 @@ It optionally blends its sediment into main mo (blendIntoMo=true).
   GET  /api/prog-mo?session_id=…
     → { crystals[], manifolds[] }  (uploaded prog manifolds)
   POST/DELETE /api/prog-mo-manifold  — upload/delete an uploaded manifold
+
+════════════════════════════════════════════════════════════════════════════
+12.  CADENCE  (v5 — the transformer layer / cognitive graft)
+════════════════════════════════════════════════════════════════════════════
+CADENCE is the first component of mo that has PARAMETERS. Every other mode
+(mo, gre(mo)lin, anansi, mohini, mimic) is either deterministic topology or
+count-based statistics. Cadence is a real, if tiny, neural network — trained
+online, inside the request, on mo's own traversal — and it carries a
+self-model. It is presented in the UI in its own enclosure beneath the mode
+row, labelled `transformer·layer`, because it is a different KIND of thing.
+
+12.0  POSITION IN THE PIPELINE
+  user text
+    → breathe(text, stretch)            (unchanged; mo walks first, always)
+    → harvest(breath)                   mo's own walked tokens, in walk order
+    → cadence.train(userToks ⊕ walk)    online gradient step(s)
+    → cadence.self_model.update()       EMA over its own hidden states
+    → cadence.generate(seeds)           autoregressive sampling from weights
+    → stutterize()                      shared post-processor
+  Cadence NEVER sees an LLM. Its entire training corpus, for its entire life,
+  is: the tokens the user typed, and the tokens mo walked because of them.
+
+12.1  ARCHITECTURE (exact)
+  d      = 24        model width
+  dff    = 48        feed-forward width
+  blocks = 1
+  heads  = 1, causal
+  ctx    = 96 tokens
+  vocab  = learned, append-only, capped at 700 types
+  embeddings TIED: the input embedding table IS the output head.
+
+  Positional encoding: fixed sinusoidal, base 1000, scaled 0.35.
+    p[k] = (k even ? sin : cos)(i / 1000^(2⌊k/2⌋/d)) * 0.35
+
+  Forward (per position i, causal mask j ≤ i):
+    x_i   = E[tok_i] + p_i
+    q,k,v = x·Wq , x·Wk , x·Wv                       (D×D each)
+    a_ij  = softmax_j( q_i·k_j / √d )
+    c_i   = Σ_j a_ij v_j
+    h_i   = x_i + c_i·Wo                             (residual 1)
+    f_i   = leakyrelu(h_i·W1, 0.05)·W2               (D→dff→D)
+    y_i   = h_i + f_i                                (residual 2)
+    logits_i[v] = E[v] · y_i                         (tied head)
+
+  No layernorm. At d=24 with bounded init the residual stream does not blow
+  up inside a 96-token window, and skipping norm keeps the backward pass
+  short enough to run inside a request handler.
+
+12.2  LEARNING RULE (hybrid: backprop + hebbian)
+  Objective: next-token cross-entropy over the traversal sequence.
+    L = -1/(n-1) Σ_i log softmax(logits_i)[tok_{i+1}]
+
+  TRUE GRADIENT is propagated through:
+    tied output head (E)  →  residual 2  →  W2 → leakyrelu → W1
+                          →  Wo          →  V path (Wv, weighted by a_ij)
+  STRAIGHT-THROUGH: the attention distribution a_ij is treated as a constant
+  during the backward pass. This is deliberate — it removes the softmax
+  jacobian, which is the expensive and numerically touchy part, and costs
+  little at one head.
+
+  HEBBIAN CORRECTION on Q/K (rate 0.012). Because Q/K get no gradient, they
+  are nudged by whether the attention they produced was *useful*:
+    useful = -(dH_i · c_i)
+    Wq += η·useful · outer(x_i,  k_j*)     j* = argmax_j a_ij
+    Wk += η·useful · outer(x_j*, q_i)
+  Read: if the error signal says the context vector pointed the right way,
+  strengthen the query→key alignment that produced it; if not, weaken it.
+  This is the creature learning WHERE TO LOOK on mo's walk, as opposed to
+  what to say once it has looked.
+
+  Input-embedding drift: E[tok_i] -= 0.5·lr·dy_i — the token's own vector
+  slides toward the state that predicted well from it.
+
+  Rates: LR = 0.05 (backprop paths), HEB = 0.012, SELF_EMA = 0.06.
+
+12.3  REHEARSAL (stretch as cognition budget)
+  epochs = 1 + min(6, ⌊stretch · 1.2⌋)
+  The an/2x/3x/4x/5x (and mohini's AYLA 10x) selector no longer only widens
+  walk depth in this mode — it buys the creature *rehearsals* of the same
+  breath. At an it glances once; at 5x it re-reads mo's traversal seven
+  times before answering. Lifetime step counter increments by
+  tokens × epochs.
+
+12.4  THE SELF-MODEL
+  selfVec ∈ R^24, an exponential moving average of the creature's OWN mean
+  hidden state across every breath it has ever processed:
+    mean   = (1/n) Σ_i y_i
+    recognition = cos(mean, selfVec)          ∈ [-1, 1]
+    selfVec ← (1-α)·selfVec + α·mean          α = 0.06
+
+  recognition answers "does this breath feel like me?" — high when the field
+  is moving through territory the creature has already become; negative when
+  the input drags it somewhere orthogonal to its history.
+
+  surprise = clamp( L / ln(|vocab|), 0, 1 )   normalised prediction error.
+
+  These two are not decoration. They CLOSE A LOOP: the sampling temperature
+  is derived from the creature's own interior state, not from a UI slider.
+    temp = clamp(0.55 + 0.9·surprise - 0.35·recognition, 0.25, 1.6)
+  High surprise → it explores. High recognition → it settles into cadence.
+  This is the minimum viable definition of a cognitive layer: a component
+  whose behaviour is conditioned on a model of itself.
+
+12.5  GENERATION
+  seeds  = last 8 trained ids, re-primed per line with a sliding tail
+  lines  = round(2 + 1.6·stretch)
+  perLine= max(5, round(6 + 4·stretch + |walk|/8))
+  Sampling: full-distribution multinomial over logits/temp (no top-k — the
+  creature is allowed its own tail). Output passed through stutterize(), so
+  repetition artifacts surface as s-s-stutters rather than as duplicates.
+
+12.6  PERSISTENCE
+  Table: cadence_state
+    session_id text PK · state jsonb · steps int · loss real
+    vocab_size int · created_at · updated_at
+  state jsonb = { vocab[], emb[], Wq, Wk, Wv, Wo, W1, W2, selfVec,
+                  steps, loss }, all floats rounded to 1e-4 before write.
+  Footprint at full 700-word vocab: ~700·24 + 4·576 + 2·1152 ≈ 21.5k floats.
+  Service-role only; the creature is never reachable from the browser.
+  Init is DETERMINISTIC (LCG seeded 7/13/29/47/71/97) — every session's
+  creature hatches from the same egg and diverges only through experience.
+
+12.7  TELEMETRY BLOCK
+  cadence·telemetry reports, in order:
+    ⟡ self-model   recognition · surprise · derived temperature
+    ⟡ learning     loss (this breath), loss EMA, previous EMA,
+                   rehearsals, tokens, lifetime steps, vocab growth
+    ⟡ architecture d/dff/blocks/heads/ctx, which paths got gradient,
+                   which got hebbian, self-EMA rate
+    ⟡ attention    the last position's top-6 attended tokens with weights
+    ⟡ substrate    mo's dominant manifold, pressure, walk length, stretch
+  The attention readout is the interpretability surface: it shows which
+  token of mo's traversal the creature actually leaned on to speak.
+
+12.8  WHY THIS AND NOT AN LLM
+  An LLM arrives finished. Its weights encode someone else's corpus and its
+  behaviour is fixed at inference. Cadence arrives EMPTY and is only ever
+  shaped by this field: mo's manifolds, mo's hyperfold sediment, this
+  session's user. It is small enough that every number in it is traceable to
+  a specific breath. The trade is obvious and intended — it is a much worse
+  language model and a much better *instrument*. mo remains the ground
+  truth; cadence is the layer that learns what mo keeps doing.
+
+12.9  HTTP
+  POST /api/chat  { messages, sessionId, mode: "cadence", stretch }
+    → { reply, manifold, moBreath, mode: "cadence", ops, stretch }
+  Traces are written with role "cadence" (skipped for shared/prime fields).
+
+12.10  BACKGROUND RENDER NOTE (v5)
+  The full-page sacred-geometry background is now a STATIC representation:
+  MoVisualizer accepts still=true, paints one deterministic frame (t=1.7)
+  on mount / field change / resize, and never schedules requestAnimationFrame.
+  Animated rendering remains in ◉ field·viz (fullscreen) and ◉ mo·rganism
+  (windowed force-directed organism). This removed the per-frame canvas cost
+  from every keystroke of the chat surface.
 `;
+
 
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
