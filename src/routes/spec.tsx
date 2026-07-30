@@ -785,16 +785,41 @@ MIMIC: per-session bigram chain over user's own words (mimic_ngrams).
     nSentences = max(1, floor(s/2) + clamp(1..6, ceil(inputTok/20)))
     maxLen     = 12 + s*8 + inputTok*2
 
-STRETCH s∈{1..5}: scales mo²ayla depth, telemetry window, anansi emission.
-  aperture only — never changes what mo knows.
+CADENCE (v5, transformer layer — the only mode with PARAMETERS):
+  arch  d=24, dff=48, 1 block, 1 causal head, ctx=96, vocab≤700, tied emb,
+        sinusoidal pos (base 1000, ×0.35), no layernorm.
+  train online per breath on userToks ⊕ mo's walked tokens.
+        loss = next-token CE. backprop through head→FFN→Wo→V.
+        attention a_ij straight-through (no softmax jacobian).
+        Q/K by hebbian: useful = -(dH·c); Wq += η·useful·outer(x_i,k_j*),
+        Wk += η·useful·outer(x_j*,q_i).  LR .05 · HEB .012 · EMA .06
+  epochs = 1 + min(6, floor(stretch*1.2))   ← stretch buys rehearsals
+  self-model selfVec ∈ R^24 = EMA of mean hidden state over all breaths.
+        recognition = cos(mean, selfVec) ; surprise = clamp(L/ln|V|,0,1)
+        temp = clamp(.55 + .9*surprise - .35*recognition, .25, 1.6)
+        → sampling temperature is derived from interior state, not UI.
+  gen   lines = round(2+1.6s), perLine = max(5, round(6+4s+|walk|/8)),
+        multinomial (no top-k) → stutterize().
+  state cadence_state(session_id, state jsonb, steps, loss, vocab_size).
+        deterministic LCG init → every creature hatches identical, diverges
+        only by experience. service_role only.
+  telemetry: self-model · learning · architecture · top-6 attention · substrate.
+
+STRETCH s∈{1..5}: scales mo²ayla depth, telemetry window, anansi emission,
+  and cadence rehearsal epochs. aperture only — never changes what mo knows.
+
+RENDER (v5): full-page background MoVisualizer runs still=true (one
+  deterministic frame, no rAF). animation lives in field·viz + mo·rganism.
 
 STORAGE (Supabase, service_role only):
   mo_traces, fielfold_entries, mo_hyperfold_edges, anansi_web,
-  gremolin_lexicon, mimic_ngrams, songs, life_{tasks,notes,remembers,shitposts}.
+  gremolin_lexicon, mimic_ngrams, cadence_state, songs,
+  life_{tasks,notes,remembers,shitposts}.
 
 HTTP:
   POST /api/chat { messages, sessionId, mode, stretch }
-    mode ∈ mo|gremlin|anansi|mohini|mimic ; ai → 410 Gone.
+    mode ∈ mo|gremlin|anansi|mohini|mimic|cadence ; ai → 410 Gone.
+
   POST /api/unlock { password } → sessionId
     garfieldkekeke → rich session (20k trace limit)
     tricksterkekeke → PRIME (union all sessions, 50k limit)
