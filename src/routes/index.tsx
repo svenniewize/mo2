@@ -287,7 +287,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : mode === "cadence" ? "feed the cadence creature — it trains on mo's walk, updates its weights, and answers from its own self-model…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
