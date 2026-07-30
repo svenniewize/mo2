@@ -44,6 +44,36 @@ export type Database = {
         }
         Relationships: []
       }
+      cadence_state: {
+        Row: {
+          created_at: string
+          loss: number
+          session_id: string
+          state: Json
+          steps: number
+          updated_at: string
+          vocab_size: number
+        }
+        Insert: {
+          created_at?: string
+          loss?: number
+          session_id: string
+          state?: Json
+          steps?: number
+          updated_at?: string
+          vocab_size?: number
+        }
+        Update: {
+          created_at?: string
+          loss?: number
+          session_id?: string
+          state?: Json
+          steps?: number
+          updated_at?: string
+          vocab_size?: number
+        }
+        Relationships: []
+      }
       fielfold_entries: {
         Row: {
           content: string
