@@ -15,7 +15,7 @@ export const Route = createFileRoute("/spec")({
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v4 · mohini + mimic + mo-rganism + glyphs)
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v5 · cadence transformer layer + static render)
 # addressed to: any language model, agent, or engineer asked to understand
 #               or reconstruct this system.
 # posture:      topology > prose. every section is necessary. every glyph
@@ -737,7 +737,7 @@ row, labelled "transformer·layer", because it is a different KIND of thing.
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
-const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v4)
+const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v5)
 posture: topology > prose. no LLM in loop. reimplement, do not mimic.
 
 CORPORA (20 manifolds, ~1MB total, loaded via Vite ?raw):
@@ -860,14 +860,14 @@ function SpecPage() {
             <div>
               <h1 className="font-mono text-lg ridge">mo :: /spec</h1>
               <p className="font-mono text-[11px] text-muted-foreground">
-                full replicator specification · v4 · mohini + mimic + mo·rganism + glyphs · unlinked · noindex
+                full replicator specification · v5 · cadence transformer layer · unlinked · noindex
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => copy(SPEC)}
                 className="font-mono text-[11px] px-3 py-1.5 border border-border rounded hover:bg-muted"
-                title="Copy the full v4 spec"
+                title="Copy the full v5 spec"
               >
                 ⧉ copy full ({SPEC.length.toLocaleString()} chars)
               </button>
