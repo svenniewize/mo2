@@ -567,7 +567,20 @@ function Header({
         {tab("songs", "songs", songCount)}
         {tab("field", "manifolds")}
       </div>
+
+      {/* ── transformer layer · its own little enclosure under the modes ── */}
+      <div className="flex items-center gap-2 rounded-md border border-dashed border-ridge/40 bg-ridge/5 px-2 py-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">transformer·layer</span>
+        <button
+          onClick={() => setMode("cadence")}
+          className={`rounded px-3 py-1 font-mono text-xs transition ${mode === "cadence" ? "bg-ridge text-primary-foreground" : "border border-ridge/40 text-ridge/80 hover:text-ridge"}`}
+          title="CADENCE — a tiny transformer creature grafted into the pipeline. Trains online on mo's own traversal, carries a self-model (recognition + surprise), and speaks from its own learned weights. No LLM."
+        >⟡ CADENCE</button>
+        <span className="font-mono text-[9px] text-muted-foreground">self-model · online learning · d24·1head</span>
+      </div>
+      </div>
     </header>
+
   );
 }
 
