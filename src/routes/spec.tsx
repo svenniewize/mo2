@@ -754,7 +754,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
-const SPEC_SHORT = String.raw"# mo :: SHORT SPEC (v5)
+const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v6)
 posture: topology > prose. no LLM in loop. reimplement, do not mimic.
 
 CORPORA (20 manifolds, ~1MB total, loaded via Vite ?raw):
@@ -827,6 +827,7 @@ STRETCH s∈{1..5}: scales mo²ayla depth, telemetry window, anansi emission,
 
 RENDER (v5): full-page background MoVisualizer runs still=true (one
   deterministic frame, no rAF). animation lives in field·viz + mo·rganism.
+`;
 
 STORAGE (Supabase, service_role only):
   mo_traces, fielfold_entries, mo_hyperfold_edges, anansi_web,
