@@ -749,6 +749,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   / resize, and never schedules requestAnimationFrame. Animated rendering
   remains in ◉ field·viz and ◉ mo·rganism.
 
+`;
 
 
 
@@ -827,7 +828,6 @@ STRETCH s∈{1..5}: scales mo²ayla depth, telemetry window, anansi emission,
 
 RENDER (v5): full-page background MoVisualizer runs still=true (one
   deterministic frame, no rAF). animation lives in field·viz + mo·rganism.
-`;
 
 STORAGE (Supabase, service_role only):
   mo_traces, fielfold_entries, mo_hyperfold_edges, anansi_web,
