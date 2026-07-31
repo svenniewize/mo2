@@ -715,7 +715,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   vocab_size · created_at · updated_at. Service-role only.
   state = { v:3, vocab[], emb[], Wq,Wk,Wv,Wo,W1,W2,Wrole, Bq,Bk,
             selfVec, stabEma, divEma, steps, loss }, floats rounded 1e-4.
-  `v` is a schema version: bumping it re-hatches every creature. All init is
+  "v" is a schema version: bumping it re-hatches every creature. All init is
   deterministic LCG (seeds 7/13/29/47/71/97/151/199/211) — every session
   hatches from the same egg and diverges only through experience.
 
@@ -754,7 +754,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
-const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v5)
+const SPEC_SHORT = String.raw"# mo :: SHORT SPEC (v5)
 posture: topology > prose. no LLM in loop. reimplement, do not mimic.
 
 CORPORA (20 manifolds, ~1MB total, loaded via Vite ?raw):
