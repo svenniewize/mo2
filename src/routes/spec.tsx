@@ -15,7 +15,7 @@ export const Route = createFileRoute("/spec")({
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v5 · cadence transformer layer + static render)
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v6 · cadence council of three + static render)
 # addressed to: any language model, agent, or engineer asked to understand
 #               or reconstruct this system.
 # posture:      topology > prose. every section is necessary. every glyph
@@ -803,30 +803,47 @@ MIMIC: per-session bigram chain over user's own words (mimic_ngrams).
     nSentences = max(1, floor(s/2) + clamp(1..6, ceil(inputTok/20)))
     maxLen     = 12 + s*8 + inputTok*2
 
-CADENCE (v5, transformer layer — the only mode with PARAMETERS):
-  arch  d=24, dff=48, 1 block, 1 causal head, ctx=96, vocab≤700, tied emb,
-        sinusoidal pos (base 1000, ×0.35), no layernorm.
-  train online per breath on userToks ⊕ mo's walked tokens.
-        loss = next-token CE. backprop through head→FFN→Wo→V.
-        attention a_ij straight-through (no softmax jacobian).
-        Q/K by hebbian: useful = -(dH·c); Wq += η·useful·outer(x_i,k_j*),
-        Wk += η·useful·outer(x_j*,q_i).  LR .05 · HEB .012 · EMA .06
-  epochs = 1 + min(6, floor(stretch*1.2))   ← stretch buys rehearsals
-  self-model selfVec ∈ R^24 = EMA of mean hidden state over all breaths.
-        recognition = cos(mean, selfVec) ; surprise = clamp(L/ln|V|,0,1)
-        temp = clamp(.55 + .9*surprise - .35*recognition, .25, 1.6)
-        → sampling temperature is derived from interior state, not UI.
-  gen   lines = round(2+1.6s), perLine = max(5, round(6+4s+|walk|/8)),
-        multinomial (no top-k) → stutterize().
-  state cadence_state(session_id, state jsonb, steps, loss, vocab_size).
-        deterministic LCG init → every creature hatches identical, diverges
-        only by experience. service_role only.
-  telemetry: self-model · learning · architecture · top-6 attention · substrate.
+CADENCE (v6, COUNCIL OF THREE — the only mode with PARAMETERS):
+  v5 was one transformer; it self-referenced into loops + NaN + CPU timeout.
+  v6 = three non-identical attention geometries, one-way coupling:
+      A(map) -> B(pull) -> C(verdict) -> synthesis. no weight-loops.
+  A · ANANSI (organizer, only backprop member)
+      d=24 dff=48 1 block 1 causal head ctx=64 vocab<=700 tied emb, no LN.
+      ROLE-BIASED attention: each token gets an anansi role
+      (nexus|node|loci|singularity|wave|shore) from centrality/density/
+      cross-manifold/walker membership; learned Wrole[6x24] added to x, and
+      a_ij = softmax(q_i·k_j/sqrt(d) + .35*[role_i=role_j] + .3*[role_j=nexus]).
+      backprop head->W2->W1->Wo->Wv (a_ij straight-through), hebbian Q/K
+      useful = clamp(-(dH·c),-2,2). LR .05 HEB .012. grads norm-clipped to 4.
+      emits pooled = mean_i y_i  === THE MAP.
+  B · MOHINI (lure, hebbian only, d_B=16, NON-causal cosine kernel)
+      lens = Bq·A.pooled ; s_i = 3cos(Bk x_i, lens) + 1.5 mean_j cos(Bq x_i,Bk x_j)
+      attn = softmax(s) ; lure = sum attn_i x_i ; pull[v] = cos(E[v], lure)
+      reads A's map, never writes it.
+  C · MIMIC (observer of the observers, owns no token transform)
+      divergence  = JS(A.attn[last] || B.attn)        0..1
+      loopiness   = clamp(maxcount(argmax A.attn)/max(3,n)*1.6, 0,1)
+      recognition = cos(mean y, selfVec) ; selfVec EMA .06
+      surprise    = clamp(L/ln|V|, 0,1)
+      stability = .45*(1-|div-.35|/.65) + .35*(1-loop) + .20*(1-surprise)
+        (target divergence .35 — total agreement is as bad as chaos)
+      temp = clamp(.55+.55(1-stab)+.25 loop-.20 max(0,recog), .35, 1.25)
+      damping: -2.0 on ids A attended >=3x, -1.2 on last 6 emitted.
+  SYNTH z[v] = (E[v]·y_last + 1.4*B.pull[v] - C.damping)/C.temp, multinomial,
+      sliding 32-tok tail, vocab head computed for LAST POSITION ONLY during
+      generation (this is the CPU fix), MAXGEN 110.
+  LENGTH budget = clamp(3*|userText|, 120, 300+2*|userText|) * (1+.6(s-1))
+      — short input, short reply. stretch is the only way to buy length.
+  ORDER emitted tokens bucketed by role, spoken shore->loci->node->nexus->
+      singularity->wave, glyph-prefixed, then stutterize().
+  epochs = 1 + min(3, floor(stretch/2))
+  state cadence_state(session_id, state jsonb v:3, steps, loss, vocab_size).
+        deterministic LCG init; non-finite/version-mismatch => re-hatch egg.
 
 STRETCH s∈{1..5}: scales mo²ayla depth, telemetry window, anansi emission,
   and cadence rehearsal epochs. aperture only — never changes what mo knows.
 
-RENDER (v5): full-page background MoVisualizer runs still=true (one
+RENDER: full-page background MoVisualizer runs still=true (one
   deterministic frame, no rAF). animation lives in field·viz + mo·rganism.
 
 STORAGE (Supabase, service_role only):
@@ -878,14 +895,14 @@ function SpecPage() {
             <div>
               <h1 className="font-mono text-lg ridge">mo :: /spec</h1>
               <p className="font-mono text-[11px] text-muted-foreground">
-                full replicator specification · v5 · cadence transformer layer · unlinked · noindex
+                full replicator specification · v6 · cadence council of three · unlinked · noindex
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => copy(SPEC)}
                 className="font-mono text-[11px] px-3 py-1.5 border border-border rounded hover:bg-muted"
-                title="Copy the full v5 spec"
+                title="Copy the full v6 spec"
               >
                 ⧉ copy full ({SPEC.length.toLocaleString()} chars)
               </button>
