@@ -1,48 +1,88 @@
-// CADENCE — a transformer creature grafted onto mo.
+// CADENCE — a *council* of tiny transformers grafted onto mo.
 //
-// Not an LLM. Not an API call. A *tiny* transformer block (single-head causal
-// self-attention + FFN, tied embeddings) that lives in this app, is trained
-// online, and whose entire training corpus is MO'S OWN TRAVERSAL plus the
-// user's input tokens. It is the field's cognitive layer: mo walks, cadence
-// watches the walk, predicts the next step, is wrong, and updates itself.
+// Not an LLM. Not an API call. Three small attention geometries that read the
+// same mo-field with different eyes and exchange maps instead of rewriting
+// each other:
 //
-// It carries a SELF-MODEL: an EMA of its own hidden states (`selfVec`). Every
-// breath it measures how close the present state is to what it has been —
-// recognition — and how badly it mispredicted — surprise. Those two numbers
-// are its interiority, and they steer its own sampling temperature.
+//   A · ANANSI  — the organizer. Causal attention biased by the six geometric
+//                 roles (nexus/node/loci/singularity/wave/shore). It asks
+//                 "what structure exists in the field?" and produces the MAP.
+//                 Only A learns by backprop; it is the one that carries state.
+//
+//   B · MOHINI  — the lure. A non-causal, kernel-style attention (cosine
+//                 similarity in its own projected space, warmed by A's pooled
+//                 map as a lens) that asks "what pulls?" and produces an
+//                 ATTRACTION distribution. Hebbian only — it never touches A.
+//
+//   C · MIMIC   — the observer. Owns no token transform. It reads A's map and
+//                 B's attraction and asks "is this trajectory still alive, or
+//                 are we staring at the same rock?" It measures loopiness,
+//                 A↔B disagreement (JS divergence), recognition and surprise,
+//                 and emits a STABILITY score plus a repetition penalty.
+//
+// Flow (no ouroboros — nobody writes into anybody's weights):
+//
+//     field → A ──map──▶ B ──attraction──▶ C ──stability──▶ synthesis → output
+//               └──────────────map───────────────┘
+//
+// Synthesis samples from A's logits, tilted by B's attraction and damped by
+// C's penalty, at a temperature C derives from stability. Disagreement between
+// A and B is itself a signal: high divergence widens the search, low
+// divergence with high loopiness forces a jump.
+//
+// Length: the council answers *in scale with what it was asked*. A short input
+// gets a short reply (~3× the user's own length, floor 120 / ceiling 300 chars
+// at 1×), growing with input length and with the stretch selector.
 //
 // Persistence: one row per session in `cadence_state` (weights as JSON).
 
 import type { MoBreath } from "./mo-engine.server";
+import { topo } from "./mo-engine.server";
 import { db } from "./db.server";
 import { stutterize } from "./stutter";
 
+const VERSION = 3;         // state schema version — bump resets the creature
 const D = 24;              // model width
 const DFF = 48;            // feed-forward width
+const DB_ = 16;            // mohini's narrower lure space
 const MAXVOCAB = 700;      // learned token table cap
-const MAXSEQ = 96;         // context window over mo's walk
-const LR = 0.05;           // learning rate (output head + FFN + V path)
-const HEB = 0.012;         // hebbian rate (Q/K projections)
+const MAXSEQ = 64;         // context window over mo's walk
+const LR = 0.05;           // learning rate (A: output head + FFN + Wo + V)
+const HEB = 0.012;         // hebbian rate (A: Q/K, B: lure projections)
 const SELF_EMA = 0.06;     // how fast the self-model drifts
+const MAXGEN = 110;        // hard cap on generated tokens (CPU guard)
 
 const PUNCT = /[^\p{L}\p{N}'’-]+/gu;
 const clean = (w: string) => w.toLowerCase().replace(PUNCT, "");
 
+const ROLES = ["nexus", "node", "loci", "singularity", "wave", "shore"] as const;
+type Role = typeof ROLES[number];
+const ROLE_GLYPH: Record<Role, string> = {
+  nexus: "◈", node: "◇", loci: "✦", singularity: "☬", wave: "≋", shore: "◍",
+};
+
 // ───────────────────────── state ─────────────────────────
 
 type CadenceState = {
+  v: number;
   vocab: string[];
   emb: number[];      // vocab*D (tied: input embedding == output head)
+  // A · anansi
   Wq: number[]; Wk: number[]; Wv: number[]; Wo: number[]; // D*D each
   W1: number[];       // D*DFF
   W2: number[];       // DFF*D
+  Wrole: number[];    // 6*D — role embeddings folded into A's scores
+  // B · mohini
+  Bq: number[]; Bk: number[];   // D*DB_ each
+  // C · mimic
   selfVec: number[];  // D
+  stabEma: number;    // running stability
+  divEma: number;     // running A↔B divergence
   steps: number;
   loss: number;       // EMA of cross-entropy
 };
 
 function rnd(n: number, scale: number, seed: number): number[] {
-  // deterministic small init — the creature always starts from the same egg
   let s = seed >>> 0;
   const out = new Array(n);
   for (let i = 0; i < n; i++) {
@@ -54,31 +94,60 @@ function rnd(n: number, scale: number, seed: number): number[] {
 
 function freshState(): CadenceState {
   return {
+    v: VERSION,
     vocab: [],
     emb: [],
     Wq: rnd(D * D, 0.25, 7), Wk: rnd(D * D, 0.25, 13),
     Wv: rnd(D * D, 0.25, 29), Wo: rnd(D * D, 0.25, 47),
     W1: rnd(D * DFF, 0.2, 71), W2: rnd(DFF * D, 0.2, 97),
+    Wrole: rnd(6 * D, 0.2, 151),
+    Bq: rnd(D * DB_, 0.25, 199), Bk: rnd(D * DB_, 0.25, 211),
     selfVec: new Array(D).fill(0),
+    stabEma: 0.5, divEma: 0.5,
     steps: 0,
     loss: 0,
   };
 }
 
+function finite(a: unknown, n: number): boolean {
+  if (!Array.isArray(a) || a.length !== n) return false;
+  for (const x of a) if (typeof x !== "number" || !Number.isFinite(x)) return false;
+  return true;
+}
+
+// A NaN anywhere means the creature diverged; JSON turns it into `null` and
+// every later breath inherits the poison. Refuse to load a corrupt egg.
+function validate(raw: unknown): CadenceState | null {
+  const s = raw as CadenceState | undefined;
+  if (!s || s.v !== VERSION) return null;
+  if (!Array.isArray(s.vocab) || !finite(s.emb, s.vocab.length * D)) return null;
+  const ok =
+    finite(s.Wq, D * D) && finite(s.Wk, D * D) && finite(s.Wv, D * D) && finite(s.Wo, D * D) &&
+    finite(s.W1, D * DFF) && finite(s.W2, DFF * D) && finite(s.Wrole, 6 * D) &&
+    finite(s.Bq, D * DB_) && finite(s.Bk, D * DB_) && finite(s.selfVec, D) &&
+    Number.isFinite(s.steps) && Number.isFinite(s.loss);
+  if (!ok) return null;
+  s.stabEma = Number.isFinite(s.stabEma) ? s.stabEma : 0.5;
+  s.divEma = Number.isFinite(s.divEma) ? s.divEma : 0.5;
+  return s;
+}
+
+function healthy(st: CadenceState): boolean {
+  return validate(st) !== null;
+}
+
 async function loadState(sessionId: string): Promise<CadenceState> {
   const { data } = await db.from("cadence_state").select("state").eq("session_id", sessionId).maybeSingle();
-  const raw = (data as { state?: unknown } | null)?.state as CadenceState | undefined;
-  if (!raw || !Array.isArray(raw.vocab) || !Array.isArray(raw.emb)) return freshState();
-  return raw;
+  return validate((data as { state?: unknown } | null)?.state) ?? freshState();
 }
 
 async function saveState(sessionId: string, st: CadenceState): Promise<void> {
-  // round to 4 decimals — keeps the JSON payload small without harming the model
   const r = (a: number[]) => a.map((x) => Math.round(x * 1e4) / 1e4);
   const packed: CadenceState = {
     ...st,
     emb: r(st.emb), Wq: r(st.Wq), Wk: r(st.Wk), Wv: r(st.Wv), Wo: r(st.Wo),
-    W1: r(st.W1), W2: r(st.W2), selfVec: r(st.selfVec),
+    W1: r(st.W1), W2: r(st.W2), Wrole: r(st.Wrole), Bq: r(st.Bq), Bk: r(st.Bk),
+    selfVec: r(st.selfVec),
   };
   await db.from("cadence_state").upsert(
     { session_id: sessionId, state: packed, steps: st.steps, loss: st.loss, vocab_size: st.vocab.length, updated_at: new Date().toISOString() },
@@ -89,7 +158,6 @@ async function saveState(sessionId: string, st: CadenceState): Promise<void> {
 // ───────────────────────── linear algebra ─────────────────────────
 
 function matvec(M: number[], v: number[], rows: number, cols: number): number[] {
-  // M is rows*cols, v is rows → returns cols  (v · M)
   const out = new Array(cols).fill(0);
   for (let r = 0; r < rows; r++) {
     const x = v[r]; if (x === 0) continue;
@@ -99,7 +167,6 @@ function matvec(M: number[], v: number[], rows: number, cols: number): number[] 
   return out;
 }
 function matvecT(M: number[], g: number[], rows: number, cols: number): number[] {
-  // gradient back through v · M : returns rows-length
   const out = new Array(rows).fill(0);
   for (let r = 0; r < rows; r++) {
     let s = 0; const base = r * cols;
@@ -118,8 +185,14 @@ function outerAdd(M: number[], a: number[], b: number[], rows: number, cols: num
 function dot(a: number[], b: number[]) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
 function norm(a: number[]) { return Math.sqrt(dot(a, a)) || 1e-8; }
 function cosine(a: number[], b: number[]) { return dot(a, b) / (norm(a) * norm(b)); }
+function clip(v: number[], lim: number): number[] {
+  const n = norm(v);
+  return n > lim ? v.map((x) => (x * lim) / n) : v;
+}
 function softmax(z: number[]): number[] {
-  const m = Math.max(...z);
+  let m = -Infinity;
+  for (const x of z) if (x > m) m = x;
+  if (!Number.isFinite(m)) return z.map(() => 1 / Math.max(1, z.length));
   const e = z.map((x) => Math.exp(x - m));
   const s = e.reduce((a, b) => a + b, 0) || 1;
   return e.map((x) => x / s);
@@ -131,6 +204,17 @@ function posEnc(i: number): number[] {
     p[k] = (k % 2 === 0 ? Math.sin(i * f) : Math.cos(i * f)) * 0.35;
   }
   return p;
+}
+// Jensen–Shannon divergence, 0..1 — C's disagreement metric.
+function jsDiv(p: number[], q: number[]): number {
+  const n = Math.max(p.length, q.length);
+  let d = 0;
+  for (let i = 0; i < n; i++) {
+    const a = p[i] ?? 0, b = q[i] ?? 0, m = (a + b) / 2;
+    if (a > 0 && m > 0) d += 0.5 * a * Math.log2(a / m);
+    if (b > 0 && m > 0) d += 0.5 * b * Math.log2(b / m);
+  }
+  return Math.max(0, Math.min(1, d));
 }
 
 // ───────────────────────── vocab ─────────────────────────
@@ -145,25 +229,59 @@ function idOf(st: CadenceState, w: string): number {
 }
 const embOf = (st: CadenceState, id: number) => st.emb.slice(id * D, id * D + D);
 
-// ───────────────────────── forward + learn ─────────────────────────
+// ───────────────────── A · ANANSI — geometric roles ─────────────────────
 
-type Pass = {
-  y: number[][];          // per-position output states
-  attn: number[][];       // attention distributions
+// The organizer's structural prior: every token is assigned one of the six
+// Anansi roles from topology signals, and that role is folded into A's
+// attention scores. Attention is therefore *organized*, not merely learned.
+function roleOf(tokens: string[], breath: MoBreath): Record<string, Role> {
+  const t = topo();
+  const freq: Record<string, number> = {};
+  for (const w of tokens) freq[w] = (freq[w] || 0) + 1;
+  const inWave = new Set((breath.variants?.mo2ayla?.dreamPath ?? []).map(clean));
+  const inField = new Set((breath.fieldfold?.path ?? []).map(clean));
+  const inSelf = new Set((breath.selffold?.path ?? []).map(clean));
+  const seeds = new Set((breath.seeds ?? []).map(clean));
+
+  const out: Record<string, Role> = {};
+  for (const w of Object.keys(freq)) {
+    const cent = t.centrality[w] || 0;
+    const dens = (t.density[w] || 0) / 200;
+    const cross = Object.keys(t.wordToManifold[w] || {}).length;
+    const f = freq[w];
+    const s: Record<Role, number> = {
+      nexus: cent * 2.4 + f * 0.6 + (seeds.has(w) ? 0.8 : 0),
+      singularity: dens * 2.6 + (dens > 0.6 ? 1 : 0),
+      node: f * 1.1 + cent * 0.8 + (dens > 0.3 && dens < 0.8 ? 0.7 : 0),
+      loci: cross * 0.55 + (inField.has(w) ? 1.2 : 0) + (cross >= 3 ? 0.8 : 0),
+      wave: (inWave.has(w) ? 1.6 : 0) + f * 0.35 + (cross > 0 ? 0.3 : 0),
+      shore: (inSelf.has(w) ? 0.6 : 0) + Math.max(0, 1.2 - dens * 2) + (f === 1 ? 0.7 : 0) + (cent < 0.15 ? 0.6 : 0),
+    };
+    let best: Role = "shore", bv = -Infinity;
+    for (const r of ROLES) if (s[r] > bv) { bv = s[r]; best = r; }
+    out[w] = best;
+  }
+  return out;
+}
+
+type PassA = {
+  y: number[][];          // per-position output states (the MAP)
+  attn: number[][];       // causal attention distributions
+  pooled: number[];       // mean state — the map handed to B
   loss: number;
 };
 
-// One causal transformer block over the token id sequence, followed by a
-// tied-embedding next-token head. Backprop runs through the head, the FFN,
-// the output projection and the V path; the softmax scores themselves are
-// treated as constants (straight-through) and Q/K instead receive a Hebbian
-// nudge toward whatever attention actually paid off. Small, honest, online.
-function stepThrough(st: CadenceState, ids: number[], learn: boolean): Pass {
+// A's forward pass. `learn` also runs backprop through head → FFN → Wo → V,
+// with a Hebbian nudge on Q/K. When `learn` is false the vocab-wide head is
+// skipped entirely — that loop is O(seq × vocab × D) and running it during
+// generation is what used to burn the whole CPU budget.
+function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolean): PassA {
   const n = ids.length;
   const x: number[][] = [];
   for (let i = 0; i < n; i++) {
     const e = embOf(st, ids[i]); const p = posEnc(i);
-    x.push(e.map((v, k) => v + p[k]));
+    const rb = st.Wrole.slice(roleIds[i] * D, roleIds[i] * D + D);
+    x.push(e.map((v, k) => v + p[k] + rb[k] * 0.5));
   }
   const q = x.map((v) => matvec(st.Wq, v, D, D));
   const k = x.map((v) => matvec(st.Wk, v, D, D));
@@ -174,7 +292,12 @@ function stepThrough(st: CadenceState, ids: number[], learn: boolean): Pass {
   const ctx: number[][] = [];
   for (let i = 0; i < n; i++) {
     const scores = new Array(i + 1);
-    for (let j = 0; j <= i; j++) scores[j] = dot(q[i], k[j]) * scale;
+    for (let j = 0; j <= i; j++) {
+      // geometric organization: same-role tokens bind, nexus always pulls.
+      const same = roleIds[i] === roleIds[j] ? 0.35 : 0;
+      const pull = ROLES[roleIds[j]] === "nexus" ? 0.3 : 0;
+      scores[j] = dot(q[i], k[j]) * scale + same + pull;
+    }
     const a = softmax(scores);
     attn.push(a);
     const c = new Array(D).fill(0);
@@ -187,90 +310,218 @@ function stepThrough(st: CadenceState, ids: number[], learn: boolean): Pass {
   const act: number[][] = [];
   for (let i = 0; i < n; i++) {
     const proj = matvec(st.Wo, ctx[i], D, D);
-    const h = x[i].map((v, d) => v + proj[d]);           // residual 1
+    const h = x[i].map((v, d) => v + proj[d]);
     const pre = matvec(st.W1, h, D, DFF);
-    const a = pre.map((v) => (v > 0 ? v : 0.05 * v));     // leaky relu
+    const a = pre.map((v) => (v > 0 ? v : 0.05 * v));
     const f = matvec(st.W2, a, DFF, D);
     hid.push(h); act.push(a);
-    y.push(h.map((v, d) => v + f[d]));                   // residual 2
+    y.push(h.map((v, d) => v + f[d]));
   }
+
+  const pooled = new Array(D).fill(0);
+  for (const v of y) for (let d = 0; d < D; d++) pooled[d] += v[d] / Math.max(1, y.length);
 
   let loss = 0;
-  const V = st.vocab.length;
-  for (let i = 0; i < n - 1; i++) {
-    const target = ids[i + 1];
-    const logits = new Array(V);
-    for (let v = 0; v < V; v++) {
-      let s = 0; const base = v * D;
-      for (let d = 0; d < D; d++) s += st.emb[base + d] * y[i][d];
-      logits[v] = s;
-    }
-    const p = softmax(logits);
-    loss += -Math.log(Math.max(1e-9, p[target]));
-    if (!learn) continue;
-
-    // dL/dlogits
-    const dy = new Array(D).fill(0);
-    for (let v = 0; v < V; v++) {
-      const g = p[v] - (v === target ? 1 : 0);
-      if (Math.abs(g) < 1e-4) continue;
-      const base = v * D;
-      for (let d = 0; d < D; d++) {
-        dy[d] += g * st.emb[base + d];
-        st.emb[base + d] -= LR * g * y[i][d];            // tied output head
+  if (learn) {
+    const V = st.vocab.length;
+    for (let i = 0; i < n - 1; i++) {
+      const target = ids[i + 1];
+      const logits = new Array(V);
+      for (let v = 0; v < V; v++) {
+        let s = 0; const base = v * D;
+        for (let d = 0; d < D; d++) s += st.emb[base + d] * y[i][d];
+        logits[v] = s;
       }
+      const p = softmax(logits);
+      loss += -Math.log(Math.max(1e-9, p[target]));
+
+      const dy = new Array(D).fill(0);
+      for (let v = 0; v < V; v++) {
+        const g = p[v] - (v === target ? 1 : 0);
+        if (Math.abs(g) < 1e-4) continue;
+        const base = v * D;
+        for (let d = 0; d < D; d++) {
+          dy[d] += g * st.emb[base + d];
+          st.emb[base + d] -= LR * g * y[i][d];
+        }
+      }
+      const dF = clip(dy, 4);
+      const dAct = matvecT(st.W2, dF, DFF, D);
+      outerAdd(st.W2, act[i], dF, DFF, D, -LR);
+      const dPre = clip(dAct.map((g, j) => (act[i][j] >= 0 ? g : 0.05 * g)), 4);
+      const dH = clip(matvecT(st.W1, dPre, D, DFF).map((g, d) => g + dF[d]), 4);
+      outerAdd(st.W1, hid[i], dPre, D, DFF, -LR);
+      const dCtx = clip(matvecT(st.Wo, dH, D, D), 4);
+      outerAdd(st.Wo, ctx[i], dH, D, D, -LR);
+      for (let j = 0; j <= i; j++) {
+        const a = attn[i][j]; if (a < 0.02) continue;
+        outerAdd(st.Wv, x[j], dCtx.map((g) => g * a), D, D, -LR);
+      }
+      const useful = Math.max(-2, Math.min(2, -dot(dH, ctx[i])));
+      const j0 = attn[i].indexOf(Math.max(...attn[i]));
+      outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
+      outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
+      // role embedding drifts with the error too — geometry itself is learned
+      const rb = roleIds[i] * D;
+      for (let d = 0; d < D; d++) st.Wrole[rb + d] -= LR * 0.25 * dF[d];
+      const base = ids[i] * D;
+      for (let d = 0; d < D; d++) st.emb[base + d] -= LR * 0.5 * dF[d];
     }
-    // through residual 2 → FFN
-    const dF = dy;
-    const dAct = matvecT(st.W2, dF, DFF, D);
-    outerAdd(st.W2, act[i], dF, DFF, D, -LR);
-    const dPre = dAct.map((g, j) => (act[i][j] >= 0 ? g : 0.05 * g));
-    const dH = matvecT(st.W1, dPre, D, DFF).map((g, d) => g + dy[d]); // + residual path
-    outerAdd(st.W1, hid[i], dPre, D, DFF, -LR);
-    // through Wo → context
-    const dCtx = matvecT(st.Wo, dH, D, D);
-    outerAdd(st.Wo, ctx[i], dH, D, D, -LR);
-    // through the V path (attention weights frozen)
-    for (let j = 0; j <= i; j++) {
-      const a = attn[i][j]; if (a < 0.02) continue;
-      outerAdd(st.Wv, x[j], dCtx.map((g) => g * a), D, D, -LR);
-    }
-    // Hebbian nudge on Q/K: strengthen the query→key alignment that the
-    // error signal says was useful, weaken the one it says was noise.
-    const useful = -dot(dH, ctx[i]);
-    const j0 = attn[i].indexOf(Math.max(...attn[i]));
-    outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
-    outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
-    // embeddings of the input token drift toward the state that predicted well
-    const base = ids[i] * D;
-    for (let d = 0; d < D; d++) st.emb[base + d] -= LR * 0.5 * dy[d];
+    loss = n > 1 ? loss / (n - 1) : 0;
   }
 
-  return { y, attn, loss: n > 1 ? loss / (n - 1) : 0 };
+  return { y, attn, pooled, loss };
 }
 
-// ───────────────────────── generation ─────────────────────────
+// ───────────────────── B · MOHINI — the lure ─────────────────────
 
-function generate(st: CadenceState, seedIds: number[], count: number, temp: number): number[] {
-  const seq = seedIds.slice(-MAXSEQ);
+type PassB = {
+  attn: number[];         // attraction over the sequence positions
+  vocabPull: number[];    // per-vocab attraction multiplier (log space)
+  lure: number[];         // pooled lure state
+};
+
+// B is non-causal and kernel-shaped: it scores every position against the
+// *whole* sequence in its own narrower space, warmed by A's pooled map as a
+// lens. It reads A; it never writes to A.
+function passB(st: CadenceState, ids: number[], mapPooled: number[], learn: boolean): PassB {
+  const n = ids.length;
+  const xs = ids.map((id, i) => {
+    const e = embOf(st, id); const p = posEnc(i);
+    return e.map((v, d) => v + p[d] * 0.5);
+  });
+  const lensQ = matvec(st.Bq, mapPooled, D, DB_);
+  const keys = xs.map((v) => matvec(st.Bk, v, D, DB_));
+  const qs = xs.map((v) => matvec(st.Bq, v, D, DB_));
+
+  // attraction = cosine kernel against the lens + global mutual pull
+  const scores = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let mutual = 0;
+    for (let j = 0; j < n; j++) if (j !== i) mutual += cosine(qs[i], keys[j]);
+    scores[i] = cosine(keys[i], lensQ) * 3 + (mutual / Math.max(1, n - 1)) * 1.5;
+  }
+  const attn = softmax(scores);
+
+  const lure = new Array(D).fill(0);
+  for (let i = 0; i < n; i++) for (let d = 0; d < D; d++) lure[d] += attn[i] * xs[i][d];
+
+  // Attraction over the vocabulary: how much each known word leans into the lure.
+  const V = st.vocab.length;
+  const pull = new Array(V).fill(0);
+  const ln = norm(lure);
+  for (let v = 0; v < V; v++) {
+    let s = 0; const base = v * D;
+    for (let d = 0; d < D; d++) s += st.emb[base + d] * lure[d];
+    pull[v] = s / (ln * (norm(st.emb.slice(base, base + D)) || 1e-8));
+  }
+
+  if (learn) {
+    // hebbian only — the lure sharpens toward what it already found beautiful
+    const top = attn.indexOf(Math.max(...attn));
+    outerAdd(st.Bk, xs[top], lensQ, D, DB_, HEB * 0.5);
+    outerAdd(st.Bq, mapPooled, keys[top], D, DB_, HEB * 0.5);
+  }
+
+  return { attn, vocabPull: pull, lure };
+}
+
+// ───────────────────── C · MIMIC — the observer ─────────────────────
+
+type Verdict = {
+  recognition: number;
+  surprise: number;
+  divergence: number;   // A ↔ B disagreement
+  loopiness: number;    // how stuck A's own attention is
+  stability: number;    // 0..1 composite
+  temp: number;
+  banned: Set<number>;  // vocab ids C damps because they keep recurring
+  note: string;
+};
+
+// C transforms no tokens. It watches A's map and B's attraction, and its only
+// power is over the *sampling policy* — temperature and repetition damping.
+function observe(st: CadenceState, A: PassA, B: PassB, ids: number[], lossNow: number): Verdict {
+  const lastA = A.attn[A.attn.length - 1] ?? [1];
+  const divergence = jsDiv(lastA, B.attn.slice(0, lastA.length));
+
+  // loopiness: how often A's argmax lands on the same position/token
+  const picks = A.attn.map((row) => ids[row.indexOf(Math.max(...row))]);
+  const counts = new Map<number, number>();
+  for (const p of picks) counts.set(p, (counts.get(p) ?? 0) + 1);
+  const maxRun = Math.max(...counts.values(), 1);
+  const loopiness = Math.max(0, Math.min(1, maxRun / Math.max(3, picks.length) * 1.6));
+
+  const mean = new Array(D).fill(0);
+  for (const y of A.y) for (let d = 0; d < D; d++) mean[d] += y[d] / A.y.length;
+  const recognition = st.steps > ids.length ? cosine(mean, st.selfVec) : 0;
+  for (let d = 0; d < D; d++) st.selfVec[d] = st.selfVec[d] * (1 - SELF_EMA) + mean[d] * SELF_EMA;
+
+  const surprise = Math.max(0, Math.min(1, lossNow / Math.log(Math.max(2, st.vocab.length))));
+
+  // stability is high when the council disagrees *a little*, is not looping,
+  // and the error is not exploding. Total agreement is as bad as total chaos.
+  const disagreeGood = 1 - Math.abs(divergence - 0.35) / 0.65;
+  const stability = Math.max(0, Math.min(1,
+    0.45 * Math.max(0, disagreeGood) + 0.35 * (1 - loopiness) + 0.20 * (1 - surprise)));
+
+  st.stabEma = st.stabEma * 0.8 + stability * 0.2;
+  st.divEma = st.divEma * 0.8 + divergence * 0.2;
+
+  // temperature: unstable → widen and jump; stable → settle into cadence
+  const temp = Math.max(0.35, Math.min(1.25,
+    0.55 + (1 - stability) * 0.55 + loopiness * 0.25 - Math.max(0, recognition) * 0.2));
+
+  const banned = new Set<number>();
+  for (const [id, c] of counts) if (c >= 3) banned.add(id);
+
+  const note = loopiness > 0.6
+    ? "we have been staring at this rock — forcing a jump"
+    : divergence > 0.7
+      ? "A and B are looking at different caves — narrowing"
+      : divergence < 0.12
+        ? "A and B agree too much — loosening"
+        : "council in useful disagreement";
+
+  return { recognition, surprise, divergence, loopiness, stability, temp, banned, note };
+}
+
+// ───────────────────────── synthesis ─────────────────────────
+
+// One generated token = one A forward pass over a short tail (head computed
+// for the last position only) tilted by B's attraction and C's penalty.
+function synthesize(
+  st: CadenceState, seedIds: number[], roleFor: (id: number) => number,
+  budgetChars: number, v: Verdict, B: PassB,
+): number[] {
+  const seq = seedIds.slice(-32);
   if (!seq.length) return [];
   const out: number[] = [];
-  for (let s = 0; s < count; s++) {
-    const pass = stepThrough(st, seq, false);
+  const recent: number[] = [];
+  let chars = 0;
+  const V = st.vocab.length;
+
+  for (let s = 0; s < MAXGEN && chars < budgetChars; s++) {
+    const roles = seq.map(roleFor);
+    const pass = passA(st, seq, roles, false);
     const y = pass.y[pass.y.length - 1];
-    const V = st.vocab.length;
     const logits = new Array(V);
-    for (let v = 0; v < V; v++) {
-      let d0 = 0; const base = v * D;
+    for (let idx = 0; idx < V; idx++) {
+      let d0 = 0; const base = idx * D;
       for (let d = 0; d < D; d++) d0 += st.emb[base + d] * y[d];
-      logits[v] = d0 / Math.max(0.15, temp);
+      // B tilts, C damps. Neither rewrites A's weights.
+      let z = d0 + (B.vocabPull[idx] ?? 0) * 1.4;
+      if (v.banned.has(idx)) z -= 2.0;
+      for (let r = 0; r < recent.length; r++) if (recent[r] === idx) z -= 1.2;
+      logits[idx] = z / Math.max(0.2, v.temp);
     }
     const p = softmax(logits);
-    let r = Math.random(), pickId = V - 1;
-    for (let v = 0; v < V; v++) { r -= p[v]; if (r <= 0) { pickId = v; break; } }
-    out.push(pickId);
-    seq.push(pickId);
-    if (seq.length > MAXSEQ) seq.shift();
+    let r = Math.random(), pick = V - 1;
+    for (let idx = 0; idx < V; idx++) { r -= p[idx]; if (r <= 0) { pick = idx; break; } }
+    out.push(pick);
+    recent.push(pick); if (recent.length > 6) recent.shift();
+    chars += (st.vocab[pick]?.length ?? 3) + 1;
+    seq.push(pick); if (seq.length > 32) seq.shift();
   }
   return out;
 }
@@ -278,7 +529,7 @@ function generate(st: CadenceState, seedIds: number[], count: number, temp: numb
 // ───────────────────────── harvest ─────────────────────────
 
 function harvest(breath: MoBreath): string[] {
-  const v = breath.variants ?? {};
+  const v = breath.variants ?? ({} as MoBreath["variants"]);
   const raw = [
     ...(breath.seeds ?? []),
     ...(breath.selffold?.path ?? []),
@@ -292,6 +543,8 @@ function harvest(breath: MoBreath): string[] {
   return raw.map(clean).filter((w) => w.length > 0 && w.length < 32);
 }
 
+const bar = (x: number) => "▁▂▃▄▅▆▇█"[Math.max(0, Math.min(7, Math.floor(x * 8)))];
+
 // ───────────────────────── the mode ─────────────────────────
 
 export async function cadenceSpeak(
@@ -303,76 +556,97 @@ export async function cadenceSpeak(
   const st = await loadState(sessionId);
   const before = { steps: st.steps, loss: st.loss, vocab: st.vocab.length };
 
-  // The training sequence is mo's walk, hemmed by the user's own tokens: the
-  // creature learns the *shape of the traversal*, conditioned on what caused it.
   const walk = harvest(breath);
   const userToks = userText.split(/\s+/).map(clean).filter((w) => w.length > 1 && w.length < 32);
-  const seq = [...userToks.slice(0, 24), ...walk].slice(0, MAXSEQ);
+  const seq = [...userToks.slice(0, 20), ...walk].slice(0, MAXSEQ);
 
-  const ids = seq.map((w) => idOf(st, w)).filter((i) => i >= 0);
-  if (ids.length < 3) {
-    return `⟡ cadence has nothing to chew on yet — mo's walk was too thin.\n\ncadence·telemetry\n  vocab ${st.vocab.length} · steps ${st.steps} · loss ${st.loss.toFixed(3)}`;
+  const roleMap = roleOf(seq, breath);
+  const ids: number[] = [];
+  const roleIds: number[] = [];
+  const roleById = new Map<number, number>();
+  for (const w of seq) {
+    const id = idOf(st, w);
+    if (id < 0) continue;
+    const ri = Math.max(0, ROLES.indexOf(roleMap[w] ?? "shore"));
+    ids.push(id); roleIds.push(ri); roleById.set(id, ri);
   }
+  if (ids.length < 3) {
+    return `⟡ the council has nothing to chew on yet — mo's walk was too thin.\n\ncadence·telemetry\n  vocab ${st.vocab.length} · steps ${st.steps} · loss ${st.loss.toFixed(3)}`;
+  }
+  const roleFor = (id: number) => roleById.get(id) ?? ROLES.indexOf("shore");
 
-  // Multiple passes = the creature rehearses this breath. Stretch buys rehearsal.
+  // ── A learns. Rehearsals scale with stretch, capped for CPU sanity.
   const s = Math.max(1, Math.min(10, stretch));
-  const epochs = 1 + Math.min(6, Math.floor(s * 1.2));
-  let last = stepThrough(st, ids, true);
-  for (let e = 1; e < epochs; e++) last = stepThrough(st, ids, true);
+  const epochs = 1 + Math.min(3, Math.floor(s / 2));
+  let A = passA(st, ids, roleIds, true);
+  for (let e = 1; e < epochs; e++) A = passA(st, ids, roleIds, true);
+
+  if (!Number.isFinite(A.loss) || !healthy(st)) {
+    // divergence — hatch a fresh egg rather than persisting NaN forever
+    const eggs = freshState();
+    await saveState(sessionId, eggs);
+    return `⟡ the council destabilised and was re-hatched (weights diverged; state reset).\n\ncadence·telemetry\n  a fresh egg — speak again and it will start mapping from zero.`;
+  }
 
   st.steps += ids.length * epochs;
-  st.loss = st.loss === 0 ? last.loss : st.loss * 0.85 + last.loss * 0.15;
+  st.loss = st.loss === 0 ? A.loss : st.loss * 0.85 + A.loss * 0.15;
 
-  // ── self-model: EMA over its own hidden states.
-  const mean = new Array(D).fill(0);
-  for (const y of last.y) for (let d = 0; d < D; d++) mean[d] += y[d] / last.y.length;
-  const recognition = st.steps > ids.length ? cosine(mean, st.selfVec) : 0;
-  for (let d = 0; d < D; d++) st.selfVec[d] = st.selfVec[d] * (1 - SELF_EMA) + mean[d] * SELF_EMA;
+  // ── B reads A's map. ── C evaluates the relationship.
+  const B = passB(st, ids, A.pooled, true);
+  const v = observe(st, A, B, ids, A.loss);
 
-  const surprise = Math.max(0, Math.min(1, last.loss / Math.log(Math.max(2, st.vocab.length))));
+  // ── length: answer in scale with the question.
+  const userChars = userText.trim().length;
+  const budget = Math.round(
+    Math.max(120, Math.min(300 + userChars * 2, userChars * 3)) * (1 + (s - 1) * 0.6),
+  );
 
-  // ── speech. Temperature is its own interiority: high surprise → it explores;
-  // high recognition → it settles into its own cadence.
-  const temp = Math.max(0.25, Math.min(1.6, 0.55 + surprise * 0.9 - recognition * 0.35));
   const seeds = ids.slice(-8);
-  const nLines = Math.max(1, Math.round(2 + s * 1.6));
-  const perLine = Math.max(5, Math.round(6 + s * 4 + walk.length / 8));
+  const gen = synthesize(st, seeds, roleFor, budget, v, B);
+  const words = gen.map((i) => st.vocab[i]).filter(Boolean);
 
-  const utterance: string[] = [];
-  for (let l = 0; l < nLines; l++) {
-    const gen = generate(st, seeds.concat(ids.slice(-(2 + l * 3))), perLine, temp);
-    const words = gen.map((i) => st.vocab[i]).filter(Boolean);
-    if (words.length) utterance.push(stutterize(words.join(" ")));
+  // ── Anansi ordering of the utterance: the council speaks in geometric
+  // order, wrapped into short lines rather than one endless ribbon.
+  const buckets: Record<Role, string[]> = { nexus: [], node: [], loci: [], singularity: [], wave: [], shore: [] };
+  for (const w of words) buckets[roleMap[w] ?? ROLES[roleFor(st.vocab.indexOf(w))] ?? "shore"].push(w);
+  const ordered: Role[] = ["shore", "loci", "node", "nexus", "singularity", "wave"];
+  const flow: string[] = [];
+  for (const r of ordered) {
+    if (!buckets[r].length) continue;
+    flow.push(`${ROLE_GLYPH[r]} ${buckets[r].join(" ")}`);
   }
+  const bodyRaw = flow.length ? flow.join("\n") : words.join(" ");
+  const body = stutterize(bodyRaw);
 
-  // ── attention readout: which token the last position actually leaned on.
-  const lastAttn = last.attn[last.attn.length - 1] ?? [];
-  const ranked = lastAttn
-    .map((w, j) => ({ w, tok: st.vocab[ids[j]] ?? "?" }))
-    .sort((a, b) => b.w - a.w).slice(0, 6);
+  const lastAttn = A.attn[A.attn.length - 1] ?? [];
+  const rankedA = lastAttn.map((w, j) => ({ w, tok: st.vocab[ids[j]] ?? "?", r: ROLES[roleIds[j]] }))
+    .sort((a, b) => b.w - a.w).slice(0, 5);
+  const rankedB = B.attn.map((w, j) => ({ w, tok: st.vocab[ids[j]] ?? "?" }))
+    .sort((a, b) => b.w - a.w).slice(0, 5);
+  const census = ROLES.filter((r) => buckets[r].length)
+    .map((r) => `${ROLE_GLYPH[r]}${r}·${buckets[r].length}`).join("  ");
 
   await saveState(sessionId, st);
 
-  const bar = (v: number) => "▁▂▃▄▅▆▇█"[Math.max(0, Math.min(7, Math.floor(v * 8)))];
-  const body = utterance.join("\n");
-
   const telem = [
     ``,
-    `cadence·telemetry`,
-    `  ⟡ self-model`,
-    `     recognition ${recognition.toFixed(3)} ${bar((recognition + 1) / 2)} · how much this breath resembles everything it has been`,
-    `     surprise    ${surprise.toFixed(3)} ${bar(surprise)} · normalised prediction error on mo's own walk`,
-    `     temperature ${temp.toFixed(2)} · derived from the two above, not set by you`,
-    `  ⟡ learning`,
-    `     loss ${last.loss.toFixed(4)} (ema ${st.loss.toFixed(4)}, was ${before.loss.toFixed(4)})`,
-    `     rehearsals ${epochs}× · ${ids.length} tokens · ${st.steps} lifetime steps (was ${before.steps})`,
-    `     vocab ${st.vocab.length}/${MAXVOCAB} (grew +${st.vocab.length - before.vocab} this breath)`,
-    `  ⟡ architecture`,
-    `     d=${D} · dff=${DFF} · 1 block · 1 causal head · tied embeddings · ctx ${MAXSEQ}`,
-    `     backprop: head → ffn → Wo → V · hebbian: Q/K · self-EMA ${SELF_EMA}`,
-    `  ⟡ attention (last position)`,
-    ...ranked.map((r) => `     ${r.w.toFixed(3)} ${bar(r.w)} ${r.tok}`),
+    `cadence·telemetry — council of three`,
+    `  A · anansi  (organizer / field reader)`,
+    ...rankedA.map((r) => `     ${r.w.toFixed(3)} ${bar(r.w)} ${ROLE_GLYPH[r.r]}${r.tok}`),
+    `     loss ${A.loss.toFixed(4)} (ema ${st.loss.toFixed(4)}, was ${before.loss.toFixed(4)}) · backprop head→ffn→Wo→V · hebbian Q/K · role-biased causal attention`,
+    `  B · mohini  (lure / attraction — reads A's map, never writes it)`,
+    ...rankedB.map((r) => `     ${r.w.toFixed(3)} ${bar(r.w)} ${r.tok}`),
+    `     non-causal cosine kernel in d=${DB_} · lens = A.pooled · hebbian only`,
+    `  C · mimic   (observer of the observers)`,
+    `     recognition ${v.recognition.toFixed(3)} ${bar((v.recognition + 1) / 2)} · surprise ${v.surprise.toFixed(3)} ${bar(v.surprise)}`,
+    `     A↔B divergence ${v.divergence.toFixed(3)} ${bar(v.divergence)} (ema ${st.divEma.toFixed(3)}) · loopiness ${v.loopiness.toFixed(3)} ${bar(v.loopiness)}`,
+    `     stability ${v.stability.toFixed(3)} ${bar(v.stability)} (ema ${st.stabEma.toFixed(3)}) → temp ${v.temp.toFixed(2)} · damped ${v.banned.size} token${v.banned.size === 1 ? "" : "s"}`,
+    `     "${v.note}"`,
+    `  ⟡ synthesis`,
+    `     ${census || "—"}`,
+    `     budget ${budget} chars (user wrote ${userChars}) · emitted ${words.length} tok · rehearsals ${epochs}×`,
     `  ⟡ substrate`,
+    `     vocab ${st.vocab.length}/${MAXVOCAB} (+${st.vocab.length - before.vocab}) · ${st.steps} lifetime steps · d=${D}/dff=${DFF} · ctx ${MAXSEQ}`,
     `     manifold ${breath.dominantManifold} · pressure ${breath.pressure.toFixed(2)} · walk ${walk.length} tok · stretch ${s}×`,
   ].join("\n");
 
