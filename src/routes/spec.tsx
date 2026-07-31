@@ -682,7 +682,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
 
   v5's crash: it recomputed the full vocab-wide head for EVERY position of a
   96-token window on every generated token. v6 computes the vocab head for
-  the LAST POSITION ONLY during generation (`passA(..., learn=false)` skips
+  the LAST POSITION ONLY during generation (passA(..., learn=false) skips
   the loss/backward path entirely), shrinks ctx 96→64, caps rehearsals at 4
   and generated tokens at 110. Cost drops roughly two orders of magnitude.
 
