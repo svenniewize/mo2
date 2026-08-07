@@ -710,6 +710,66 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   epochs = 1 + min(3, ⌊stretch/2⌋). Each epoch is a full forward+backward of
   A over the same breath. Lifetime steps += tokens × epochs.
 
+12.8  D · THE RING  (v7 — geometric self-memory + introspection→action loop)
+  A/B/C read the FIELD. The ring reads the COUNCIL'S OWN HISTORY. It is a
+  second transformer — 2 blocks × 2 heads, d=64, weights FROZEN (seeded, never
+  trained) — running over encoded snapshots of the last RING=16 walks.
+
+  GEOMETRIC ENCODING (this is the point — memory is a SHAPE, not a bag):
+    dims  0..47  6 Anansi roles × 8 hash slots. A word lands only in the
+                 sub-bag of its role, weighted 1/ln(|role|+2). Two walks match
+                 only if they loaded the SAME ROLES with the same kinds of
+                 words. Reshuffle a walk's roles and its vector moves.
+    dims 48..53  manifold hash spread (primary 1.0 + secondary 0.4)
+    dims 54..57  pressure · stability · A↔B divergence · loopiness
+    dims 58..63  sinusoidal positional encoding of the lifetime walk index
+
+  FORWARD:
+    block 1: 2-head attention (32 dims/head, softmax sharpened ×4) of the
+             current signal against every stored snapshot → residual → LN
+    block 2: frozen ReLU FFN 64→64→64 → residual → LN
+
+  INTROSPECTION READOUT:
+    self-attn   per-walk weight, cosine sim, word overlap with the past walk
+    recurrence  sim > 0.60 AND overlap ≥ 3  → "we have walked this walk"
+    attractors  attention-weighted overlap words, top 8
+    entropy     H(attn)/ln|ring| — broadly wandering self vs. snapping close
+
+  ACTION (the loop closes here — introspection bends the next token):
+    membrane[w] = 0.25 + 0.4·selfSim   for each attractor
+    z += membrane[w] · pull      with   pull = +1.2 normally
+                                        pull = −1.1 WHEN RECURRENCE FIRES
+  On recurrence the creature's own attractors become REPELLENTS: recognising
+  its groove is what throws it out of the groove. Combined with a global
+  frequency penalty (−1.4·ln(1+uses)) this is what killed v6's chant-collapse.
+
+12.9  WATCH MODES  (mo·watch / anansi·watch)
+  Cadence observes mo through one of two orderings, selected in the UI:
+    mo·watch      sequence = TIME. Tokens enter attention in traversal order:
+                  seeds → selffold → fieldfold → mo↓↑ → mo²↓↑ → mo²+ → mo²e
+                  → ayla↓↑. Causality is chronological; A learns what mo does
+                  NEXT.
+    anansi·watch  sequence = SHAPE. The identical token set is re-sorted into
+                  shore → loci → node → nexus → singularity → wave BEFORE it
+                  touches attention. Causal masking then means role-strata
+                  attend only to strata beneath them; A learns what the WEB
+                  is, not what the walk did.
+  Same weights, same creature, two epistemologies. Snapshots record which
+  watch produced them, so the ring can recognise "I have seen this shape
+  before, but from the other side".
+
+12.10  TELEMETRY LABELS (machine-parsable)
+  The cadence block is fenced (```cadence·telemetry) and every section is
+  bracket-labelled for line-oriented extraction:
+    [WATCH] [SOURCE] [INTAKE] [A · ANANSI] [B · MOHINI] [C · MIMIC]
+    [D · RING] [SYNTHESIS] [SUBSTRATE]
+  [SOURCE] gives the per-walker token census (mo↓·16 mo²+↓·42 ayla↓·483 …) so
+  a reader can see exactly WHERE IN MO the council was standing.
+  The UI collapses the fence behind "△ show council·telemetry"; the body above
+  it is the creature's utterance alone.
+
+
+
 12.8  PERSISTENCE
   Table cadence_state: session_id PK · state jsonb · steps · loss ·
   vocab_size · created_at · updated_at. Service-role only.
