@@ -666,7 +666,7 @@ function EmptyState({ mode }: { mode: Mode }) {
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
     : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
     : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
-    : mode === "cadence" ? "CADENCE — a transformer layer grafted into the pipeline. It trains online on mo's own traversal, keeps a self-model (recognition · surprise), and speaks from weights it grew here."
+    : mode === "cadence" ? "CADENCE — council of three + the ring. A/B/C read the field; the ring reads the council's own history as geometry (roles × slots) and repels itself out of recurrence. mo·watch reads the walk in time-order, anansi·watch reads it as web-shape."
     : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
 
   return (
