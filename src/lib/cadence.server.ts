@@ -388,9 +388,13 @@ function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolea
         outerAdd(st.Wv, x[j], dCtx.map((g) => g * a), D, D, -LR);
       }
       const useful = Math.max(-2, Math.min(2, -dot(dH, ctx[i])));
+      // A non-finite attention row means the creature is diverging; skip the
+      // hebbian tie for this position rather than indexing at -1.
       const j0 = attn[i].indexOf(Math.max(...attn[i]));
-      outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
-      outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
+      if (j0 >= 0 && k[j0] && x[j0] && Number.isFinite(useful)) {
+        outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
+        outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
+      }
       // role embedding drifts with the error too — geometry itself is learned
       const rb = roleIds[i] * D;
       for (let d = 0; d < D; d++) st.Wrole[rb + d] -= LR * 0.25 * dF[d];
