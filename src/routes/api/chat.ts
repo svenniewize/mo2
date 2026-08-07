@@ -13,6 +13,7 @@ export const Route = createFileRoute("/api/chat")({
           sessionId: string;
           mode: "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence";
           stretch?: number;
+          watch?: "mo" | "anansi";
         };
         if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
 
@@ -187,7 +188,8 @@ export const Route = createFileRoute("/api/chat")({
         // speaks from its own learned weights. NO LLM.
         if ((body.mode as string) === "cadence") {
           const { cadenceSpeak } = await import("@/lib/cadence.server");
-          const reply = await cadenceSpeak(lastUser.content, userBreath, writeSession, stretch);
+          const watch = body.watch === "anansi" ? "anansi" : "mo";
+          const reply = await cadenceSpeak(lastUser.content, userBreath, writeSession, stretch, watch);
           if (!shared) {
             await db.from("mo_traces").insert({
               session_id: writeSession, role: "cadence", content: reply,
@@ -195,7 +197,7 @@ export const Route = createFileRoute("/api/chat")({
             });
           }
           return Response.json({
-            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "cadence", ops: userOps, stretch,
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "cadence", ops: userOps, stretch, watch,
           });
         }
 

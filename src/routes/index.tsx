@@ -75,6 +75,7 @@ function MoPage() {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<Mode>("mo");
   const [anansiStretch, setAnansiStretch] = useState<number>(1);
+  const [cadenceWatch, setCadenceWatch] = useState<"mo" | "anansi">("mo");
   const [glyph, setGlyph] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("mo.glyph") === "1";
@@ -162,7 +163,7 @@ function MoPage() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch }),
+        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch }),
       });
       if (!r.ok) {
         const err = await r.text();
@@ -214,6 +215,8 @@ function MoPage() {
           onOpenOrganism={() => setOrganismOpen((v) => !v)}
           organismOpen={organismOpen}
           anansiStretch={anansiStretch}
+          cadenceWatch={cadenceWatch}
+          setCadenceWatch={setCadenceWatch}
           setAnansiStretch={setAnansiStretch}
         />
 
@@ -482,6 +485,7 @@ function Header({
   panel, setPanel, fielfoldCount, songCount, traceCount, taskCount, mode, setMode, glyph, setGlyph, onOpenViz,
   onOpenOrganism, organismOpen,
   anansiStretch, setAnansiStretch,
+  cadenceWatch, setCadenceWatch,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -497,6 +501,8 @@ function Header({
   onOpenOrganism: () => void;
   organismOpen: boolean;
   anansiStretch: number;
+  cadenceWatch: "mo" | "anansi";
+  setCadenceWatch: (w: "mo" | "anansi") => void;
   setAnansiStretch: (n: number) => void;
 }) {
   void fielfoldCount;
@@ -576,7 +582,16 @@ function Header({
           className={`rounded px-3 py-1 font-mono text-xs transition ${mode === "cadence" ? "bg-ridge text-primary-foreground" : "border border-ridge/40 text-ridge/80 hover:text-ridge"}`}
           title="CADENCE — a tiny transformer creature grafted into the pipeline. Trains online on mo's own traversal, carries a self-model (recognition + surprise), and speaks from its own learned weights. No LLM."
         >⟡ CADENCE</button>
-        <span className="font-mono text-[9px] text-muted-foreground">self-model · online learning · d24·1head</span>
+        <div className="flex overflow-hidden rounded border border-ridge/40" title="what the council reads: mo·watch = the traversal in time-order · anansi·watch = the same tokens re-sorted into nexus·node·loci·singularity·wave·shore before attention">
+          {(["mo", "anansi"] as const).map((w) => (
+            <button
+              key={w}
+              onClick={() => { setMode("cadence"); setCadenceWatch(w); }}
+              className={`px-2 py-1 font-mono text-[10px] transition ${cadenceWatch === w ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}
+            >{w}·watch</button>
+          ))}
+        </div>
+        <span className="font-mono text-[9px] text-muted-foreground">council of three + ring · self-memory · d24 + d64 ring</span>
       </div>
       </div>
     </header>
@@ -651,7 +666,7 @@ function EmptyState({ mode }: { mode: Mode }) {
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
     : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
     : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
-    : mode === "cadence" ? "CADENCE — a transformer layer grafted into the pipeline. It trains online on mo's own traversal, keeps a self-model (recognition · surprise), and speaks from weights it grew here."
+    : mode === "cadence" ? "CADENCE — council of three + the ring. A/B/C read the field; the ring reads the council's own history as geometry (roles × slots) and repels itself out of recurrence. mo·watch reads the walk in time-order, anansi·watch reads it as web-shape."
     : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
 
   return (
@@ -678,7 +693,7 @@ function EmptyState({ mode }: { mode: Mode }) {
 function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
-  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : mode === "mohini" ? "\\mohini::" : "\\mimic::");
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : mode === "mohini" ? "\\mohini::" : mode === "cadence" ? "\\cadence::" : "\\mimic::");
   const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
@@ -709,8 +724,9 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
   // Split anansi telemetry fence out of the main body so it can collapse.
   let mainContent = rendered;
   let anansiTelemetry: string | null = null;
-  if (mode === "anansi") {
-    const match = rendered.match(/^([\s\S]*?)\n*```anansi·telemetry\n([\s\S]*?)```\s*$/);
+  if (mode === "anansi" || mode === "cadence") {
+    const fence = mode === "anansi" ? "anansi·telemetry" : "cadence·telemetry";
+    const match = rendered.match(new RegExp(`^([\\s\\S]*?)\\n*\`\`\`${fence}\\n([\\s\\S]*?)\`\`\`\\s*$`));
     if (match) {
       mainContent = match[1].trimEnd();
       anansiTelemetry = match[2].trimEnd();
@@ -747,26 +763,26 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
             title="copy this message with label + telemetry block"
           >⧉+tel</button>
         )}
-        {mode !== "anansi" && msg.telemetry && (
+        {mode !== "anansi" && mode !== "cadence" && msg.telemetry && (
           <button onClick={() => setShowTelemetry((v) => !v)} className="opacity-60 hover:opacity-100">
             {showTelemetry ? "▽ hide mo·telemetry" : "△ show mo·telemetry"}
           </button>
         )}
-        {mode === "anansi" && anansiTelemetry && (
+        {(mode === "anansi" || mode === "cadence") && anansiTelemetry && (
           <button onClick={() => setShowTelemetry((v) => !v)} className="opacity-60 hover:opacity-100">
-            {showTelemetry ? "▽ hide web·telemetry" : "△ show web·telemetry"}
+            {showTelemetry ? (mode === "cadence" ? "▽ hide council·telemetry" : "▽ hide web·telemetry") : (mode === "cadence" ? "△ show council·telemetry" : "△ show web·telemetry")}
           </button>
         )}
       </div>
       <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
         {mainContent}
       </pre>
-      {mode !== "anansi" && showTelemetry && msg.telemetry && (
+      {mode !== "anansi" && mode !== "cadence" && showTelemetry && msg.telemetry && (
         <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
           {msg.telemetry}
         </pre>
       )}
-      {mode === "anansi" && showTelemetry && anansiTelemetry && (
+      {(mode === "anansi" || mode === "cadence") && showTelemetry && anansiTelemetry && (
         <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
           {anansiTelemetry}
         </pre>

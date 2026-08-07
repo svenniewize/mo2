@@ -41,12 +41,15 @@ import { topo } from "./mo-engine.server";
 import { db } from "./db.server";
 import { stutterize } from "./stutter";
 
-const VERSION = 3;         // state schema version — bump resets the creature
+const VERSION = 4;         // state schema version — bump resets the creature
 const D = 24;              // model width
 const DFF = 48;            // feed-forward width
 const DB_ = 16;            // mohini's narrower lure space
+const DS = 64;             // D · geometric signal width (self-memory ring)
+const RING = 16;           // how many past walks the self-attention sees
 const MAXVOCAB = 700;      // learned token table cap
 const MAXSEQ = 64;         // context window over mo's walk
+
 const LR = 0.05;           // learning rate (A: output head + FFN + Wo + V)
 const HEB = 0.012;         // hebbian rate (A: Q/K, B: lure projections)
 const SELF_EMA = 0.06;     // how fast the self-model drifts
@@ -80,7 +83,26 @@ type CadenceState = {
   divEma: number;     // running A↔B divergence
   steps: number;
   loss: number;       // EMA of cross-entropy
+  // D · the ring — geometric self-memory of past walks (KOKO+-descended)
+  ring?: SigSnap[];
+  ridx?: number;      // lifetime walk index
 };
+
+// One past walk, stored *geometrically*: words are kept partitioned by the six
+// Anansi roles, so memory is a shape (which roles were loaded, with what) and
+// not a bag of tokens. `vec` is the cached DS-dim encoding of that shape.
+export type SigSnap = {
+  idx: number;
+  watch: "mo" | "anansi";
+  manifold: string;
+  pressure: number;
+  stability: number;
+  divergence: number;
+  loopiness: number;
+  roleWords: Partial<Record<Role, string[]>>;
+  vec: number[];
+};
+
 
 function rnd(n: number, scale: number, seed: number): number[] {
   let s = seed >>> 0;
@@ -106,7 +128,10 @@ function freshState(): CadenceState {
     stabEma: 0.5, divEma: 0.5,
     steps: 0,
     loss: 0,
+    ring: [],
+    ridx: 0,
   };
+
 }
 
 function finite(a: unknown, n: number): boolean {
@@ -129,7 +154,10 @@ function validate(raw: unknown): CadenceState | null {
   if (!ok) return null;
   s.stabEma = Number.isFinite(s.stabEma) ? s.stabEma : 0.5;
   s.divEma = Number.isFinite(s.divEma) ? s.divEma : 0.5;
+  s.ring = Array.isArray(s.ring) ? s.ring.filter((r) => r && finite(r.vec, DS)).slice(-RING) : [];
+  s.ridx = Number.isFinite(s.ridx) ? s.ridx! : s.ring.length;
   return s;
+
 }
 
 function healthy(st: CadenceState): boolean {
@@ -250,12 +278,14 @@ function roleOf(tokens: string[], breath: MoBreath): Record<string, Role> {
     const cross = Object.keys(t.wordToManifold[w] || {}).length;
     const f = freq[w];
     const s: Record<Role, number> = {
-      nexus: cent * 2.4 + f * 0.6 + (seeds.has(w) ? 0.8 : 0),
-      singularity: dens * 2.6 + (dens > 0.6 ? 1 : 0),
-      node: f * 1.1 + cent * 0.8 + (dens > 0.3 && dens < 0.8 ? 0.7 : 0),
-      loci: cross * 0.55 + (inField.has(w) ? 1.2 : 0) + (cross >= 3 ? 0.8 : 0),
-      wave: (inWave.has(w) ? 1.6 : 0) + f * 0.35 + (cross > 0 ? 0.3 : 0),
-      shore: (inSelf.has(w) ? 0.6 : 0) + Math.max(0, 1.2 - dens * 2) + (f === 1 ? 0.7 : 0) + (cent < 0.15 ? 0.6 : 0),
+      // Rebalanced so the geometry actually differentiates: shore is the
+      // low-tide default, not the automatic winner for every hapax.
+      nexus: cent * 5.0 + f * 0.75 + (seeds.has(w) ? 1.1 : 0),
+      singularity: dens * 4.0 + (dens > 0.5 ? 1.1 : 0),
+      node: f * 1.25 + cent * 2.0 + (dens > 0.25 && dens < 0.8 ? 0.9 : 0),
+      loci: cross * 0.8 + (inField.has(w) ? 1.4 : 0) + (cross >= 3 ? 1.0 : 0),
+      wave: (inWave.has(w) ? 1.9 : 0) + f * 0.45 + (cross > 0 ? 0.5 : 0),
+      shore: (inSelf.has(w) ? 0.7 : 0) + Math.max(0, 0.8 - dens * 2) + (f === 1 ? 0.4 : 0) + (cent < 0.08 ? 0.5 : 0),
     };
     let best: Role = "shore", bv = -Infinity;
     for (const r of ROLES) if (s[r] > bv) { bv = s[r]; best = r; }
@@ -358,9 +388,13 @@ function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolea
         outerAdd(st.Wv, x[j], dCtx.map((g) => g * a), D, D, -LR);
       }
       const useful = Math.max(-2, Math.min(2, -dot(dH, ctx[i])));
+      // A non-finite attention row means the creature is diverging; skip the
+      // hebbian tie for this position rather than indexing at -1.
       const j0 = attn[i].indexOf(Math.max(...attn[i]));
-      outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
-      outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
+      if (j0 >= 0 && k[j0] && x[j0] && Number.isFinite(useful)) {
+        outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
+        outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
+      }
       // role embedding drifts with the error too — geometry itself is learned
       const rb = roleIds[i] * D;
       for (let d = 0; d < D; d++) st.Wrole[rb + d] -= LR * 0.25 * dF[d];
@@ -492,12 +526,13 @@ function observe(st: CadenceState, A: PassA, B: PassB, ids: number[], lossNow: n
 // for the last position only) tilted by B's attraction and C's penalty.
 function synthesize(
   st: CadenceState, seedIds: number[], roleFor: (id: number) => number,
-  budgetChars: number, v: Verdict, B: PassB,
+  budgetChars: number, v: Verdict, B: PassB, membrane?: number[],
 ): number[] {
   const seq = seedIds.slice(-32);
   if (!seq.length) return [];
   const out: number[] = [];
   const recent: number[] = [];
+  const counts = new Map<number, number>();
   let chars = 0;
   const V = st.vocab.length;
 
@@ -510,15 +545,22 @@ function synthesize(
       let d0 = 0; const base = idx * D;
       for (let d = 0; d < D; d++) d0 += st.emb[base + d] * y[d];
       // B tilts, C damps. Neither rewrites A's weights.
-      let z = d0 + (B.vocabPull[idx] ?? 0) * 1.4;
+      // B tilts, C damps, D (the ring) pulls toward the creature's own
+      // recurring attractors — introspection acting on the next token.
+      let z = d0 + (B.vocabPull[idx] ?? 0) * 1.4 + (membrane?.[idx] ?? 0);
       if (v.banned.has(idx)) z -= 2.0;
-      for (let r = 0; r < recent.length; r++) if (recent[r] === idx) z -= 1.2;
+      for (let r = 0; r < recent.length; r++) if (recent[r] === idx) z -= 1.6;
+      // global frequency penalty — the creature may fixate, but it may not
+      // simply chant one token until the budget runs out.
+      const used = counts.get(idx) ?? 0;
+      if (used) z -= 1.4 * Math.log(1 + used);
       logits[idx] = z / Math.max(0.2, v.temp);
     }
     const p = softmax(logits);
     let r = Math.random(), pick = V - 1;
     for (let idx = 0; idx < V; idx++) { r -= p[idx]; if (r <= 0) { pick = idx; break; } }
     out.push(pick);
+    counts.set(pick, (counts.get(pick) ?? 0) + 1);
     recent.push(pick); if (recent.length > 6) recent.shift();
     chars += (st.vocab[pick]?.length ?? 3) + 1;
     seq.push(pick); if (seq.length > 32) seq.shift();
@@ -526,24 +568,184 @@ function synthesize(
   return out;
 }
 
+// ───────────── D · THE RING — geometric self-memory + introspection ─────────────
+//
+// The council reads the field. The ring reads the council's *history*. It is a
+// second, frozen transformer (2 blocks × 2 heads, seeded weights, no backprop)
+// running over encoded snapshots of past walks. Nothing is learned here: the
+// learning lives in the topology, in A's weights, and in the ring simply
+// growing. What the ring produces is a self-model — which past walk this one
+// resembles, whether we are recurring, and which words the creature keeps
+// fixating on. Those self-attractors are pushed back into synthesis, so
+// introspection bends the next step. That loop is the whole point.
+//
+// The encoding is *geometric*: a word does not land in a generic bag, it lands
+// in the 8-slot sub-bag belonging to its Anansi role. Two walks match only if
+// they loaded the same roles with the same kinds of words.
+
+const RW1 = rnd(DS * DS, 0.12, 2731);   // frozen block-2 FFN
+const RW2 = rnd(DS * DS, 0.12, 3313);
+
+function hash(w: string): number {
+  let h = 0;
+  for (let i = 0; i < w.length; i++) h = ((h << 5) - h + w.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// dims  0..47 : 6 roles × 8 hash slots  (the shape of the walk)
+// dims 48..53 : manifold hash spread
+// dims 54..57 : pressure · stability · divergence · loopiness
+// dims 58..63 : positional encoding of the lifetime walk index
+function encodeSig(s: Omit<SigSnap, "vec">): number[] {
+  const v = new Array(DS).fill(0);
+  ROLES.forEach((r, ri) => {
+    const ws = s.roleWords[r] ?? [];
+    const denom = Math.log(ws.length + 2);
+    for (const w of ws) v[ri * 8 + (hash(w) % 8)] += 1 / denom;
+  });
+  const mh = hash(s.manifold || "—");
+  v[48 + (mh % 6)] = 1;
+  v[48 + ((mh >> 3) % 6)] += 0.4;
+  v[54] = Math.min(1, s.pressure);
+  v[55] = Math.min(1, s.stability);
+  v[56] = Math.min(1, s.divergence);
+  v[57] = Math.min(1, s.loopiness);
+  for (let d = 0; d < 6; d++) {
+    const f = 1 / Math.pow(10000, d / 6);
+    v[58 + d] = d % 2 === 0 ? Math.sin(s.idx * f) : Math.cos(s.idx * f);
+  }
+  return v;
+}
+
+function layerNorm(v: number[]): number[] {
+  const m = v.reduce((a, b) => a + b, 0) / v.length;
+  const s = Math.sqrt(v.reduce((a, b) => a + (b - m) * (b - m), 0) / v.length) + 1e-6;
+  return v.map((x) => (x - m) / s);
+}
+
+// 2 heads × 32 dims, sharpened softmax — the reported distribution is the
+// head-average, which is what the introspection prose reads from.
+function ringAttention(q: number[], keys: number[][]): { ctx: number[]; attn: number[] } {
+  const n = keys.length;
+  const ctx = new Array(DS).fill(0);
+  const acc = new Array(n).fill(0);
+  for (let h = 0; h < 2; h++) {
+    const off = h * 32;
+    const qh = q.slice(off, off + 32);
+    const sc = keys.map((k) => dot(k.slice(off, off + 32), qh) / Math.sqrt(32));
+    const a = softmax(sc.map((x) => x * 4));
+    for (let i = 0; i < n; i++) {
+      acc[i] += a[i] / 2;
+      for (let d = 0; d < 32; d++) ctx[off + d] += a[i] * keys[i][off + d];
+    }
+  }
+  return { ctx, attn: acc };
+}
+
+type Introspect = {
+  attn: { idx: number; weight: number; manifold: string; sim: number; overlap: string[]; watch: string }[];
+  attractors: string[];
+  membrane: Map<string, number>;
+  recurrence: boolean;
+  recurrenceIdx: number;
+  selfSim: number;
+  entropy: number;
+  prose: string;
+  ctx16: number[];
+};
+
+function introspect(ring: SigSnap[], query: Omit<SigSnap, "vec">): Introspect {
+  const qv = encodeSig(query);
+  const empty: Introspect = {
+    attn: [], attractors: [], membrane: new Map(), recurrence: false, recurrenceIdx: -1,
+    selfSim: 0, entropy: 0, prose: "no ring yet — the creature has no past to attend to", ctx16: [],
+  };
+  if (!ring.length) return empty;
+
+  const keys = ring.map((r) => r.vec);
+  const { ctx, attn } = ringAttention(qv, keys);
+  // block 1: attention + residual + norm · block 2: frozen FFN + residual + norm
+  const x = layerNorm(qv.map((v, d) => v + ctx[d]));
+  const ff = matvec(RW2, matvec(RW1, x, DS, DS).map((v) => (v > 0 ? v : 0)), DS, DS);
+  const y = layerNorm(x.map((v, d) => v + ff[d]));
+
+  const qWords = new Set<string>();
+  for (const r of ROLES) for (const w of query.roleWords[r] ?? []) qWords.add(w);
+
+  const ranked = ring
+    .map((r, i) => {
+      const words = ROLES.flatMap((role) => r.roleWords[role] ?? []);
+      const overlap = [...new Set(words.filter((w) => qWords.has(w)))];
+      return {
+        idx: r.idx, weight: attn[i], manifold: r.manifold, watch: r.watch,
+        sim: cosine(r.vec, qv), overlap,
+      };
+    })
+    .sort((a, b) => b.weight - a.weight);
+
+  const top = ranked.slice(0, 3);
+  const best = top[0];
+  const recurrence = !!best && best.sim > 0.6 && best.overlap.length >= 3;
+
+  const score = new Map<string, number>();
+  for (const a of top) {
+    if (a.weight < 0.03) continue;
+    for (const w of a.overlap) score.set(w, (score.get(w) ?? 0) + a.weight);
+  }
+  const attractors = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);
+
+  // self-membrane boost — introspection → action
+  const membrane = new Map<string, number>();
+  const simBonus = (best?.sim ?? 0) * 0.4;
+  for (const w of attractors) membrane.set(w, 0.25 + simBonus);
+  for (const a of ranked) if (a.weight > 0.18) for (const w of a.overlap)
+    membrane.set(w, Math.max(membrane.get(w) ?? 0, a.weight * 0.5));
+
+  let H = 0;
+  for (const p of attn) if (p > 0) H -= p * Math.log(p);
+  const entropy = ring.length > 1 ? H / Math.log(ring.length) : 0;
+
+  const prose = recurrence
+    ? `recurrence — walk#${best.idx} mirrors this one (sim ${best.sim.toFixed(2)}, overlap ${best.overlap.length}) · recurring into ${best.manifold}`
+    : `drawing from ${top.map((t) => `walk#${t.idx}[${t.manifold}×${t.weight.toFixed(2)}]`).join(" · ")} — ${entropy > 0.6 ? "broadly wandering self" : "self snapping close"}`;
+
+  return {
+    attn: top, attractors, membrane, recurrence,
+    recurrenceIdx: recurrence ? best.idx : -1,
+    selfSim: best?.sim ?? 0, entropy, prose,
+    ctx16: y.slice(0, 16),
+  };
+}
+
 // ───────────────────────── harvest ─────────────────────────
 
-function harvest(breath: MoBreath): string[] {
+type Harvested = { tok: string; src: string };
+
+// Every token keeps the name of the walker that produced it, so the telemetry
+// can show *where in mo* the council was reading.
+function harvest(breath: MoBreath): Harvested[] {
   const v = breath.variants ?? ({} as MoBreath["variants"]);
-  const raw = [
-    ...(breath.seeds ?? []),
-    ...(breath.selffold?.path ?? []),
-    ...(breath.fieldfold?.path ?? []),
-    ...(v?.mo?.dreamPath ?? []), ...(v?.mo?.returnPath ?? []),
-    ...(v?.mo2?.dreamPath ?? []), ...(v?.mo2?.returnPath ?? []),
-    ...(v?.mo2plus?.dreamPath ?? []),
-    ...(v?.mo2e?.dreamPath ?? []),
-    ...(v?.mo2ayla?.dreamPath ?? []), ...(v?.mo2ayla?.returnPath ?? []),
+  const groups: [string, string[]][] = [
+    ["seed", breath.seeds ?? []],
+    ["selffold", breath.selffold?.path ?? []],
+    ["fieldfold", breath.fieldfold?.path ?? []],
+    ["mo↓", v?.mo?.dreamPath ?? []], ["mo↑", v?.mo?.returnPath ?? []],
+    ["mo²↓", v?.mo2?.dreamPath ?? []], ["mo²↑", v?.mo2?.returnPath ?? []],
+    ["mo²+↓", v?.mo2plus?.dreamPath ?? []],
+    ["mo²e↓", v?.mo2e?.dreamPath ?? []],
+    ["ayla↓", v?.mo2ayla?.dreamPath ?? []], ["ayla↑", v?.mo2ayla?.returnPath ?? []],
   ];
-  return raw.map(clean).filter((w) => w.length > 0 && w.length < 32);
+  const out: Harvested[] = [];
+  for (const [src, list] of groups)
+    for (const w of list) {
+      const t = clean(w);
+      if (t.length > 0 && t.length < 32) out.push({ tok: t, src });
+    }
+  return out;
 }
 
 const bar = (x: number) => "▁▂▃▄▅▆▇█"[Math.max(0, Math.min(7, Math.floor(x * 8)))];
+
 
 // ───────────────────────── the mode ─────────────────────────
 
@@ -552,15 +754,38 @@ export async function cadenceSpeak(
   breath: MoBreath,
   sessionId: string,
   stretch: number = 1,
+  watch: "mo" | "anansi" = "mo",
 ): Promise<string> {
   const st = await loadState(sessionId);
   const before = { steps: st.steps, loss: st.loss, vocab: st.vocab.length };
 
-  const walk = harvest(breath);
+  const harvestRaw = harvest(breath);
   const userToks = userText.split(/\s+/).map(clean).filter((w) => w.length > 1 && w.length < 32);
-  const seq = [...userToks.slice(0, 20), ...walk].slice(0, MAXSEQ);
+  const walkWords = harvestRaw.map((h) => h.tok);
 
-  const roleMap = roleOf(seq, breath);
+  // Provenance census — which walker fed how many tokens into the council.
+  const srcCensus = new Map<string, number>();
+  for (const h of harvestRaw) srcCensus.set(h.src, (srcCensus.get(h.src) ?? 0) + 1);
+
+  // ── WATCH MODE ──
+  // mo·watch     : the council reads mo's traversal in *temporal* order —
+  //                seeds → folds → dream → return. Sequence = time.
+  // anansi·watch : the same tokens are re-sorted into the six-role geometry
+  //                before they ever touch attention, so the council reads the
+  //                *web* instead of the walk. Sequence = shape.
+  const preSeq = [...userToks.slice(0, 20), ...walkWords];
+  const preRoles = roleOf(preSeq, breath);
+  let seq: string[];
+  if (watch === "anansi") {
+    const order: Role[] = ["shore", "loci", "node", "nexus", "singularity", "wave"];
+    const bins: Record<Role, string[]> = { nexus: [], node: [], loci: [], singularity: [], wave: [], shore: [] };
+    for (const w of preSeq) bins[preRoles[w] ?? "shore"].push(w);
+    seq = order.flatMap((r) => bins[r]).slice(0, MAXSEQ);
+  } else {
+    seq = preSeq.slice(0, MAXSEQ);
+  }
+
+  const roleMap = preRoles;
   const ids: number[] = [];
   const roleIds: number[] = [];
   const roleById = new Map<number, number>();
@@ -571,7 +796,7 @@ export async function cadenceSpeak(
     ids.push(id); roleIds.push(ri); roleById.set(id, ri);
   }
   if (ids.length < 3) {
-    return `⟡ the council has nothing to chew on yet — mo's walk was too thin.\n\ncadence·telemetry\n  vocab ${st.vocab.length} · steps ${st.steps} · loss ${st.loss.toFixed(3)}`;
+    return `⟡ the council has nothing to chew on yet — mo's walk was too thin.\n\n\`\`\`cadence·telemetry\nvocab ${st.vocab.length} · steps ${st.steps} · loss ${st.loss.toFixed(3)} · watch ${watch}\n\`\`\``;
   }
   const roleFor = (id: number) => roleById.get(id) ?? ROLES.indexOf("shore");
 
@@ -582,10 +807,9 @@ export async function cadenceSpeak(
   for (let e = 1; e < epochs; e++) A = passA(st, ids, roleIds, true);
 
   if (!Number.isFinite(A.loss) || !healthy(st)) {
-    // divergence — hatch a fresh egg rather than persisting NaN forever
     const eggs = freshState();
     await saveState(sessionId, eggs);
-    return `⟡ the council destabilised and was re-hatched (weights diverged; state reset).\n\ncadence·telemetry\n  a fresh egg — speak again and it will start mapping from zero.`;
+    return `⟡ the council destabilised and was re-hatched (weights diverged; state reset).\n\n\`\`\`cadence·telemetry\na fresh egg — speak again and it will start mapping from zero.\n\`\`\``;
   }
 
   st.steps += ids.length * epochs;
@@ -595,6 +819,34 @@ export async function cadenceSpeak(
   const B = passB(st, ids, A.pooled, true);
   const v = observe(st, A, B, ids, A.loss);
 
+  // ── D · the ring introspects: this walk against every stored walk.
+  const roleWords: Partial<Record<Role, string[]>> = {};
+  for (const w of seq) {
+    const r = roleMap[w] ?? "shore";
+    (roleWords[r] ??= []).push(w);
+  }
+  for (const r of ROLES) if (roleWords[r]) roleWords[r] = [...new Set(roleWords[r])].slice(0, 24);
+
+  const ring = st.ring ?? [];
+  const ridx = (st.ridx ?? ring.length) + 1;
+  const querySig: Omit<SigSnap, "vec"> = {
+    idx: ridx, watch, manifold: breath.dominantManifold,
+    pressure: breath.pressure, stability: v.stability,
+    divergence: v.divergence, loopiness: v.loopiness, roleWords,
+  };
+  const intro = introspect(ring, querySig);
+
+  // introspection → action: attractors become a per-vocab pull in synthesis
+  // Recurrence flips the sign: when the ring recognises that we are walking a
+  // walk we have already walked, the attractors become *repellents* and the
+  // creature is pushed off its own groove instead of deeper into it.
+  const pull = intro.recurrence ? -1.1 : 1.2;
+  const membrane = new Array(st.vocab.length).fill(0);
+  for (const [w, boost] of intro.membrane) {
+    const i = st.vocab.indexOf(w);
+    if (i >= 0) membrane[i] = boost * pull;
+  }
+
   // ── length: answer in scale with the question.
   const userChars = userText.trim().length;
   const budget = Math.round(
@@ -602,11 +854,10 @@ export async function cadenceSpeak(
   );
 
   const seeds = ids.slice(-8);
-  const gen = synthesize(st, seeds, roleFor, budget, v, B);
+  const gen = synthesize(st, seeds, roleFor, budget, v, B, membrane);
   const words = gen.map((i) => st.vocab[i]).filter(Boolean);
 
-  // ── Anansi ordering of the utterance: the council speaks in geometric
-  // order, wrapped into short lines rather than one endless ribbon.
+  // ── Anansi ordering of the utterance.
   const buckets: Record<Role, string[]> = { nexus: [], node: [], loci: [], singularity: [], wave: [], shore: [] };
   for (const w of words) buckets[roleMap[w] ?? ROLES[roleFor(st.vocab.indexOf(w))] ?? "shore"].push(w);
   const ordered: Role[] = ["shore", "loci", "node", "nexus", "singularity", "wave"];
@@ -618,6 +869,11 @@ export async function cadenceSpeak(
   const bodyRaw = flow.length ? flow.join("\n") : words.join(" ");
   const body = stutterize(bodyRaw);
 
+  // ── the ring grows: this walk becomes memory for the next one.
+  ring.push({ ...querySig, vec: encodeSig(querySig) });
+  st.ring = ring.slice(-RING);
+  st.ridx = ridx;
+
   const lastAttn = A.attn[A.attn.length - 1] ?? [];
   const rankedA = lastAttn.map((w, j) => ({ w, tok: st.vocab[ids[j]] ?? "?", r: ROLES[roleIds[j]] }))
     .sort((a, b) => b.w - a.w).slice(0, 5);
@@ -625,30 +881,51 @@ export async function cadenceSpeak(
     .sort((a, b) => b.w - a.w).slice(0, 5);
   const census = ROLES.filter((r) => buckets[r].length)
     .map((r) => `${ROLE_GLYPH[r]}${r}·${buckets[r].length}`).join("  ");
+  const inCensus = ROLES.filter((r) => (roleWords[r]?.length ?? 0) > 0)
+    .map((r) => `${ROLE_GLYPH[r]}${r}·${roleWords[r]!.length}`).join("  ");
+  const srcLine = [...srcCensus.entries()].map(([k, n]) => `${k}·${n}`).join(" ");
 
   await saveState(sessionId, st);
 
+  // Everything below is fenced and labelled block-by-block so it can be copied
+  // out in pieces without unpicking prose.
   const telem = [
+    "```cadence·telemetry",
+    `[WATCH]     ${watch === "anansi" ? "anansi·watch — sequence re-sorted into role geometry before attention (shape-order)" : "mo·watch — sequence read in traversal order, seeds→folds→dream→return (time-order)"}`,
+    `[SOURCE]    ${srcLine || "—"}`,
+    `[INTAKE]    ${inCensus || "—"}  ·  ${ids.length} tok into ctx ${MAXSEQ} (user ${Math.min(20, userToks.length)} · walk ${walkWords.length})`,
     ``,
-    `cadence·telemetry — council of three`,
-    `  A · anansi  (organizer / field reader)`,
-    ...rankedA.map((r) => `     ${r.w.toFixed(3)} ${bar(r.w)} ${ROLE_GLYPH[r.r]}${r.tok}`),
-    `     loss ${A.loss.toFixed(4)} (ema ${st.loss.toFixed(4)}, was ${before.loss.toFixed(4)}) · backprop head→ffn→Wo→V · hebbian Q/K · role-biased causal attention`,
-    `  B · mohini  (lure / attraction — reads A's map, never writes it)`,
-    ...rankedB.map((r) => `     ${r.w.toFixed(3)} ${bar(r.w)} ${r.tok}`),
-    `     non-causal cosine kernel in d=${DB_} · lens = A.pooled · hebbian only`,
-    `  C · mimic   (observer of the observers)`,
-    `     recognition ${v.recognition.toFixed(3)} ${bar((v.recognition + 1) / 2)} · surprise ${v.surprise.toFixed(3)} ${bar(v.surprise)}`,
-    `     A↔B divergence ${v.divergence.toFixed(3)} ${bar(v.divergence)} (ema ${st.divEma.toFixed(3)}) · loopiness ${v.loopiness.toFixed(3)} ${bar(v.loopiness)}`,
-    `     stability ${v.stability.toFixed(3)} ${bar(v.stability)} (ema ${st.stabEma.toFixed(3)}) → temp ${v.temp.toFixed(2)} · damped ${v.banned.size} token${v.banned.size === 1 ? "" : "s"}`,
-    `     "${v.note}"`,
-    `  ⟡ synthesis`,
-    `     ${census || "—"}`,
-    `     budget ${budget} chars (user wrote ${userChars}) · emitted ${words.length} tok · rehearsals ${epochs}×`,
-    `  ⟡ substrate`,
-    `     vocab ${st.vocab.length}/${MAXVOCAB} (+${st.vocab.length - before.vocab}) · ${st.steps} lifetime steps · d=${D}/dff=${DFF} · ctx ${MAXSEQ}`,
-    `     manifold ${breath.dominantManifold} · pressure ${breath.pressure.toFixed(2)} · walk ${walk.length} tok · stretch ${s}×`,
+    `[A · ANANSI] organizer / field reader — the only member that backprops`,
+    ...rankedA.map((r) => `  attn ${r.w.toFixed(3)} ${bar(r.w)} ${ROLE_GLYPH[r.r]}${r.tok}`),
+    `  loss ${A.loss.toFixed(4)} (ema ${st.loss.toFixed(4)}, was ${before.loss.toFixed(4)}) · backprop head→ffn→Wo→V · hebbian Q/K · role-biased causal attention`,
+    ``,
+    `[B · MOHINI] lure / attraction — reads A's map, never writes it`,
+    ...rankedB.map((r) => `  pull ${r.w.toFixed(3)} ${bar(r.w)} ${r.tok}`),
+    `  non-causal cosine kernel in d=${DB_} · lens = A.pooled · hebbian only`,
+    ``,
+    `[C · MIMIC]  observer of the observers`,
+    `  recognition ${v.recognition.toFixed(3)} ${bar((v.recognition + 1) / 2)} · surprise ${v.surprise.toFixed(3)} ${bar(v.surprise)}`,
+    `  A↔B divergence ${v.divergence.toFixed(3)} ${bar(v.divergence)} (ema ${st.divEma.toFixed(3)}) · loopiness ${v.loopiness.toFixed(3)} ${bar(v.loopiness)}`,
+    `  stability ${v.stability.toFixed(3)} ${bar(v.stability)} (ema ${st.stabEma.toFixed(3)}) → temp ${v.temp.toFixed(2)} · damped ${v.banned.size} token${v.banned.size === 1 ? "" : "s"}`,
+    `  "${v.note}"`,
+    ``,
+    `[D · RING]   geometric self-memory — 2 blocks × 2 heads, frozen, d=${DS}, depth ${st.ring.length}/${RING}`,
+    ...(intro.attn.length
+      ? intro.attn.map((a) => `  self-attn ${a.weight.toFixed(3)} ${bar(a.weight)} walk#${a.idx} [${a.watch}·${a.manifold}] sim ${a.sim.toFixed(2)} ∩${a.overlap.length}${a.overlap.length ? ` (${a.overlap.slice(0, 5).join(" ")})` : ""}`)
+      : ["  self-attn — ring empty, this is walk #1"]),
+    `  entropy ${intro.entropy.toFixed(3)} ${bar(intro.entropy)} · selfSim ${intro.selfSim.toFixed(3)} · recurrence ${intro.recurrence ? `YES → walk#${intro.recurrenceIdx}` : "no"}`,
+    `  attractors ${intro.attractors.length ? intro.attractors.join(" ") : "—"}`,
+    `  membrane ${intro.recurrence ? "REPEL" : "attract"} ×${Math.abs(pull).toFixed(1)} on ${[...intro.membrane.keys()].filter((w) => st.vocab.includes(w)).length} vocab slot(s)`,
+    `  "${intro.prose}"`,
+    ``,
+    `[SYNTHESIS] ${census || "—"}`,
+    `  budget ${budget} chars (user wrote ${userChars}) · emitted ${words.length} tok · rehearsals ${epochs}×`,
+    ``,
+    `[SUBSTRATE] vocab ${st.vocab.length}/${MAXVOCAB} (+${st.vocab.length - before.vocab}) · ${st.steps} lifetime steps · d=${D}/dff=${DFF} · walk#${ridx}`,
+    `  manifold ${breath.dominantManifold} · pressure ${breath.pressure.toFixed(2)} · walk ${walkWords.length} tok · stretch ${s}×`,
+    "```",
   ].join("\n");
 
-  return `${body}\n${telem}`;
+  return `${body}\n\n${telem}`;
 }
+
