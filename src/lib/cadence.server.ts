@@ -528,6 +528,7 @@ function synthesize(
   if (!seq.length) return [];
   const out: number[] = [];
   const recent: number[] = [];
+  const counts = new Map<number, number>();
   let chars = 0;
   const V = st.vocab.length;
 
@@ -544,13 +545,18 @@ function synthesize(
       // recurring attractors — introspection acting on the next token.
       let z = d0 + (B.vocabPull[idx] ?? 0) * 1.4 + (membrane?.[idx] ?? 0);
       if (v.banned.has(idx)) z -= 2.0;
-      for (let r = 0; r < recent.length; r++) if (recent[r] === idx) z -= 1.2;
+      for (let r = 0; r < recent.length; r++) if (recent[r] === idx) z -= 1.6;
+      // global frequency penalty — the creature may fixate, but it may not
+      // simply chant one token until the budget runs out.
+      const used = counts.get(idx) ?? 0;
+      if (used) z -= 1.4 * Math.log(1 + used);
       logits[idx] = z / Math.max(0.2, v.temp);
     }
     const p = softmax(logits);
     let r = Math.random(), pick = V - 1;
     for (let idx = 0; idx < V; idx++) { r -= p[idx]; if (r <= 0) { pick = idx; break; } }
     out.push(pick);
+    counts.set(pick, (counts.get(pick) ?? 0) + 1);
     recent.push(pick); if (recent.length > 6) recent.shift();
     chars += (st.vocab[pick]?.length ?? 3) + 1;
     seq.push(pick); if (seq.length > 32) seq.shift();
