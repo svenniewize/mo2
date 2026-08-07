@@ -21,7 +21,6 @@ import { Route as ApiShitpostsRouteImport } from './routes/api/shitposts'
 import { Route as ApiRemembersRouteImport } from './routes/api/remembers'
 import { Route as ApiProgMoManifoldRouteImport } from './routes/api/prog-mo-manifold'
 import { Route as ApiProgMoRouteImport } from './routes/api/prog-mo'
-import { Route as ApiProbeRouteImport } from './routes/api/probe'
 import { Route as ApiNotesRouteImport } from './routes/api/notes'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -88,11 +87,6 @@ const ApiProgMoRoute = ApiProgMoRouteImport.update({
   path: '/api/prog-mo',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiProbeRoute = ApiProbeRouteImport.update({
-  id: '/api/probe',
-  path: '/api/probe',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiNotesRoute = ApiNotesRouteImport.update({
   id: '/api/notes',
   path: '/api/notes',
@@ -128,7 +122,6 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
-  '/api/probe': typeof ApiProbeRoute
   '/api/prog-mo': typeof ApiProgMoRoute
   '/api/prog-mo-manifold': typeof ApiProgMoManifoldRoute
   '/api/remembers': typeof ApiRemembersRoute
@@ -148,7 +141,6 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
-  '/api/probe': typeof ApiProbeRoute
   '/api/prog-mo': typeof ApiProgMoRoute
   '/api/prog-mo-manifold': typeof ApiProgMoManifoldRoute
   '/api/remembers': typeof ApiRemembersRoute
@@ -169,7 +161,6 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/memory': typeof ApiMemoryRoute
   '/api/notes': typeof ApiNotesRoute
-  '/api/probe': typeof ApiProbeRoute
   '/api/prog-mo': typeof ApiProgMoRoute
   '/api/prog-mo-manifold': typeof ApiProgMoManifoldRoute
   '/api/remembers': typeof ApiRemembersRoute
@@ -191,7 +182,6 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
-    | '/api/probe'
     | '/api/prog-mo'
     | '/api/prog-mo-manifold'
     | '/api/remembers'
@@ -211,7 +201,6 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
-    | '/api/probe'
     | '/api/prog-mo'
     | '/api/prog-mo-manifold'
     | '/api/remembers'
@@ -231,7 +220,6 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/memory'
     | '/api/notes'
-    | '/api/probe'
     | '/api/prog-mo'
     | '/api/prog-mo-manifold'
     | '/api/remembers'
@@ -252,7 +240,6 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiMemoryRoute: typeof ApiMemoryRoute
   ApiNotesRoute: typeof ApiNotesRoute
-  ApiProbeRoute: typeof ApiProbeRoute
   ApiProgMoRoute: typeof ApiProgMoRoute
   ApiProgMoManifoldRoute: typeof ApiProgMoManifoldRoute
   ApiRemembersRoute: typeof ApiRemembersRoute
@@ -350,13 +337,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProgMoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/probe': {
-      id: '/api/probe'
-      path: '/api/probe'
-      fullPath: '/api/probe'
-      preLoaderRoute: typeof ApiProbeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/notes': {
       id: '/api/notes'
       path: '/api/notes'
@@ -404,7 +384,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiMemoryRoute: ApiMemoryRoute,
   ApiNotesRoute: ApiNotesRoute,
-  ApiProbeRoute: ApiProbeRoute,
   ApiProgMoRoute: ApiProgMoRoute,
   ApiProgMoManifoldRoute: ApiProgMoManifoldRoute,
   ApiRemembersRoute: ApiRemembersRoute,
@@ -418,13 +397,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
