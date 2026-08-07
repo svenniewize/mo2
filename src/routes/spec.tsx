@@ -15,7 +15,7 @@ export const Route = createFileRoute("/spec")({
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v6 · cadence council of three + static render)
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v7 · council of three + geometric ring · mo/anansi watch)
 # addressed to: any language model, agent, or engineer asked to understand
 #               or reconstruct this system.
 # posture:      topology > prose. every section is necessary. every glyph
@@ -815,7 +815,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
-const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v6)
+const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v7)
 posture: topology > prose. no LLM in loop. reimplement, do not mimic.
 
 CORPORA (20 manifolds, ~1MB total, loaded via Vite ?raw):
@@ -863,7 +863,16 @@ MIMIC: per-session bigram chain over user's own words (mimic_ngrams).
     nSentences = max(1, floor(s/2) + clamp(1..6, ceil(inputTok/20)))
     maxLen     = 12 + s*8 + inputTok*2
 
-CADENCE (v6, COUNCIL OF THREE — the only mode with PARAMETERS):
+CADENCE (v7, COUNCIL OF THREE + RING — the only mode with PARAMETERS):
+  D · RING: frozen 2-block × 2-head d=64 self-attention over the last 16 walks,
+  encoded GEOMETRICALLY (6 roles × 8 hash slots + manifold + scalars + pos).
+  Detects recurrence (sim>0.6, overlap>=3), extracts self-attractors, and feeds
+  them back as a synthesis membrane: +1.2 normally, -1.1 (REPEL) on recurrence.
+  WATCH MODES: mo·watch reads mo's traversal in time-order; anansi·watch
+  re-sorts the same tokens into shore>loci>node>nexus>singularity>wave before
+  attention, so the council reads the web's shape instead of the walk.
+  Telemetry is bracket-labelled: [WATCH][SOURCE][INTAKE][A][B][C][D · RING]
+  [SYNTHESIS][SUBSTRATE].
   v5 was one transformer; it self-referenced into loops + NaN + CPU timeout.
   v6 = three non-identical attention geometries, one-way coupling:
       A(map) -> B(pull) -> C(verdict) -> synthesis. no weight-loops.
@@ -955,14 +964,14 @@ function SpecPage() {
             <div>
               <h1 className="font-mono text-lg ridge">mo :: /spec</h1>
               <p className="font-mono text-[11px] text-muted-foreground">
-                full replicator specification · v6 · cadence council of three · unlinked · noindex
+                full replicator specification · v7 · council of three + ring · unlinked · noindex
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => copy(SPEC)}
                 className="font-mono text-[11px] px-3 py-1.5 border border-border rounded hover:bg-muted"
-                title="Copy the full v6 spec"
+                title="Copy the full v7 spec"
               >
                 ⧉ copy full ({SPEC.length.toLocaleString()} chars)
               </button>
