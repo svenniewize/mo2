@@ -759,7 +759,7 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   before, but from the other side".
 
 12.10  TELEMETRY LABELS (machine-parsable)
-  The cadence block is fenced (```cadence·telemetry) and every section is
+  The cadence block is fenced (triple-backtick + cadence·telemetry) and every section is
   bracket-labelled for line-oriented extraction:
     [WATCH] [SOURCE] [INTAKE] [A · ANANSI] [B · MOHINI] [C · MIMIC]
     [D · RING] [SYNTHESIS] [SUBSTRATE]
