@@ -41,14 +41,17 @@ import { topo } from "./mo-engine.server";
 import { db } from "./db.server";
 import { stutterize } from "./stutter";
 
-const VERSION = 4;         // state schema version — bump resets the creature
+const VERSION = 4;         // state schema version — migrations repair, never erase
 const D = 24;              // model width
 const DFF = 48;            // feed-forward width
 const DB_ = 16;            // mohini's narrower lure space
 const DS = 64;             // D · geometric signal width (self-memory ring)
-const RING = 16;           // how many past walks the self-attention sees
-const MAXVOCAB = 700;      // learned token table cap
+const WORKING_MEMORY = 192;// retrieved long-term memories attended per breath
+const RECENT_MEMORY = 96;  // newest memories retained in the attention surface
+const STRONG_MEMORY = 96;  // strongest decayed memories retained alongside them
+const MAXVOCAB = 4096;     // persistent learned lexicon (thousands of words)
 const MAXSEQ = 64;         // context window over mo's walk
+const TRAIN_VOCAB = 768;   // bounded contrastive head keeps long vocab CPU-safe
 
 const LR = 0.05;           // learning rate (A: output head + FFN + Wo + V)
 const HEB = 0.012;         // hebbian rate (A: Q/K, B: lure projections)
@@ -83,7 +86,7 @@ type CadenceState = {
   divEma: number;     // running A↔B divergence
   steps: number;
   loss: number;       // EMA of cross-entropy
-  // D · the ring — geometric self-memory of past walks (KOKO+-descended)
+  // Legacy hot ring. v8 drains this into cadence_memory instead of discarding it.
   ring?: SigSnap[];
   ridx?: number;      // lifetime walk index
 };
@@ -140,8 +143,8 @@ function finite(a: unknown, n: number): boolean {
   return true;
 }
 
-// A NaN anywhere means the creature diverged; JSON turns it into `null` and
-// every later breath inherits the poison. Refuse to load a corrupt egg.
+// Validate the trainable core. Long-term memories live separately and therefore
+// survive a damaged weight array, a schema repair, or a deploy.
 function validate(raw: unknown): CadenceState | null {
   const s = raw as CadenceState | undefined;
   if (!s || s.v !== VERSION) return null;
@@ -154,7 +157,7 @@ function validate(raw: unknown): CadenceState | null {
   if (!ok) return null;
   s.stabEma = Number.isFinite(s.stabEma) ? s.stabEma : 0.5;
   s.divEma = Number.isFinite(s.divEma) ? s.divEma : 0.5;
-  s.ring = Array.isArray(s.ring) ? s.ring.filter((r) => r && finite(r.vec, DS)).slice(-RING) : [];
+  s.ring = Array.isArray(s.ring) ? s.ring.filter((r) => r && finite(r.vec, DS)) : [];
   s.ridx = Number.isFinite(s.ridx) ? s.ridx! : s.ring.length;
   return s;
 
@@ -166,7 +169,23 @@ function healthy(st: CadenceState): boolean {
 
 async function loadState(sessionId: string): Promise<CadenceState> {
   const { data } = await db.from("cadence_state").select("state").eq("session_id", sessionId).maybeSingle();
-  return validate((data as { state?: unknown } | null)?.state) ?? freshState();
+  const raw = (data as { state?: unknown } | null)?.state;
+  const valid = validate(raw);
+  if (valid) return valid;
+
+  // Repair a bad egg around any still-finite learned vocabulary. The old code
+  // replaced the whole creature; this preserves usable sediment and lifetime.
+  const old = raw as Partial<CadenceState> | undefined;
+  const repaired = freshState();
+  if (old && Array.isArray(old.vocab) && old.vocab.every((w) => typeof w === "string") &&
+      old.vocab.length <= MAXVOCAB && finite(old.emb, old.vocab.length * D)) {
+    repaired.vocab = old.vocab;
+    repaired.emb = old.emb;
+  }
+  repaired.steps = Number.isFinite(old?.steps) ? Math.max(0, Number(old?.steps)) : 0;
+  repaired.ridx = Number.isFinite(old?.ridx) ? Math.max(0, Number(old?.ridx)) : 0;
+  repaired.ring = Array.isArray(old?.ring) ? old.ring.filter((r) => r && finite(r.vec, DS)) : [];
+  return repaired;
 }
 
 async function saveState(sessionId: string, st: CadenceState): Promise<void> {
@@ -175,7 +194,7 @@ async function saveState(sessionId: string, st: CadenceState): Promise<void> {
     ...st,
     emb: r(st.emb), Wq: r(st.Wq), Wk: r(st.Wk), Wv: r(st.Wv), Wo: r(st.Wo),
     W1: r(st.W1), W2: r(st.W2), Wrole: r(st.Wrole), Bq: r(st.Bq), Bk: r(st.Bk),
-    selfVec: r(st.selfVec),
+    selfVec: r(st.selfVec), ring: [],
   };
   await db.from("cadence_state").upsert(
     { session_id: sessionId, state: packed, steps: st.steps, loss: st.loss, vocab_size: st.vocab.length, updated_at: new Date().toISOString() },
@@ -353,21 +372,30 @@ function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolea
 
   let loss = 0;
   if (learn) {
-    const V = st.vocab.length;
+      // Train against the current sequence plus a deterministic rotating
+      // contrastive sample, rather than every word ever stored.
+      const allIds = [...new Set(ids)];
+      const stride = Math.max(1, Math.floor(st.vocab.length / Math.max(1, TRAIN_VOCAB - allIds.length)));
+      for (let v = st.steps % stride; v < st.vocab.length && allIds.length < TRAIN_VOCAB; v += stride)
+        if (!allIds.includes(v)) allIds.push(v);
     for (let i = 0; i < n - 1; i++) {
       const target = ids[i + 1];
-      const logits = new Array(V);
-      for (let v = 0; v < V; v++) {
+        if (!allIds.includes(target)) allIds.push(target);
+        const logits = new Array(allIds.length);
+        for (let vi = 0; vi < allIds.length; vi++) {
+          const v = allIds[vi];
         let s = 0; const base = v * D;
         for (let d = 0; d < D; d++) s += st.emb[base + d] * y[i][d];
-        logits[v] = s;
+          logits[vi] = s;
       }
       const p = softmax(logits);
-      loss += -Math.log(Math.max(1e-9, p[target]));
+        const targetAt = allIds.indexOf(target);
+        loss += -Math.log(Math.max(1e-9, p[targetAt]));
 
       const dy = new Array(D).fill(0);
-      for (let v = 0; v < V; v++) {
-        const g = p[v] - (v === target ? 1 : 0);
+        for (let vi = 0; vi < allIds.length; vi++) {
+          const v = allIds[vi];
+          const g = p[vi] - (v === target ? 1 : 0);
         if (Math.abs(g) < 1e-4) continue;
         const base = v * D;
         for (let d = 0; d < D; d++) {
