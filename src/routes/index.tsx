@@ -166,7 +166,10 @@ function MoPage() {
         body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch }),
       });
       if (!r.ok) {
-        const err = await r.text();
+        const contentType = r.headers.get("content-type") ?? "";
+        const err = contentType.includes("application/json")
+          ? ((await r.json()) as { message?: string; error?: string }).message ?? "The field could not complete that breath."
+          : "The field could not complete that breath. Its stored memory was not erased; please try again.";
         setMessages((m) => [...m, { role: "assistant", content: `~ field disturbance ~\n${err}` }]);
       } else {
         const j = await r.json();
@@ -591,7 +594,7 @@ function Header({
             >{w}·watch</button>
           ))}
         </div>
-        <span className="font-mono text-[9px] text-muted-foreground">council of three + ring · self-memory · d24 + d64 ring</span>
+        <span className="font-mono text-[9px] text-muted-foreground">council + durable sediment · 4k-word lexicon · long self-memory</span>
       </div>
       </div>
     </header>
@@ -666,7 +669,7 @@ function EmptyState({ mode }: { mode: Mode }) {
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
     : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
     : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
-    : mode === "cadence" ? "CADENCE — council of three + the ring. A/B/C read the field; the ring reads the council's own history as geometry (roles × slots) and repels itself out of recurrence. mo·watch reads the walk in time-order, anansi·watch reads it as web-shape."
+    : mode === "cadence" ? "CADENCE — council of three + durable sediment. Long memory retrieves recent and strengthened walks, decays unused traces, and grows recurring geometry. mo·watch reads time-order; anansi·watch reads web-shape."
     : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
 
   return (

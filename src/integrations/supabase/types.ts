@@ -44,6 +44,60 @@ export type Database = {
         }
         Relationships: []
       }
+      cadence_memory: {
+        Row: {
+          created_at: string
+          divergence: number
+          id: string
+          last_used: string
+          loopiness: number
+          manifold: string
+          pressure: number
+          role_words: Json
+          session_id: string
+          shape: Json
+          stability: number
+          strength: number
+          uses: number
+          walk_index: number
+          watch: string
+        }
+        Insert: {
+          created_at?: string
+          divergence?: number
+          id?: string
+          last_used?: string
+          loopiness?: number
+          manifold: string
+          pressure?: number
+          role_words?: Json
+          session_id: string
+          shape?: Json
+          stability?: number
+          strength?: number
+          uses?: number
+          walk_index: number
+          watch: string
+        }
+        Update: {
+          created_at?: string
+          divergence?: number
+          id?: string
+          last_used?: string
+          loopiness?: number
+          manifold?: string
+          pressure?: number
+          role_words?: Json
+          session_id?: string
+          shape?: Json
+          stability?: number
+          strength?: number
+          uses?: number
+          walk_index?: number
+          watch?: string
+        }
+        Relationships: []
+      }
       cadence_state: {
         Row: {
           created_at: string

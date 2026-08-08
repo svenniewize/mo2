@@ -687,9 +687,9 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   and generated tokens at 110. Cost drops roughly two orders of magnitude.
 
   NUMERICAL SAFETY: all gradient vectors are norm-clipped to 4. State is
-  validated on load AND after training — any non-finite weight, wrong-length
-  array, or version mismatch re-hatches a fresh egg instead of persisting
-  NaN forever (v5's loss=20.5 spike was exactly this poison being reloaded).
+  validated on load AND after training. A damaged trainable core is repaired
+  without deleting durable sediment, the lifetime index, or still-finite
+  vocabulary embeddings. NaN is never persisted into the next breath.
 
 12.5  LENGTH DISCIPLINE (answer in scale with the question)
   v5 answered a three-word input with a 40-line ribbon. v6:
@@ -710,10 +710,13 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   epochs = 1 + min(3, ⌊stretch/2⌋). Each epoch is a full forward+backward of
   A over the same breath. Lifetime steps += tokens × epochs.
 
-12.8  D · THE RING  (v7 — geometric self-memory + introspection→action loop)
-  A/B/C read the FIELD. The ring reads the COUNCIL'S OWN HISTORY. It is a
-  second transformer — 2 blocks × 2 heads, d=64, weights FROZEN (seeded, never
-  trained) — running over encoded snapshots of the last RING=16 walks.
+12.8  D · DURABLE SEDIMENT  (v8 — long geometric self-memory)
+  A/B/C read the FIELD. Sediment reads the COUNCIL'S OWN HISTORY. It is a
+  second transformer — 2 blocks × 2 heads, d=64, weights FROZEN — over a
+  retrieved surface of up to 192 walks: 96 newest plus 96 strongest. The full
+  history is durable database sediment; reaching attention width never deletes
+  or restarts it. The learned lexicon stores up to 4096 words, while training
+  uses a bounded rotating contrastive head to keep each request CPU-safe.
 
   GEOMETRIC ENCODING (this is the point — memory is a SHAPE, not a bag):
     dims  0..47  6 Anansi roles × 8 hash slots. A word lands only in the
@@ -726,8 +729,16 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
 
   FORWARD:
     block 1: 2-head attention (32 dims/head, softmax sharpened ×4) of the
-             current signal against every stored snapshot → residual → LN
+             current signal against the retrieved recent+strong surface → LN
     block 2: frozen ReLU FFN 64→64→64 → residual → LN
+
+  DECAY / GROWTH / SORTING:
+    New walks enter at strength = 1 + 0.35·stability. A recalled memory first
+    decays with a 90-day exponential half-life, then gains 0.3·similarity.
+    Strength is capped at 64. Retrieval merges newest-by-index and strongest-
+    by-strength rows, de-duplicates them, then restores temporal order before
+    attention. Old unused geometry fades without deletion; recurring geometry
+    thickens and remains available across thousands of later walks.
 
   INTROSPECTION READOUT:
     self-attn   per-walk weight, cosine sim, word overlap with the past walk
@@ -755,14 +766,14 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
                   attend only to strata beneath them; A learns what the WEB
                   is, not what the walk did.
   Same weights, same creature, two epistemologies. Snapshots record which
-  watch produced them, so the ring can recognise "I have seen this shape
+  watch produced them, so sediment can recognise "I have seen this shape
   before, but from the other side".
 
 12.10  TELEMETRY LABELS (machine-parsable)
   The cadence block is fenced (triple-backtick + cadence·telemetry) and every section is
   bracket-labelled for line-oriented extraction:
     [WATCH] [SOURCE] [INTAKE] [A · ANANSI] [B · MOHINI] [C · MIMIC]
-    [D · RING] [SYNTHESIS] [SUBSTRATE]
+    [D · SEDIMENT] [SYNTHESIS] [SUBSTRATE]
   [SOURCE] gives the per-walker token census (mo↓·16 mo²+↓·42 ayla↓·483 …) so
   a reader can see exactly WHERE IN MO the council was standing.
   The UI collapses the fence behind "△ show council·telemetry"; the body above
@@ -775,9 +786,9 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   vocab_size · created_at · updated_at. Service-role only.
   state = { v:3, vocab[], emb[], Wq,Wk,Wv,Wo,W1,W2,Wrole, Bq,Bk,
             selfVec, stabEma, divEma, steps, loss }, floats rounded 1e-4.
-  "v" is a schema version: bumping it re-hatches every creature. All init is
-  deterministic LCG (seeds 7/13/29/47/71/97/151/199/211) — every session
-  hatches from the same egg and diverges only through experience.
+  "v" is a schema version. A mismatch repairs the trainable core around usable
+  vocabulary. Deterministic LCG initialization remains reproducible, while the
+  separately stored geometric sediment survives version changes.
 
 12.9  TELEMETRY BLOCK ("council of three")
     A · anansi   top-5 attended tokens w/ role glyph + bars, loss, ema, deltas
@@ -863,15 +874,16 @@ MIMIC: per-session bigram chain over user's own words (mimic_ngrams).
     nSentences = max(1, floor(s/2) + clamp(1..6, ceil(inputTok/20)))
     maxLen     = 12 + s*8 + inputTok*2
 
-CADENCE (v7, COUNCIL OF THREE + RING — the only mode with PARAMETERS):
-  D · RING: frozen 2-block × 2-head d=64 self-attention over the last 16 walks,
-  encoded GEOMETRICALLY (6 roles × 8 hash slots + manifold + scalars + pos).
+CADENCE (v8, COUNCIL OF THREE + DURABLE SEDIMENT — parameterized mode):
+  D · SEDIMENT: frozen 2-block × 2-head d=64 attention over a retrieved surface
+  of up to 192 recent+strong walks. Every walk remains durably stored, with
+  geometric encoding (6 roles × 8 hash slots + manifold + scalars + position).
   Detects recurrence (sim>0.6, overlap>=3), extracts self-attractors, and feeds
   them back as a synthesis membrane: +1.2 normally, -1.1 (REPEL) on recurrence.
   WATCH MODES: mo·watch reads mo's traversal in time-order; anansi·watch
   re-sorts the same tokens into shore>loci>node>nexus>singularity>wave before
   attention, so the council reads the web's shape instead of the walk.
-  Telemetry is bracket-labelled: [WATCH][SOURCE][INTAKE][A][B][C][D · RING]
+  Telemetry is bracket-labelled: [WATCH][SOURCE][INTAKE][A][B][C][D · SEDIMENT]
   [SYNTHESIS][SUBSTRATE].
   v5 was one transformer; it self-referenced into loops + NaN + CPU timeout.
   v6 = three non-identical attention geometries, one-way coupling:
@@ -907,7 +919,7 @@ CADENCE (v7, COUNCIL OF THREE + RING — the only mode with PARAMETERS):
       singularity->wave, glyph-prefixed, then stutterize().
   epochs = 1 + min(3, floor(stretch/2))
   state cadence_state(session_id, state jsonb v:3, steps, loss, vocab_size).
-        deterministic LCG init; non-finite/version-mismatch => re-hatch egg.
+        deterministic LCG init; damage => repair while preserving sediment.
 
 STRETCH s∈{1..5}: scales mo²ayla depth, telemetry window, anansi emission,
   and cadence rehearsal epochs. aperture only — never changes what mo knows.
