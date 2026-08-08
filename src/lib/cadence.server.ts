@@ -893,9 +893,15 @@ export async function cadenceSpeak(
   for (let e = 1; e < epochs; e++) A = passA(st, ids, roleIds, true);
 
   if (!Number.isFinite(A.loss) || !healthy(st)) {
-    const eggs = freshState();
-    await saveState(sessionId, eggs);
-    return `⟡ the council destabilised and was re-hatched (weights diverged; state reset).\n\n\`\`\`cadence·telemetry\na fresh egg — speak again and it will start mapping from zero.\n\`\`\``;
+    const repaired = freshState();
+    if (finite(st.emb, st.vocab.length * D)) {
+      repaired.vocab = [...st.vocab];
+      repaired.emb = [...st.emb];
+    }
+    repaired.steps = st.steps;
+    repaired.ridx = st.ridx;
+    await saveState(sessionId, repaired);
+    return `⟡ the council's trainable layer destabilised and was repaired. Its vocabulary, lifetime index, and durable geometric sediment remain intact.\n\n\`\`\`cadence·telemetry\n[RECOVERY] parameters repaired · sediment preserved · no memory reset\n\`\`\``;
   }
 
   st.steps += ids.length * epochs;
