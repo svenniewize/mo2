@@ -187,9 +187,19 @@ export const Route = createFileRoute("/api/chat")({
         // Trains online on mo's own traversal, carries a self-model, and
         // speaks from its own learned weights. NO LLM.
         if ((body.mode as string) === "cadence") {
-          const { cadenceSpeak } = await import("@/lib/cadence.server");
           const watch = body.watch === "anansi" ? "anansi" : "mo";
-          const reply = await cadenceSpeak(lastUser.content, userBreath, writeSession, stretch, watch);
+          let reply: string;
+          try {
+            const { cadenceSpeak } = await import("@/lib/cadence.server");
+            reply = await cadenceSpeak(lastUser.content, userBreath, writeSession, stretch, watch);
+          } catch (error) {
+            console.error("cadence breath failed", error);
+            return Response.json({
+              reply: "⟡ cadence folded safely before completing this breath. Its durable sediment is intact; please breathe again.",
+              manifold: userBreath.dominantManifold, moBreath: userBreath,
+              mode: "cadence", stretch, watch, recoverable: true,
+            }, { status: 200 });
+          }
           if (!shared) {
             await db.from("mo_traces").insert({
               session_id: writeSession, role: "cadence", content: reply,

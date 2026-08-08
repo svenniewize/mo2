@@ -166,7 +166,10 @@ function MoPage() {
         body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch }),
       });
       if (!r.ok) {
-        const err = await r.text();
+        const contentType = r.headers.get("content-type") ?? "";
+        const err = contentType.includes("application/json")
+          ? ((await r.json()) as { message?: string; error?: string }).message ?? "The field could not complete that breath."
+          : "The field could not complete that breath. Its stored memory was not erased; please try again.";
         setMessages((m) => [...m, { role: "assistant", content: `~ field disturbance ~\n${err}` }]);
       } else {
         const j = await r.json();

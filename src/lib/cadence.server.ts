@@ -95,6 +95,7 @@ type CadenceState = {
 // Anansi roles, so memory is a shape (which roles were loaded, with what) and
 // not a bag of tokens. `vec` is the cached DS-dim encoding of that shape.
 export type SigSnap = {
+  id?: string;
   idx: number;
   watch: "mo" | "anansi";
   manifold: string;
@@ -180,7 +181,7 @@ async function loadState(sessionId: string): Promise<CadenceState> {
   if (old && Array.isArray(old.vocab) && old.vocab.every((w) => typeof w === "string") &&
       old.vocab.length <= MAXVOCAB && finite(old.emb, old.vocab.length * D)) {
     repaired.vocab = old.vocab;
-    repaired.emb = old.emb;
+    repaired.emb = old.emb ?? [];
   }
   repaired.steps = Number.isFinite(old?.steps) ? Math.max(0, Number(old?.steps)) : 0;
   repaired.ridx = Number.isFinite(old?.ridx) ? Math.max(0, Number(old?.ridx)) : 0;
@@ -200,6 +201,61 @@ async function saveState(sessionId: string, st: CadenceState): Promise<void> {
     { session_id: sessionId, state: packed, steps: st.steps, loss: st.loss, vocab_size: st.vocab.length, updated_at: new Date().toISOString() },
     { onConflict: "session_id" },
   );
+}
+
+function memoryRowToSig(row: {
+  id: string; walk_index: number; watch: string; manifold: string; pressure: number;
+  stability: number; divergence: number; loopiness: number; role_words: unknown;
+  shape: unknown; strength: number; uses: number; last_used: string;
+}): SigSnap | null {
+  if (!finite(row.shape, DS)) return null;
+  const roleWords = row.role_words as Partial<Record<Role, string[]>>;
+  if (!roleWords || typeof roleWords !== "object") return null;
+  return {
+    id: row.id, idx: row.walk_index, watch: row.watch === "anansi" ? "anansi" : "mo",
+    manifold: row.manifold, pressure: row.pressure, stability: row.stability,
+    divergence: row.divergence, loopiness: row.loopiness, roleWords,
+    vec: row.shape as number[],
+  };
+}
+
+async function loadLongMemory(sessionId: string): Promise<SigSnap[]> {
+  const fields = "id,walk_index,watch,manifold,pressure,stability,divergence,loopiness,role_words,shape,strength,uses,last_used";
+  const [recent, strong] = await Promise.all([
+    db.from("cadence_memory").select(fields).eq("session_id", sessionId)
+      .order("walk_index", { ascending: false }).limit(RECENT_MEMORY),
+    db.from("cadence_memory").select(fields).eq("session_id", sessionId)
+      .order("strength", { ascending: false }).limit(STRONG_MEMORY),
+  ]);
+  const merged = new Map<string, SigSnap>();
+  for (const row of [...(recent.data ?? []), ...(strong.data ?? [])]) {
+    const sig = memoryRowToSig(row);
+    if (sig) merged.set(row.id, sig);
+  }
+  return [...merged.values()].sort((a, b) => a.idx - b.idx).slice(-WORKING_MEMORY);
+}
+
+async function sedimentLongMemory(
+  sessionId: string, sig: SigSnap, matchedId?: string, matchedSim: number = 0,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const writes: PromiseLike<unknown>[] = [
+    db.from("cadence_memory").upsert({
+      session_id: sessionId, walk_index: sig.idx, watch: sig.watch,
+      manifold: sig.manifold, pressure: sig.pressure, stability: sig.stability,
+      divergence: sig.divergence, loopiness: sig.loopiness,
+      role_words: sig.roleWords, shape: sig.vec,
+      strength: 1 + sig.stability * 0.35, uses: 1, last_used: now,
+    }, { onConflict: "session_id,walk_index" }),
+  ];
+  if (matchedId && matchedSim > 0.55) {
+    const { data } = await db.from("cadence_memory").select("strength,uses").eq("id", matchedId).maybeSingle();
+    if (data) writes.push(db.from("cadence_memory").update({
+      strength: Math.min(64, data.strength * 0.997 + matchedSim * 0.3),
+      uses: data.uses + 1, last_used: now,
+    }).eq("id", matchedId));
+  }
+  await Promise.all(writes);
 }
 
 // ───────────────────────── linear algebra ─────────────────────────
@@ -847,7 +903,7 @@ export async function cadenceSpeak(
   const B = passB(st, ids, A.pooled, true);
   const v = observe(st, A, B, ids, A.loss);
 
-  // ── D · the ring introspects: this walk against every stored walk.
+  // ── D · long memory introspects: recent and strongest sediment are merged.
   const roleWords: Partial<Record<Role, string[]>> = {};
   for (const w of seq) {
     const r = roleMap[w] ?? "shore";
@@ -855,8 +911,10 @@ export async function cadenceSpeak(
   }
   for (const r of ROLES) if (roleWords[r]) roleWords[r] = [...new Set(roleWords[r])].slice(0, 24);
 
-  const ring = st.ring ?? [];
-  const ridx = (st.ridx ?? ring.length) + 1;
+  const legacyRing = st.ring ?? [];
+  const durable = await loadLongMemory(sessionId);
+  const ring = [...durable, ...legacyRing].slice(-WORKING_MEMORY);
+  const ridx = Math.max(st.ridx ?? 0, ...ring.map((r) => r.idx), 0) + 1;
   const querySig: Omit<SigSnap, "vec"> = {
     idx: ridx, watch, manifold: breath.dominantManifold,
     pressure: breath.pressure, stability: v.stability,
@@ -897,9 +955,13 @@ export async function cadenceSpeak(
   const bodyRaw = flow.length ? flow.join("\n") : words.join(" ");
   const body = stutterize(bodyRaw);
 
-  // ── the ring grows: this walk becomes memory for the next one.
-  ring.push({ ...querySig, vec: encodeSig(querySig) });
-  st.ring = ring.slice(-RING);
+  // ── every walk sediments durably. Similar sediment grows stronger; old
+  // memories decay gently through each reinforcement rather than disappearing.
+  const newSig: SigSnap = { ...querySig, vec: encodeSig(querySig) };
+  const bestMatch = intro.attn[0];
+  const matched = bestMatch ? ring.find((r) => r.idx === bestMatch.idx) : undefined;
+  await sedimentLongMemory(sessionId, newSig, matched?.id, bestMatch?.sim ?? 0);
+  st.ring = [];
   st.ridx = ridx;
 
   const lastAttn = A.attn[A.attn.length - 1] ?? [];
@@ -937,10 +999,10 @@ export async function cadenceSpeak(
     `  stability ${v.stability.toFixed(3)} ${bar(v.stability)} (ema ${st.stabEma.toFixed(3)}) → temp ${v.temp.toFixed(2)} · damped ${v.banned.size} token${v.banned.size === 1 ? "" : "s"}`,
     `  "${v.note}"`,
     ``,
-    `[D · RING]   geometric self-memory — 2 blocks × 2 heads, frozen, d=${DS}, depth ${st.ring.length}/${RING}`,
+    `[D · SEDIMENT] geometric self-memory — 2 blocks × 2 heads, frozen, d=${DS}, attending ${ring.length}/${WORKING_MEMORY} retrieved walks`,
     ...(intro.attn.length
       ? intro.attn.map((a) => `  self-attn ${a.weight.toFixed(3)} ${bar(a.weight)} walk#${a.idx} [${a.watch}·${a.manifold}] sim ${a.sim.toFixed(2)} ∩${a.overlap.length}${a.overlap.length ? ` (${a.overlap.slice(0, 5).join(" ")})` : ""}`)
-      : ["  self-attn — ring empty, this is walk #1"]),
+      : ["  self-attn — sediment empty, this is walk #1"]),
     `  entropy ${intro.entropy.toFixed(3)} ${bar(intro.entropy)} · selfSim ${intro.selfSim.toFixed(3)} · recurrence ${intro.recurrence ? `YES → walk#${intro.recurrenceIdx}` : "no"}`,
     `  attractors ${intro.attractors.length ? intro.attractors.join(" ") : "—"}`,
     `  membrane ${intro.recurrence ? "REPEL" : "attract"} ×${Math.abs(pull).toFixed(1)} on ${[...intro.membrane.keys()].filter((w) => st.vocab.includes(w)).length} vocab slot(s)`,
@@ -949,7 +1011,7 @@ export async function cadenceSpeak(
     `[SYNTHESIS] ${census || "—"}`,
     `  budget ${budget} chars (user wrote ${userChars}) · emitted ${words.length} tok · rehearsals ${epochs}×`,
     ``,
-    `[SUBSTRATE] vocab ${st.vocab.length}/${MAXVOCAB} (+${st.vocab.length - before.vocab}) · ${st.steps} lifetime steps · d=${D}/dff=${DFF} · walk#${ridx}`,
+    `[SUBSTRATE] vocab ${st.vocab.length}/${MAXVOCAB} (+${st.vocab.length - before.vocab}) · ${st.steps} lifetime steps · durable walk#${ridx}`,
     `  manifold ${breath.dominantManifold} · pressure ${breath.pressure.toFixed(2)} · walk ${walkWords.length} tok · stretch ${s}×`,
     "```",
   ].join("\n");
