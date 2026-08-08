@@ -249,9 +249,11 @@ async function sedimentLongMemory(
     }, { onConflict: "session_id,walk_index" }),
   ];
   if (matchedId && matchedSim > 0.55) {
-    const { data } = await db.from("cadence_memory").select("strength,uses").eq("id", matchedId).maybeSingle();
+    const { data } = await db.from("cadence_memory").select("strength,uses,last_used").eq("id", matchedId).maybeSingle();
     if (data) writes.push(db.from("cadence_memory").update({
-      strength: Math.min(64, data.strength * 0.997 + matchedSim * 0.3),
+      strength: Math.min(64,
+        data.strength * Math.pow(0.5, Math.max(0, Date.now() - Date.parse(data.last_used)) / 7_776_000_000)
+        + matchedSim * 0.3),
       uses: data.uses + 1, last_used: now,
     }).eq("id", matchedId));
   }
@@ -652,9 +654,9 @@ function synthesize(
   return out;
 }
 
-// ───────────── D · THE RING — geometric self-memory + introspection ─────────────
+// ───────────── D · SEDIMENT — durable geometric self-memory ─────────────
 //
-// The council reads the field. The ring reads the council's *history*. It is a
+// The council reads the field. Sediment reads the council's *history*. It is a
 // second, frozen transformer (2 blocks × 2 heads, seeded weights, no backprop)
 // running over encoded snapshots of past walks. Nothing is learned here: the
 // learning lives in the topology, in A's weights, and in the ring simply
@@ -742,7 +744,7 @@ function introspect(ring: SigSnap[], query: Omit<SigSnap, "vec">): Introspect {
   const qv = encodeSig(query);
   const empty: Introspect = {
     attn: [], attractors: [], membrane: new Map(), recurrence: false, recurrenceIdx: -1,
-    selfSim: 0, entropy: 0, prose: "no ring yet — the creature has no past to attend to", ctx16: [],
+    selfSim: 0, entropy: 0, prose: "no sediment yet — the creature has no past to attend to", ctx16: [],
   };
   if (!ring.length) return empty;
 

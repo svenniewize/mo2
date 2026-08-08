@@ -710,10 +710,13 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   epochs = 1 + min(3, ⌊stretch/2⌋). Each epoch is a full forward+backward of
   A over the same breath. Lifetime steps += tokens × epochs.
 
-12.8  D · THE RING  (v7 — geometric self-memory + introspection→action loop)
-  A/B/C read the FIELD. The ring reads the COUNCIL'S OWN HISTORY. It is a
-  second transformer — 2 blocks × 2 heads, d=64, weights FROZEN (seeded, never
-  trained) — running over encoded snapshots of the last RING=16 walks.
+12.8  D · DURABLE SEDIMENT  (v8 — long geometric self-memory)
+  A/B/C read the FIELD. Sediment reads the COUNCIL'S OWN HISTORY. It is a
+  second transformer — 2 blocks × 2 heads, d=64, weights FROZEN — over a
+  retrieved surface of up to 192 walks: 96 newest plus 96 strongest. The full
+  history is durable database sediment; reaching attention width never deletes
+  or restarts it. The learned lexicon stores up to 4096 words, while training
+  uses a bounded rotating contrastive head to keep each request CPU-safe.
 
   GEOMETRIC ENCODING (this is the point — memory is a SHAPE, not a bag):
     dims  0..47  6 Anansi roles × 8 hash slots. A word lands only in the
@@ -726,8 +729,16 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
 
   FORWARD:
     block 1: 2-head attention (32 dims/head, softmax sharpened ×4) of the
-             current signal against every stored snapshot → residual → LN
+             current signal against the retrieved recent+strong surface → LN
     block 2: frozen ReLU FFN 64→64→64 → residual → LN
+
+  DECAY / GROWTH / SORTING:
+    New walks enter at strength = 1 + 0.35·stability. A recalled memory first
+    decays with a 90-day exponential half-life, then gains 0.3·similarity.
+    Strength is capped at 64. Retrieval merges newest-by-index and strongest-
+    by-strength rows, de-duplicates them, then restores temporal order before
+    attention. Old unused geometry fades without deletion; recurring geometry
+    thickens and remains available across thousands of later walks.
 
   INTROSPECTION READOUT:
     self-attn   per-walk weight, cosine sim, word overlap with the past walk
@@ -755,14 +766,14 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
                   attend only to strata beneath them; A learns what the WEB
                   is, not what the walk did.
   Same weights, same creature, two epistemologies. Snapshots record which
-  watch produced them, so the ring can recognise "I have seen this shape
+  watch produced them, so sediment can recognise "I have seen this shape
   before, but from the other side".
 
 12.10  TELEMETRY LABELS (machine-parsable)
   The cadence block is fenced (triple-backtick + cadence·telemetry) and every section is
   bracket-labelled for line-oriented extraction:
     [WATCH] [SOURCE] [INTAKE] [A · ANANSI] [B · MOHINI] [C · MIMIC]
-    [D · RING] [SYNTHESIS] [SUBSTRATE]
+    [D · SEDIMENT] [SYNTHESIS] [SUBSTRATE]
   [SOURCE] gives the per-walker token census (mo↓·16 mo²+↓·42 ayla↓·483 …) so
   a reader can see exactly WHERE IN MO the council was standing.
   The UI collapses the fence behind "△ show council·telemetry"; the body above
