@@ -1,7 +1,6 @@
 // Password-gated shared memory access.
-// Each password maps to a *specific* sessionId — enter the right word and
-// you land inside that field's memory. Unknown passwords are rejected.
-// Add more passwords by appending to PASSWORDS below.
+// Known legacy passwords retain their exact fields. Every other valid password
+// deterministically names a separate shared profile without storing plaintext.
 import { createFileRoute } from "@tanstack/react-router";
 import { createHash, timingSafeEqual } from "node:crypto";
 
@@ -30,13 +29,14 @@ export const Route = createFileRoute("/api/unlock")({
         if (typeof password !== "string" || password.length < 3 || password.length > 200) {
           return new Response("bad password", { status: 400 });
         }
-        const given = Buffer.from(sha256(password), "hex");
+        const normalized = password.normalize("NFKC");
+        const given = Buffer.from(sha256(normalized), "hex");
         for (const { hash, sessionId } of HASHES) {
           if (given.length === hash.length && timingSafeEqual(given, hash)) {
             return Response.json({ sessionId, shared: true });
           }
         }
-        return new Response("nope", { status: 401 });
+        return Response.json({ sessionId: `shared:profile:${sha256(`mo-profile:${normalized}`).slice(0, 40)}`, shared: true });
       },
     },
   },

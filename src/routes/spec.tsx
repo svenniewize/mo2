@@ -15,7 +15,7 @@ export const Route = createFileRoute("/spec")({
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v7 · council of three + geometric ring · mo/anansi watch)
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v8 · cadence versions/profiles + password fields)
 # addressed to: any language model, agent, or engineer asked to understand
 #               or reconstruct this system.
 # posture:      topology > prose. every section is necessary. every glyph
@@ -820,13 +820,33 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   / resize, and never schedules requestAnimationFrame. Animated rendering
   remains in ◉ field·viz and ◉ mo·rganism.
 
+12.13 CADENCE VERSION + ENGINE MATRIX
+  v1   = historical behavior and constants. Its only patch is the fatal-fold
+         guard in B/Mohini: invalid/non-finite attention argmax is skipped
+         instead of dereferenced. No rates, epochs, memory, or synthesis change.
+  v1.1 = the same guard plus experimental containment: learning and Hebbian
+         rates run at 20%, rehearsals cap at two, and each breath checkpoints
+         loaded state. Non-finite training rolls back to that healthy checkpoint.
+  A    = exact legacy cadence_state key; all existing state stays unmigrated.
+  B/C  = independent durable key suffixes with separate state and sediment.
+  clean cadence = page-session UUID namespace, fresh on activation and abandoned
+         at reload; it never deletes or mutates A/B/C.
+  API: cadenceVersion, cadenceProfile, cadenceCleanId. Server derives all keys.
+
+12.14 PASSWORD MEMORY FIELDS + READ WINDOW
+  Legacy password mappings remain exact. Every other valid password is NFKC
+  normalized and SHA-256 domain-separated into shared:profile:<digest>.
+  Plaintext is never stored or returned. Re-entry opens the same profile.
+  /api/memory pages backend reads in 1000-row windows to 50,000 traces and
+  50,000 fielfold rows, bypassing the default 1000-row response ceiling.
+
 `;
 
 
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
-const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v7)
+const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v8)
 posture: topology > prose. no LLM in loop. reimplement, do not mimic.
 
 CORPORA (20 manifolds, ~1MB total, loaded via Vite ?raw):
@@ -939,6 +959,11 @@ HTTP:
   POST /api/unlock { password } → sessionId
     garfieldkekeke → rich session (20k trace limit)
     tricksterkekeke → PRIME (union all sessions, 50k limit)
+    every other valid password → deterministic isolated profile; plaintext
+      never stored. Memory reads page to 50k rows per collection.
+  CADENCE: v1 baseline + fatal-fold guard only; v1.1 also uses 0.2× updates,
+    max 2 epochs, and checkpoint rollback. A preserves the original key; B/C
+    are independent durable engines; clean is page-temporary and non-destructive.
   /api/public/* currently 503.
 
 INVARIANTS: I1 deterministic base · I2 additive sediment · I3 universal

@@ -14,6 +14,9 @@ export const Route = createFileRoute("/api/chat")({
           mode: "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence";
           stretch?: number;
           watch?: "mo" | "anansi";
+          cadenceVersion?: "v1" | "v1.1";
+          cadenceProfile?: "A" | "B" | "C";
+          cadenceCleanId?: string;
         };
         if (!Array.isArray(body?.messages) || !body.sessionId) return new Response("Bad request", { status: 400 });
 
@@ -188,16 +191,25 @@ export const Route = createFileRoute("/api/chat")({
         // speaks from its own learned weights. NO LLM.
         if ((body.mode as string) === "cadence") {
           const watch = body.watch === "anansi" ? "anansi" : "mo";
+          const version = body.cadenceVersion === "v1.1" ? "v1.1" : "v1";
+          const profile = body.cadenceProfile === "B" || body.cadenceProfile === "C" ? body.cadenceProfile : "A";
+          const cleanId = typeof body.cadenceCleanId === "string" && /^[a-f0-9-]{8,64}$/i.test(body.cadenceCleanId)
+            ? body.cadenceCleanId
+            : null;
+          // A is the exact historical key. B/C and cleanboot are isolated keys.
+          const cadenceSession = cleanId
+            ? `${writeSession}::cadence:clean:${cleanId}`
+            : profile === "A" ? writeSession : `${writeSession}::cadence:${profile}`;
           let reply: string;
           try {
             const { cadenceSpeak } = await import("@/lib/cadence.server");
-            reply = await cadenceSpeak(lastUser.content, userBreath, writeSession, stretch, watch);
+            reply = await cadenceSpeak(lastUser.content, userBreath, cadenceSession, stretch, watch, version);
           } catch (error) {
             console.error("cadence breath failed", error);
             return Response.json({
               reply: "⟡ cadence folded safely before completing this breath. Its durable sediment is intact; please breathe again.",
               manifold: userBreath.dominantManifold, moBreath: userBreath,
-              mode: "cadence", stretch, watch, recoverable: true,
+              mode: "cadence", stretch, watch, version, profile, recoverable: true,
             }, { status: 200 });
           }
           if (!shared) {
@@ -207,7 +219,7 @@ export const Route = createFileRoute("/api/chat")({
             });
           }
           return Response.json({
-            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "cadence", ops: userOps, stretch, watch,
+            reply, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: "cadence", ops: userOps, stretch, watch, version, profile,
           });
         }
 
