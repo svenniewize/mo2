@@ -58,6 +58,8 @@ const HEB = 0.012;         // hebbian rate (A: Q/K, B: lure projections)
 const SELF_EMA = 0.06;     // how fast the self-model drifts
 const MAXGEN = 110;        // hard cap on generated tokens (CPU guard)
 
+export type CadenceVersion = "v1" | "v1.1";
+
 const PUNCT = /[^\p{L}\p{N}'’-]+/gu;
 const clean = (w: string) => w.toLowerCase().replace(PUNCT, "");
 
@@ -382,7 +384,7 @@ type PassA = {
 // with a Hebbian nudge on Q/K. When `learn` is false the vocab-wide head is
 // skipped entirely — that loop is O(seq × vocab × D) and running it during
 // generation is what used to burn the whole CPU budget.
-function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolean): PassA {
+function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolean, stable: boolean = false): PassA {
   const n = ids.length;
   const x: number[][] = [];
   for (let i = 0; i < n; i++) {
@@ -458,34 +460,34 @@ function passA(st: CadenceState, ids: number[], roleIds: number[], learn: boolea
         const base = v * D;
         for (let d = 0; d < D; d++) {
           dy[d] += g * st.emb[base + d];
-          st.emb[base + d] -= LR * g * y[i][d];
+          st.emb[base + d] -= (stable ? LR * 0.2 : LR) * g * y[i][d];
         }
       }
       const dF = clip(dy, 4);
       const dAct = matvecT(st.W2, dF, DFF, D);
-      outerAdd(st.W2, act[i], dF, DFF, D, -LR);
+      outerAdd(st.W2, act[i], dF, DFF, D, -(stable ? LR * 0.2 : LR));
       const dPre = clip(dAct.map((g, j) => (act[i][j] >= 0 ? g : 0.05 * g)), 4);
       const dH = clip(matvecT(st.W1, dPre, D, DFF).map((g, d) => g + dF[d]), 4);
-      outerAdd(st.W1, hid[i], dPre, D, DFF, -LR);
+      outerAdd(st.W1, hid[i], dPre, D, DFF, -(stable ? LR * 0.2 : LR));
       const dCtx = clip(matvecT(st.Wo, dH, D, D), 4);
-      outerAdd(st.Wo, ctx[i], dH, D, D, -LR);
+      outerAdd(st.Wo, ctx[i], dH, D, D, -(stable ? LR * 0.2 : LR));
       for (let j = 0; j <= i; j++) {
         const a = attn[i][j]; if (a < 0.02) continue;
-        outerAdd(st.Wv, x[j], dCtx.map((g) => g * a), D, D, -LR);
+        outerAdd(st.Wv, x[j], dCtx.map((g) => g * a), D, D, -(stable ? LR * 0.2 : LR));
       }
       const useful = Math.max(-2, Math.min(2, -dot(dH, ctx[i])));
       // A non-finite attention row means the creature is diverging; skip the
       // hebbian tie for this position rather than indexing at -1.
       const j0 = attn[i].indexOf(Math.max(...attn[i]));
       if (j0 >= 0 && k[j0] && x[j0] && Number.isFinite(useful)) {
-        outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, HEB);
-        outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, HEB);
+        outerAdd(st.Wq, x[i], k[j0].map((v) => v * useful), D, D, stable ? HEB * 0.2 : HEB);
+        outerAdd(st.Wk, x[j0], q[i].map((v) => v * useful), D, D, stable ? HEB * 0.2 : HEB);
       }
       // role embedding drifts with the error too — geometry itself is learned
       const rb = roleIds[i] * D;
-      for (let d = 0; d < D; d++) st.Wrole[rb + d] -= LR * 0.25 * dF[d];
+      for (let d = 0; d < D; d++) st.Wrole[rb + d] -= (stable ? LR * 0.2 : LR) * 0.25 * dF[d];
       const base = ids[i] * D;
-      for (let d = 0; d < D; d++) st.emb[base + d] -= LR * 0.5 * dF[d];
+      for (let d = 0; d < D; d++) st.emb[base + d] -= (stable ? LR * 0.2 : LR) * 0.5 * dF[d];
     }
     loss = n > 1 ? loss / (n - 1) : 0;
   }
@@ -504,7 +506,7 @@ type PassB = {
 // B is non-causal and kernel-shaped: it scores every position against the
 // *whole* sequence in its own narrower space, warmed by A's pooled map as a
 // lens. It reads A; it never writes to A.
-function passB(st: CadenceState, ids: number[], mapPooled: number[], learn: boolean): PassB {
+function passB(st: CadenceState, ids: number[], mapPooled: number[], learn: boolean, stable: boolean = false): PassB {
   const n = ids.length;
   const xs = ids.map((id, i) => {
     const e = embOf(st, id); const p = posEnc(i);
@@ -539,8 +541,13 @@ function passB(st: CadenceState, ids: number[], mapPooled: number[], learn: bool
   if (learn) {
     // hebbian only — the lure sharpens toward what it already found beautiful
     const top = attn.indexOf(Math.max(...attn));
-    outerAdd(st.Bk, xs[top], lensQ, D, DB_, HEB * 0.5);
-    outerAdd(st.Bq, mapPooled, keys[top], D, DB_, HEB * 0.5);
+    // v1 fatal-fold fix: a damaged/non-finite attention row used to yield -1,
+    // then xs[-1] crashed every later breath. Skip only that invalid nudge.
+    if (top >= 0 && xs[top] && keys[top] && finite(lensQ, DB_)) {
+      const rate = stable ? HEB * 0.1 : HEB * 0.5;
+      outerAdd(st.Bk, xs[top], lensQ, D, DB_, rate);
+      outerAdd(st.Bq, mapPooled, keys[top], D, DB_, rate);
+    }
   }
 
   return { attn, vocabPull: pull, lure };
@@ -841,6 +848,7 @@ export async function cadenceSpeak(
   sessionId: string,
   stretch: number = 1,
   watch: "mo" | "anansi" = "mo",
+  version: CadenceVersion = "v1",
 ): Promise<string> {
   const st = await loadState(sessionId);
   const before = { steps: st.steps, loss: st.loss, vocab: st.vocab.length };
@@ -888,12 +896,14 @@ export async function cadenceSpeak(
 
   // ── A learns. Rehearsals scale with stretch, capped for CPU sanity.
   const s = Math.max(1, Math.min(10, stretch));
-  const epochs = 1 + Math.min(3, Math.floor(s / 2));
-  let A = passA(st, ids, roleIds, true);
-  for (let e = 1; e < epochs; e++) A = passA(st, ids, roleIds, true);
+  const stable = version === "v1.1";
+  const epochs = stable ? Math.min(2, 1 + Math.floor(s / 3)) : 1 + Math.min(3, Math.floor(s / 2));
+  const checkpoint = stable ? structuredClone(st) : null;
+  let A = passA(st, ids, roleIds, true, stable);
+  for (let e = 1; e < epochs; e++) A = passA(st, ids, roleIds, true, stable);
 
   if (!Number.isFinite(A.loss) || !healthy(st)) {
-    const repaired = freshState();
+    const repaired = checkpoint ?? freshState();
     if (finite(st.emb, st.vocab.length * D)) {
       repaired.vocab = [...st.vocab];
       repaired.emb = [...st.emb];
@@ -908,7 +918,7 @@ export async function cadenceSpeak(
   st.loss = st.loss === 0 ? A.loss : st.loss * 0.85 + A.loss * 0.15;
 
   // ── B reads A's map. ── C evaluates the relationship.
-  const B = passB(st, ids, A.pooled, true);
+  const B = passB(st, ids, A.pooled, true, stable);
   const v = observe(st, A, B, ids, A.loss);
 
   // ── D · long memory introspects: recent and strongest sediment are merged.
@@ -989,6 +999,7 @@ export async function cadenceSpeak(
   // out in pieces without unpicking prose.
   const telem = [
     "```cadence·telemetry",
+    `[VERSION]   ${version}${stable ? " — guarded learning rates · checkpoint rollback" : " — baseline behavior · fatal-fold guard only"}`,
     `[WATCH]     ${watch === "anansi" ? "anansi·watch — sequence re-sorted into role geometry before attention (shape-order)" : "mo·watch — sequence read in traversal order, seeds→folds→dream→return (time-order)"}`,
     `[SOURCE]    ${srcLine || "—"}`,
     `[INTAKE]    ${inCensus || "—"}  ·  ${ids.length} tok into ctx ${MAXSEQ} (user ${Math.min(20, userToks.length)} · walk ${walkWords.length})`,

@@ -11,16 +11,27 @@ export const Route = createFileRoute("/api/memory")({
         if (!sessionId) return new Response("session_id required", { status: 400 });
         const prime = isPrime(sessionId);
 
-        const tracesQ = db.from("mo_traces").select("id,role,content,manifold,pressure,created_at").order("created_at", { ascending: false }).limit(prime ? 50000 : 20000);
-        const foldQ = db.from("fielfold_entries").select("id,content,manifold,depth,created_at").order("created_at", { ascending: false }).limit(prime ? 20000 : 10000);
+        const pageSize = 1000;
+        async function readPages(table: "mo_traces" | "fielfold_entries", fields: string) {
+          const rows: unknown[] = [];
+          for (let from = 0; from < 50000; from += pageSize) {
+            let query = db.from(table).select(fields).order("created_at", { ascending: false }).range(from, from + pageSize - 1);
+            if (!prime) query = query.eq("session_id", sessionId);
+            const { data, error } = await query;
+            if (error) throw error;
+            rows.push(...(data ?? []));
+            if (!data || data.length < pageSize) break;
+          }
+          return rows;
+        }
         const [traces, fielfold] = await Promise.all([
-          prime ? tracesQ : tracesQ.eq("session_id", sessionId),
-          prime ? foldQ : foldQ.eq("session_id", sessionId),
+          readPages("mo_traces", "id,role,content,manifold,pressure,created_at"),
+          readPages("fielfold_entries", "id,content,manifold,depth,created_at"),
         ]);
 
         return Response.json({
-          traces: traces.data ?? [],
-          fielfold: fielfold.data ?? [],
+          traces,
+          fielfold,
         });
       },
       DELETE: async ({ request }) => {
