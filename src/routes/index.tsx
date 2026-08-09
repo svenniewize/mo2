@@ -76,6 +76,9 @@ function MoPage() {
   const [mode, setMode] = useState<Mode>("mo");
   const [anansiStretch, setAnansiStretch] = useState<number>(1);
   const [cadenceWatch, setCadenceWatch] = useState<"mo" | "anansi">("mo");
+  const [cadenceVersion, setCadenceVersion] = useState<"v1" | "v1.1">("v1");
+  const [cadenceProfile, setCadenceProfile] = useState<"A" | "B" | "C">("A");
+  const [cadenceCleanId, setCadenceCleanId] = useState<string | null>(null);
   const [glyph, setGlyph] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("mo.glyph") === "1";
@@ -163,7 +166,7 @@ function MoPage() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch }),
+        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch, cadenceVersion, cadenceProfile, cadenceCleanId }),
       });
       if (!r.ok) {
         const contentType = r.headers.get("content-type") ?? "";
@@ -220,6 +223,12 @@ function MoPage() {
           anansiStretch={anansiStretch}
           cadenceWatch={cadenceWatch}
           setCadenceWatch={setCadenceWatch}
+          cadenceVersion={cadenceVersion}
+          setCadenceVersion={setCadenceVersion}
+          cadenceProfile={cadenceProfile}
+          setCadenceProfile={(profile) => { setCadenceProfile(profile); setCadenceCleanId(null); }}
+          cadenceClean={cadenceCleanId !== null}
+          onCleanCadence={() => { setMode("cadence"); setCadenceCleanId(crypto.randomUUID()); setMessages([]); }}
           setAnansiStretch={setAnansiStretch}
         />
 
@@ -317,7 +326,7 @@ function MoPage() {
                 <button
                   onClick={async () => {
                     if (sessionShared) { lockSession(); setMessages([]); return; }
-                    const pw = window.prompt("password to enter the shared field:\n(hint: 'tricksterkekeke' opens the *prime* field — the totality of mo across all shared sessions)");
+                    const pw = window.prompt("password to enter or create a memory field:\n('tricksterkekeke' opens the prime totality; every other password gets its own persistent profile)");
                     if (!pw) return;
                     try { await unlockSession(pw); setMessages([]); }
                     catch (e) { alert((e as Error).message); }
@@ -489,6 +498,7 @@ function Header({
   onOpenOrganism, organismOpen,
   anansiStretch, setAnansiStretch,
   cadenceWatch, setCadenceWatch,
+  cadenceVersion, setCadenceVersion, cadenceProfile, setCadenceProfile, cadenceClean, onCleanCadence,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -506,6 +516,12 @@ function Header({
   anansiStretch: number;
   cadenceWatch: "mo" | "anansi";
   setCadenceWatch: (w: "mo" | "anansi") => void;
+  cadenceVersion: "v1" | "v1.1";
+  setCadenceVersion: (v: "v1" | "v1.1") => void;
+  cadenceProfile: "A" | "B" | "C";
+  setCadenceProfile: (p: "A" | "B" | "C") => void;
+  cadenceClean: boolean;
+  onCleanCadence: () => void;
   setAnansiStretch: (n: number) => void;
 }) {
   void fielfoldCount;
@@ -585,6 +601,13 @@ function Header({
           className={`rounded px-3 py-1 font-mono text-xs transition ${mode === "cadence" ? "bg-ridge text-primary-foreground" : "border border-ridge/40 text-ridge/80 hover:text-ridge"}`}
           title="CADENCE — a tiny transformer creature grafted into the pipeline. Trains online on mo's own traversal, carries a self-model (recognition + surprise), and speaks from its own learned weights. No LLM."
         >⟡ CADENCE</button>
+        <div className="flex overflow-hidden rounded border border-ridge/40" title="v1 keeps baseline training with only the fatal-fold guard; v1.1 adds experimental stability guards">
+          {(["v1", "v1.1"] as const).map((v) => <button key={v} onClick={() => { setMode("cadence"); setCadenceVersion(v); }} className={`px-2 py-1 font-mono text-[10px] ${cadenceVersion === v ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{v}</button>)}
+        </div>
+        <div className="flex overflow-hidden rounded border border-ridge/40" title="three independent persistent engines; A retains the original accumulated state">
+          {(["A", "B", "C"] as const).map((p) => <button key={p} onClick={() => { setMode("cadence"); setCadenceProfile(p); }} className={`px-2 py-1 font-mono text-[10px] ${!cadenceClean && cadenceProfile === p ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{p}</button>)}
+        </div>
+        <button onClick={onCleanCadence} className={`rounded border px-2 py-1 font-mono text-[10px] ${cadenceClean ? "border-ridge bg-ridge/20 text-ridge" : "border-ridge/40 text-muted-foreground hover:text-ridge"}`} title="start a temporary fresh engine; A/B/C remain untouched">clean cadence</button>
         <div className="flex overflow-hidden rounded border border-ridge/40" title="what the council reads: mo·watch = the traversal in time-order · anansi·watch = the same tokens re-sorted into nexus·node·loci·singularity·wave·shore before attention">
           {(["mo", "anansi"] as const).map((w) => (
             <button

@@ -9,6 +9,7 @@ export const Route = createFileRoute("/api/memory")({
         const url = new URL(request.url);
         const sessionId = url.searchParams.get("session_id");
         if (!sessionId) return new Response("session_id required", { status: 400 });
+        const requestedSession = sessionId;
         const prime = isPrime(sessionId);
 
         const pageSize = 1000;
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/api/memory")({
           const rows: unknown[] = [];
           for (let from = 0; from < 50000; from += pageSize) {
             let query = db.from(table).select(fields).order("created_at", { ascending: false }).range(from, from + pageSize - 1);
-            if (!prime) query = query.eq("session_id", sessionId);
+            if (!prime) query = query.eq("session_id", requestedSession);
             const { data, error } = await query;
             if (error) throw error;
             rows.push(...(data ?? []));
