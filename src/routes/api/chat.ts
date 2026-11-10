@@ -11,7 +11,9 @@ export const Route = createFileRoute("/api/chat")({
         const body = (await request.json()) as {
           messages: ChatMsg[];
           sessionId: string;
-          mode: "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence";
+          mode: "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence" | "cadence-brain";
+          talkytalk?: boolean;
+          brainState?: unknown;
           stretch?: number;
           watch?: "mo" | "anansi";
           cadenceVersion?: "v1" | "v1.1";
@@ -189,7 +191,7 @@ export const Route = createFileRoute("/api/chat")({
         // ── CADENCE MODE — a tiny transformer creature grafted onto mo.
         // Trains online on mo's own traversal, carries a self-model, and
         // speaks from its own learned weights. NO LLM.
-        if ((body.mode as string) === "cadence") {
+        if (body.mode === "cadence" || body.mode === "cadence-brain") {
           const watch = body.watch === "anansi" ? "anansi" : "mo";
           const version = body.cadenceVersion === "v1.1" ? "v1.1" : "v1";
           const profile = body.cadenceProfile === "B" || body.cadenceProfile === "C" ? body.cadenceProfile : "A";
@@ -200,6 +202,17 @@ export const Route = createFileRoute("/api/chat")({
           const cadenceSession = cleanId
             ? `${writeSession}::cadence:clean:${cleanId}`
             : profile === "A" ? writeSession : `${writeSession}::cadence:${profile}`;
+          if (body.mode === "cadence-brain") {
+            try {
+              const { cadenceBrain } = await import("@/lib/cadence-brain.server");
+              const result = await cadenceBrain(lastUser.content, userBreath, cadenceSession, watch, body.talkytalk !== false, !!cleanId, body.brainState);
+              if (!cleanId && !shared) await db.from("mo_traces").insert({ session_id: writeSession, role: "cadence-brain", content: `${result.reply}\n\n${result.telemetry}`, manifold: userBreath.dominantManifold, pressure: userBreath.pressure });
+              return Response.json({ ...result, manifold: userBreath.dominantManifold, moBreath: userBreath, mode: body.mode, stretch, profile });
+            } catch (error) {
+              console.error("cadence brain failed", error);
+              return Response.json({ message: "Cadence Brain could not complete this turn; its saved profile was not reset." }, { status: 500 });
+            }
+          }
           let reply: string;
           try {
             const { cadenceSpeak } = await import("@/lib/cadence.server");

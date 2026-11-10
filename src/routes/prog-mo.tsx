@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { PROG_MANIFOLDS } from "@/lib/prog-manifolds";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/prog-mo")({
   head: () => ({
@@ -50,6 +51,7 @@ function ProgMoPage() {
   const [stretch, setStretch] = useState(1);
   const [blend, setBlend] = useState(false);
   const [v2, setV2] = useState(false);
+  const [talkytalk, setTalkytalk] = useState(true);
 
   const [expandAll, setExpandAll] = useState(false);
   const [openTel, setOpenTel] = useState<Record<number, boolean>>({});
@@ -80,10 +82,12 @@ function ProgMoPage() {
     try {
       const r = await fetch("/api/prog-mo", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: text, sessionId, stretch, blendIntoMo: blend, v2 }),
+        body: JSON.stringify({ input: text, sessionId, stretch, blendIntoMo: blend, v2, talkytalk }),
       });
       if (!r.ok) {
-        const errText = await r.text();
+        const errText = r.headers.get("content-type")?.includes("application/json")
+          ? (await r.json()).message ?? "The field could not finish this turn."
+          : "The field could not finish this turn. Please try again.";
         setMessages((m) => [...m, { role: "prog-mo", content: `~ prog-mo disturbance ~ ${errText}` }]);
       } else {
         const { breath } = await r.json();
@@ -123,6 +127,8 @@ function ProgMoPage() {
             </button>
           ))}
           <span className="mx-1">·</span>
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={talkytalk} onChange={(e) => setTalkytalk(e.target.checked)} />talkytalk</label>
+          <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(messages.map((m) => `\\${m.role}::\n${m.content}${m.breath ? `\n\n[TELEMETRY]\n${m.breath.telemetry}` : ""}`).join("\n\n"))}>⧉ copy all + tel</Button>
           <button onClick={() => setV2((v) => !v)}
             className={`rounded border px-2 py-0.5 ${v2 ? "border-ridge text-ridge" : "border-border hover:border-ridge/50"}`}
             title="v2: clone all mo manifolds as terrain; prog manifolds become operators">
@@ -141,7 +147,7 @@ function ProgMoPage() {
       </header>
 
       <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 gap-4 p-4 lg:grid-cols-[1fr_320px]">
-        <main className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card/60 backdrop-blur">
+        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card/60 backdrop-blur">
 
           <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
             {messages.length === 0 && (

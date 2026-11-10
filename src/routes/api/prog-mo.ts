@@ -5,19 +5,25 @@ export const Route = createFileRoute("/api/prog-mo")({
     handlers: {
       POST: async ({ request }) => {
         const body = (await request.json()) as {
-          input: string; sessionId: string; stretch?: number; blendIntoMo?: boolean; v2?: boolean;
+          input: string; sessionId: string; stretch?: number; blendIntoMo?: boolean; v2?: boolean; talkytalk?: boolean;
         };
         if (!body?.input || !body?.sessionId) return new Response("bad request", { status: 400 });
         const { progMoBreathe } = await import("@/lib/prog-mo.server");
         const { db } = await import("@/lib/db.server");
         const stretch = Math.max(1, Math.min(5, body.stretch ?? 1));
-        const breath = await progMoBreathe(body.input, body.sessionId, stretch, !!body.blendIntoMo, !!body.v2);
+        let breath;
+        try {
+          breath = await progMoBreathe(body.input, body.sessionId, stretch, !!body.blendIntoMo, !!body.v2, !!body.talkytalk);
+        } catch (error) {
+          console.error("prog-mo growth failed", error);
+          return Response.json({ message: "prog-mo could not complete this turn; saved structural memory was not reset." }, { status: 500 });
+        }
 
         // record a trace so the message appears in memory
         try {
           await db.from("mo_traces").insert({
             session_id: body.sessionId, role: "prog-mo",
-            content: breath.cycle4_reply, manifold: breath.cycle1_pressure[0]?.manifold ?? null, pressure: 0.5,
+            content: `${breath.cycle4_reply}\n\n${breath.telemetry}`, manifold: breath.cycle1_pressure[0]?.manifold ?? null, pressure: 0.5,
           });
         } catch {}
         return Response.json({ breath });

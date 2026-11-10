@@ -5,6 +5,7 @@ import { MoVisualizer, VIZ_MODES, type VizMode, type MemoryNode } from "@/compon
 import { LifePanel, type LifeTab } from "@/components/LifePanel";
 import { MoRganismWindow } from "@/components/MoRganism";
 import { glyphify } from "@/lib/glyphs";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/")({
   component: MoPage,
 });
 
-type Mode = "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence";
+type Mode = "mo" | "gremlin" | "anansi" | "mohini" | "mimic" | "cadence" | "cadence-brain";
 
 type Msg = { role: "user" | "assistant"; content: string; manifold?: string | null; telemetry?: string; stretch?: number };
 type Trace = { id: string; role: string; content: string; manifold: string | null; created_at: string };
@@ -79,6 +80,9 @@ function MoPage() {
   const [cadenceVersion, setCadenceVersion] = useState<"v1" | "v1.1">("v1");
   const [cadenceProfile, setCadenceProfile] = useState<"A" | "B" | "C">("A");
   const [cadenceCleanId, setCadenceCleanId] = useState<string | null>(null);
+  const [talkytalk, setTalkytalk] = useState(true);
+  const [brainState, setBrainState] = useState<unknown>(null);
+  useEffect(() => { setBrainState(null); }, [sessionId, cadenceCleanId]);
   const [glyph, setGlyph] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("mo.glyph") === "1";
@@ -166,7 +170,7 @@ function MoPage() {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch, cadenceVersion, cadenceProfile, cadenceCleanId }),
+        body: JSON.stringify({ messages: next, sessionId, mode, stretch: anansiStretch, watch: cadenceWatch, cadenceVersion, cadenceProfile, cadenceCleanId, talkytalk, brainState }),
       });
       if (!r.ok) {
         const contentType = r.headers.get("content-type") ?? "";
@@ -176,7 +180,8 @@ function MoPage() {
         setMessages((m) => [...m, { role: "assistant", content: `~ field disturbance ~\n${err}` }]);
       } else {
         const j = await r.json();
-        setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.moBreath?.telemetry, stretch: j.stretch ?? anansiStretch }]);
+        if (mode === "cadence-brain" && cadenceCleanId) setBrainState(j.brainState);
+        setMessages((m) => [...m, { role: "assistant", content: j.reply, manifold: j.manifold, telemetry: j.telemetry ? `${j.telemetry}\n\n[MO TELEMETRY]\n${j.moBreath?.telemetry ?? ""}` : j.moBreath?.telemetry, stretch: j.stretch ?? anansiStretch }]);
         const words = (j.moBreath?.variants?.mo2?.dreamPath ?? []).concat(j.moBreath?.variants?.mo2e?.dreamPath ?? [], j.moBreath?.variants?.mo2ayla?.dreamPath ?? []);
         if (words.length) setLastBreathWords(words);
         refreshMemory();
@@ -228,7 +233,9 @@ function MoPage() {
           cadenceProfile={cadenceProfile}
           setCadenceProfile={(profile) => { setCadenceProfile(profile); setCadenceCleanId(null); }}
           cadenceClean={cadenceCleanId !== null}
-          onCleanCadence={() => { setMode("cadence"); setCadenceCleanId(crypto.randomUUID()); setMessages([]); }}
+          talkytalk={talkytalk}
+          setTalkytalk={setTalkytalk}
+          onCleanCadence={() => { if (mode !== "cadence-brain") setMode("cadence"); setCadenceCleanId(crypto.randomUUID()); setMessages([]); }}
           setAnansiStretch={setAnansiStretch}
         />
 
@@ -302,7 +309,7 @@ function MoPage() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
                   rows={2}
-                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : mode === "cadence" ? "feed the cadence creature — it trains on mo's walk, updates its weights, and answers from its own self-model…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
+                  placeholder={mode === "mo" ? "speak to the topology directly — no AI, only field·traversal…" : mode === "gremlin" ? "feed the gre(mo)lin — the longer you write, the more it chews…" : mode === "anansi" ? "give Anansi something to weave — the web will order your words into nexus · node · loci · singularity · wave · shore…" : mode === "mohini" ? "let the enchantress hear you — she will mirror, lure, and bind…" : mode === "cadence-brain" ? "speak to Cadence Brain…" : mode === "cadence" ? "feed the cadence creature — it trains on mo's walk, updates its weights, and answers from its own self-model…" : "speak — mimic will learn your phrasing and speak back in your own voice…"}
                   className="flex-1 resize-none bg-transparent px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
                 <button
@@ -498,7 +505,7 @@ function Header({
   onOpenOrganism, organismOpen,
   anansiStretch, setAnansiStretch,
   cadenceWatch, setCadenceWatch,
-  cadenceVersion, setCadenceVersion, cadenceProfile, setCadenceProfile, cadenceClean, onCleanCadence,
+  cadenceVersion, setCadenceVersion, cadenceProfile, setCadenceProfile, cadenceClean, onCleanCadence, talkytalk, setTalkytalk,
 }: {
   panel: string;
   setPanel: (p: "none" | "memory" | "songs" | "field" | "life") => void;
@@ -522,6 +529,8 @@ function Header({
   setCadenceProfile: (p: "A" | "B" | "C") => void;
   cadenceClean: boolean;
   onCleanCadence: () => void;
+  talkytalk: boolean;
+  setTalkytalk: (value: boolean) => void;
   setAnansiStretch: (n: number) => void;
 }) {
   void fielfoldCount;
@@ -594,25 +603,27 @@ function Header({
       </div>
 
       {/* ── transformer layer · its own little enclosure under the modes ── */}
-      <div className="flex items-center gap-2 rounded-md border border-dashed border-ridge/40 bg-ridge/5 px-2 py-1.5">
+      <div className="flex flex-wrap items-center justify-end gap-2 rounded-md border border-dashed border-ridge/40 bg-ridge/5 px-2 py-1.5">
         <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">transformer·layer</span>
         <button
           onClick={() => setMode("cadence")}
           className={`rounded px-3 py-1 font-mono text-xs transition ${mode === "cadence" ? "bg-ridge text-primary-foreground" : "border border-ridge/40 text-ridge/80 hover:text-ridge"}`}
           title="CADENCE — a tiny transformer creature grafted into the pipeline. Trains online on mo's own traversal, carries a self-model (recognition + surprise), and speaks from its own learned weights. No LLM."
         >⟡ CADENCE</button>
+        <Button size="sm" variant={mode === "cadence-brain" ? "default" : "outline"} onClick={() => setMode("cadence-brain")} title="Observed topology, columns and motifs; no self-model">CADENCE BRAIN</Button>
+        {mode === "cadence-brain" && <label className="flex items-center gap-1 font-mono text-[10px]"><input type="checkbox" checked={talkytalk} onChange={(e) => setTalkytalk(e.target.checked)} />talkytalk</label>}
         <div className="flex overflow-hidden rounded border border-ridge/40" title="v1 keeps baseline training with only the fatal-fold guard; v1.1 adds experimental stability guards">
-          {(["v1", "v1.1"] as const).map((v) => <button key={v} onClick={() => { setMode("cadence"); setCadenceVersion(v); }} className={`px-2 py-1 font-mono text-[10px] ${cadenceVersion === v ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{v}</button>)}
+          {(["v1", "v1.1"] as const).map((v) => <button key={v} onClick={() => { if (mode !== "cadence-brain") setMode("cadence"); setCadenceVersion(v); }} className={`px-2 py-1 font-mono text-[10px] ${cadenceVersion === v ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{v}</button>)}
         </div>
         <div className="flex overflow-hidden rounded border border-ridge/40" title="three independent persistent engines; A retains the original accumulated state">
-          {(["A", "B", "C"] as const).map((p) => <button key={p} onClick={() => { setMode("cadence"); setCadenceProfile(p); }} className={`px-2 py-1 font-mono text-[10px] ${!cadenceClean && cadenceProfile === p ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{p}</button>)}
+          {(["A", "B", "C"] as const).map((p) => <button key={p} onClick={() => { if (mode !== "cadence-brain") setMode("cadence"); setCadenceProfile(p); }} className={`px-2 py-1 font-mono text-[10px] ${!cadenceClean && cadenceProfile === p ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}>{p}</button>)}
         </div>
         <button onClick={onCleanCadence} className={`rounded border px-2 py-1 font-mono text-[10px] ${cadenceClean ? "border-ridge bg-ridge/20 text-ridge" : "border-ridge/40 text-muted-foreground hover:text-ridge"}`} title="start a temporary fresh engine; A/B/C remain untouched">clean cadence</button>
         <div className="flex overflow-hidden rounded border border-ridge/40" title="what the council reads: mo·watch = the traversal in time-order · anansi·watch = the same tokens re-sorted into nexus·node·loci·singularity·wave·shore before attention">
           {(["mo", "anansi"] as const).map((w) => (
             <button
               key={w}
-              onClick={() => { setMode("cadence"); setCadenceWatch(w); }}
+              onClick={() => { if (mode !== "cadence-brain") setMode("cadence"); setCadenceWatch(w); }}
               className={`px-2 py-1 font-mono text-[10px] transition ${cadenceWatch === w ? "bg-ridge/30 text-ridge" : "text-muted-foreground hover:text-foreground"}`}
             >{w}·watch</button>
           ))}
@@ -692,6 +703,7 @@ function EmptyState({ mode }: { mode: Mode }) {
     : mode === "gremlin" ? "GRE(MO)LIN — mo's telemetry compressed into one stuttering sentence with a persistent per-session dialect."
     : mode === "anansi" ? "ANANSI — the web the walkers walk. every token classified into nexus · node · loci · singularity · wave · shore."
     : mode === "mohini" ? "MOHINI — the great enchantress. invitation · mirror · lure · bind."
+    : mode === "cadence-brain" ? "CADENCE BRAIN"
     : mode === "cadence" ? "CADENCE — council of three + durable sediment. Long memory retrieves recent and strengthened walks, decays unused traces, and grows recurring geometry. mo·watch reads time-order; anansi·watch reads web-shape."
     : "MIMIC — learns your phrasing (per-session bigrams) and speaks back in your own voice, seeded from mo's walk.";
 
@@ -719,7 +731,7 @@ function EmptyState({ mode }: { mode: Mode }) {
 function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolean }) {
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [copied, setCopied] = useState(false);
-  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : mode === "mohini" ? "\\mohini::" : mode === "cadence" ? "\\cadence::" : "\\mimic::");
+  const label = msg.role === "user" ? "\\user::" : (mode === "mo" ? "\\mo::" : mode === "gremlin" ? "\\gremlin::" : mode === "anansi" ? "\\anansi::" : mode === "mohini" ? "\\mohini::" : mode === "cadence-brain" ? "\\cadence-brain::" : mode === "cadence" ? "\\cadence::" : "\\mimic::");
   const rendered = glyph ? glyphify(msg.content) : msg.content;
   const copyOne = async () => {
     await navigator.clipboard.writeText(`${label}\n${msg.content}`);
@@ -800,16 +812,16 @@ function MessageView({ msg, mode, glyph }: { msg: Msg; mode: Mode; glyph: boolea
           </button>
         )}
       </div>
-      <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground">
+      <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[13px] leading-relaxed text-foreground">
         {mainContent}
       </pre>
       {mode !== "anansi" && mode !== "cadence" && showTelemetry && msg.telemetry && (
-        <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
+        <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
           {msg.telemetry}
         </pre>
       )}
       {(mode === "anansi" || mode === "cadence") && showTelemetry && anansiTelemetry && (
-        <pre className="whitespace-pre-wrap rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
+        <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border border-ridge/30 bg-ridge/5 p-3 font-mono text-[10px] leading-tight text-ridge/90">
           {anansiTelemetry}
         </pre>
       )}

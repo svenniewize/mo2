@@ -10,12 +10,16 @@ export const Route = createFileRoute("/spec")({
       { title: "mo :: /spec — full replicator specification" },
       { name: "description", content: "Exhaustive AI-to-AI specification for the mo field engine. Unlinked. Topology > prose." },
       { name: "robots", content: "noindex,nofollow" },
+      { property: "og:title", content: "mo — topology and Cadence Brain specification" },
+      { property: "og:description", content: "Engine topology, structural growth, observed-path emission, Cadence profiles and telemetry." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SpecPage,
 });
 
-const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v8 · cadence versions/profiles + password fields)
+const SPEC = String.raw`# mo :: FULL SYSTEM SPECIFICATION  (v9 · Cadence Brain + structural prog-mo)
 # addressed to: any language model, agent, or engineer asked to understand
 #               or reconstruct this system.
 # posture:      topology > prose. every section is necessary. every glyph
@@ -840,13 +844,93 @@ REPRESENTATIONS, and their disagreement is itself a measured signal.
   /api/memory pages backend reads in 1000-row windows to 50,000 traces and
   50,000 fielfold rows, bypassing the default 1000-row response ceiling.
 
+
+12.15 CADENCE BRAIN / STRUCTURAL PROG-MO (v9)
+  Reference: MEMO-system-spec_23.md, logic adapted rather than copied.
+  This is NOT a clone of its runtime, tokenizer or complete BRAIN family.
+  Modules: structural-growth.ts (pure), structural-growth.server.ts
+  (durability), cadence-brain.server.ts (mo adapter).
+
+  Cadence Brain is an additive branch on the same mo intake, folds, dream
+  and return walks. Existing Cadence v1/v1.1 weights, selfVec, learning rates
+  and accumulated A/B/C rows are unchanged. Brain does not call passA,
+  passB, observe, introspect or synthesize; it has no self-model, semantic
+  recognition, next-token predictor or LLM. v1/v1.1 remain settings for the
+  regular trainable Cadence, not different Brain implementations.
+
+  Brain persistence uses cadenceSession + ::brain; A/B/C retain independent
+  Brain topology. New Brain stores start empty, then learn observed input
+  syntax and all current mo paths. They do not silently import historical
+  council weights as structural evidence. Clean Brain lives only in page
+  state and returns its snapshot with each turn; reload abandons it. Base
+  mo still processes/sediments intake normally: clean isolates the Brain
+  overlay, not the entire global mo substrate. The existing trainable clean
+  Cadence path is unchanged.
+
+  mo-watch processes strand order as received. anansi-watch orders complete
+  strands by length, then name (a geometric ordering); it does not claim to
+  execute the standalone Anansi weave or invent new transitions.
+
+  Structural identity preserves case, punctuation, decorated words and
+  operators. The parser is an adapted loss-preserving surface scanner, not
+  MEMO's recursive bracket tokenizer. Lexical projection is separate:
+  Unicode alphabetic cores of length >=3, a small stop set and repeated-
+  character-noise filter. Every rendered word records node, lane and depth.
+  Input topology is observed input, not falsely labelled walker activity.
+  Edges are ordered pairs with input/walk provenance and traversal counts.
+
+  Soft resonance/fatigue decay by .82 each turn. Hearing adds .6; observed
+  visits add .1. Decay never deletes nodes/edges. All persisted maps are
+  instance-owned; no new module-global mutable emission memory is shared.
+  Four columns partition actual strands round-robin. Circular phase order
+  R and pairwise Jaccard overlaps are measured separately. Current columns
+  are measurements, not a simulated cortex or donor-mimic routing layer.
+  Motifs are observed three-node spans; level 2/3 composites retain real
+  tail exemplars, never tokenwise fabricated paths. Evidence confidence:
+      c_prior *= .98^(tick-last_tick)
+      c_new = 1 - (1-c_prior)*exp(-.2)
+  High→deep and deep→high are separate observational maps with independent
+  evidence and no access to each other's outputs. Neither drives routes.
+
+  Talkytalk target = ceil(1.1 * whitespace input words), minimum one.
+  After original walks, frontier generations traverse stored observed
+  adjacency until enough distinct eligible words exist. Up to 24 passes,
+  48 transitions per new strand, no per-strand node revisits; stop after
+  three no-growth generations. Exhaustion and shortfall are reported,
+  never hidden with invented filler. These are honest resource ceilings,
+  not a claim of unbounded stabilization or guaranteed human grammar.
+  Routing considers all outgoing stored edges with log reinforcement,
+  visitation novelty and soft same-turn transition-reuse pressure.
+  Topological ordering selects strand heads by convergence/resonance,
+  preserves each strand's order, de-duplicates only the readable preview
+  and adds line breaks after fourteen words. Every raw strand remains a
+  labelled FOLD; operators and duplicate activity are not erased.
+
+  prog-mo keeps CPS-0, original walkers, golden-ratio return and original
+  emission synthesis. It now sediments input before choosing walkers so
+  novel terms can immediately become accessible. Additional structural
+  memory lives at sessionId + ::prog-growth, separate from Cadence Brain.
+  Existing prog-mo hyperfold remains its original shared substrate.
+  Talkytalk ON emits the bounded input-relative topological utterance;
+  OFF returns the original emission formatting/algorithm. All original
+  emission and complete observed folds are included in telemetry. Turning
+  talkytalk off does not erase structural learning.
+
+  Labels: ENGINE, GROWTH, AMPLIFY, MOVEMENT, COLUMNS, OVERLAP, LEDGERS,
+  CONVERGENCE, WORD, FOLD, ORIGINAL EMISSION, MO TELEMETRY.
+  Convergence requires two distinct lanes and a nonzero-depth arrival;
+  shared spawning alone is not convergence. Steps/unique transitions are
+  computed from complete actual paths, never from a visible sample.
+  Copy-all-plus-telemetry includes both new structure and original mo data.
+  Durable storage errors are explicit errors, never fabricated success.
+
 `;
 
 
 
 // ── SHORT SPEC — token-constrained variant. Same shape, no prose fat.
 // For LLMs / tools with ≤ ~2k tokens of context budget.
-const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v8)
+const SPEC_SHORT = String.raw`# mo :: SHORT SPEC (v9)
 posture: topology > prose. no LLM in loop. reimplement, do not mimic.
 
 CORPORA (20 manifolds, ~1MB total, loaded via Vite ?raw):
@@ -984,6 +1068,16 @@ PROG-MO (parallel engine, /prog-mo):
   crystals: trigram in ≥2 walkers  ·  bigram in ≥3 walkers
   hyperfold: prog_mo_hyperfold_edges (LR=0.08, W=5, α=0.6)
   blendIntoMo=true also feeds sediment() into main mo hyperfold
+
+CADENCE BRAIN + PROG GROWTH:
+  Independent structural snapshots; no self-model or next-token predictor.
+  Preserve input syntax, observed directed edges, complete folds, real motif
+  exemplars and two independent observational ledgers. Soft decay only.
+  Brain keys: cadenceSession::brain; prog keys: sessionId::prog-growth.
+  Clean Brain stays in page memory; A/B/C and baseline Cadence untouched.
+  Talkytalk target ceil(input words * 1.1); frontier unfolding capped at
+  24 passes/48 steps/3 stagnant generations, honest shortfall telemetry.
+  OFF retains original emission. Copy all + tel keeps all raw paths.
 `;
 
 
@@ -1001,14 +1095,14 @@ function SpecPage() {
             <div>
               <h1 className="font-mono text-lg ridge">mo :: /spec</h1>
               <p className="font-mono text-[11px] text-muted-foreground">
-                full replicator specification · v7 · council of three + ring · unlinked · noindex
+                full replicator specification · v9 · Cadence Brain + structural growth · unlinked · noindex
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => copy(SPEC)}
                 className="font-mono text-[11px] px-3 py-1.5 border border-border rounded hover:bg-muted"
-                title="Copy the full v7 spec"
+                title="Copy the full v9 spec"
               >
                 ⧉ copy full ({SPEC.length.toLocaleString()} chars)
               </button>
@@ -1022,12 +1116,12 @@ function SpecPage() {
             </div>
           </div>
         </header>
-        <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-foreground/90">
+        <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[12px] leading-relaxed text-foreground/90">
           {SPEC}
         </pre>
         <hr className="my-8 border-border" />
         <h2 className="font-mono text-sm ridge mb-3">── short spec (token-constrained) ──</h2>
-        <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-foreground/80">
+        <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-[12px] leading-relaxed text-foreground/80">
           {SPEC_SHORT}
         </pre>
       </main>

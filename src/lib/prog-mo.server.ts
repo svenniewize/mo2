@@ -17,6 +17,8 @@
 import { MANIFOLDS } from "./corpora";
 import { PROG_MANIFOLDS, type ProgManifold } from "./prog-manifolds";
 import { parseCps, compileCps, renderCpsTelemetry, type CpsProgram } from "./cps0";
+import { growTopology } from "./structural-growth";
+import { loadGrowth, saveGrowth } from "./structural-growth.server";
 
 
 const STOP = new Set("the a an is are was were be been being have has had do does did will would could should may might shall can to of in for on with at by from as into through during before after above below between out off over under again further then once here there when where why how all both each few more most other some such no nor not only own same so than too very just because but and or if while about up its it he she they them his her their what which who whom this that these those i me my we our you your us also said one two even way like new now get make many much still well back down long made first last come good know take see look find give tell think say help every try put thing since around however upon already yet though without".split(" "));
@@ -551,7 +553,7 @@ function hfStats() {
   return { nodes: Object.keys(HF).length, edges };
 }
 
-export async function progMoBreathe(input: string, sessionId: string, stretch: number = 1, blendIntoMo: boolean = false, v2: boolean = false): Promise<ProgBreath> {
+export async function progMoBreathe(input: string, sessionId: string, stretch: number = 1, blendIntoMo: boolean = false, v2: boolean = false, talkytalk: boolean = false): Promise<ProgBreath> {
   await ensureHyperfold();
   if (v2) await ensureMoHyperfoldClone();
   const t = await topo();
@@ -582,7 +584,10 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
     })();
   }
 
+  // Learn before walking so novel input is immediately accessible. Existing
+  // operators, temperament, golden-return and synthesis remain unchanged.
   const rawSeeds = tokenize(input);
+  sedimentProg(rawSeeds, blendIntoMo);
   const seeds = Array.from(new Set([...rawSeeds, ...(cpsProgram?.extraSeeds || [])]));
   const anch = seeds.filter((s) => has(t, s));
 
@@ -604,17 +609,25 @@ export async function progMoBreathe(input: string, sessionId: string, stretch: n
 
   // Cycle 4
   const { reply, crystals } = synthesize(t, walkers, ret, anch, pressure, stretch);
+  const growthKey = `${sessionId}::prog-growth`;
+  const growthState = await loadGrowth(growthKey);
+  const growth = growTopology(growthState, input, [
+    ...walkers.map((w) => ({ name: w.name, path: w.path })),
+    { name: "golden-return", path: ret.path },
+  ], talkytalk);
+  await saveGrowth(growthKey, growthState);
 
   // Sediment: input + every walker's path + return
-  sedimentProg(seeds, blendIntoMo);
   for (const w of walkers) sedimentProg(w.path, blendIntoMo);
   sedimentProg(ret.path, blendIntoMo);
+  for (const lane of growth.lanes.filter((l) => l.name.startsWith("unfold:"))) sedimentProg(lane.path, blendIntoMo);
   void persistCrystals(sessionId, crystals);
 
   const stats = hfStats();
-  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo, v2, autoTagged, cps: cpsProgram });
+  const telemetry = renderTelemetry({ seeds, anch, pressure, walkers, ret, crystals, stats, stretch, blend: blendIntoMo, v2, autoTagged, cps: cpsProgram })
+    + `\n\n${growth.telemetry}\n\n[ORIGINAL EMISSION]\n${reply}`;
 
-  return { seeds, cycle1_pressure: pressure, cycle2_walkers: walkers, cycle3_return: ret, cycle4_reply: reply, crystals, telemetry, hyperfold: stats };
+  return { seeds, cycle1_pressure: pressure, cycle2_walkers: walkers, cycle3_return: ret, cycle4_reply: talkytalk ? growth.utterance : reply, crystals, telemetry, hyperfold: stats };
 }
 
 
